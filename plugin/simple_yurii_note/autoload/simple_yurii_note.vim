@@ -4659,9 +4659,11 @@ function! s:simple_body_append(link) abort
     return
   endif
   " ### Parent の直前（本文の最後）にリンクを挿入。
-  " 直前が本文（空行でない）なら空行1つを挟む。既存の空行（余白）はそのまま。
+  " 直前が**散文**なら空行 1 つを挟む。直前が**リンク行**なら空行なしで並べる。
+  " Enter で連続で置いても空行が累積しない。既存の空行はそのまま。
   let l:prev = l:up - 1
   if l:prev >= 1 && trim(getline(l:prev)) !=# ''
+        \ && trim(getline(l:prev)) !~# '\]\s*(\S\+)\s*$'
     call append(l:prev, ['', a:link])
   else
     call append(l:prev, a:link)
