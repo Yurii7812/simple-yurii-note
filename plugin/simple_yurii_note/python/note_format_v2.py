@@ -1169,14 +1169,35 @@ def _simple_parse(path: Path) -> dict:
     return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
 
 
-def _simple_render(name: str, n: dict, path: Path, parent: list[Path], back: list[Path], titles: dict) -> str:
+def _preserve_parent(existing: list[str], targets: list[Path], path: Path, resolver, titles: dict) -> list[str]:
+    """Parent セクションを組む。リンク行だけ管理し、空行・文字などはそのまま残す。"""
+    out: list[str] = []
+    present: set[Path] = set()
+    tset = set(targets)
+    for ln in existing:
+        m = _SIMPLE_INLINE_LINK.search(ln)
+        if m:
+            tg = m.group(2).split("#", 1)[0].strip()
+            rp = resolver(tg, path.parent)
+            if rp in tset:
+                out.append(f"[{titles[rp]}]({_rel(path.parent, rp)})")
+                present.add(rp)
+            # 対象外のリンク行は落とす
+        else:
+            out.append(ln)  # 空行・文字はそのまま保持
+    for t in targets:
+        if t not in present:
+            out.append(f"[{titles[t]}]({_rel(path.parent, t)})")
+    return out
+
+
+def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back: list[Path], titles: dict) -> str:
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
     if name != "index.md":
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
         lines.append(UP_MARK)
-        for t in parent:
-            lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
+        lines += parent_lines
         lines.append(DOWN_MARK)
         for t in back:
             lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
@@ -1229,7 +1250,8 @@ def simple_sync(root) -> int:
             if t != p and t not in seen and t not in bseen:
                 bseen.add(t)
                 back.append(t)
-        new_text = _simple_render(p.name, n, p, parent, back, titles)
+        parent_lines = _preserve_parent(n["parent"], parent, p, res, titles)
+        new_text = _simple_render(p.name, n, p, parent_lines, back, titles)
         old = p.read_text(encoding="utf-8")
         if new_text != old:
             p.write_text(new_text, encoding="utf-8")
