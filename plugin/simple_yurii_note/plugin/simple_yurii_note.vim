@@ -155,6 +155,12 @@ command!          SimpleIndex call simple_yurii_note#open_index()
 command!          SimpleChooseIndexDir call simple_yurii_note#choose_index_root()
 command!          SimpleGuide call simple_yurii_note#write_guide()
 command!          SimpleChooseIndex call simple_yurii_note#choose_index_root()
+
+" 旧名エイリアス（yurii_PKM から移行した習慣用。中身は simple 側）
+command!          YuriiIndex call simple_yurii_note#open_index()
+command!          YuriiChooseIndex call simple_yurii_note#choose_index_root()
+command!          YuriiChooseIndexDir call simple_yurii_note#choose_index_root()
+command!          YuriiGuide call simple_yurii_note#write_guide()
 command! -nargs=? ExpandLinks call simple_yurii_note#expand_s_under_cursor(<q-args>)
 command!          JumpLastLinkBeforeParent call simple_yurii_note#jump_last_link_before_up()
 command!          JumpParent call simple_yurii_note#jump_up()
