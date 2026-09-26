@@ -4821,6 +4821,7 @@ function! s:v2_new_interactive(attr) abort
     " 今のノート側で Parent に置いたか（p）本文に置いたか（h / Enter）に関係なく、
     " 新ノートは本文で関係が見える。`### Parent` は空のまま。
     execute 'edit ' . fnameescape(l:file)
+    call s:squeeze_body_blanks()
     call s:simple_body_append(s:make_link_from_dir(l:cur, l:cur_title, l:dir))
     call s:ensure_blank_before_up()
     silent noautocmd write
@@ -6153,6 +6154,27 @@ function! simple_yurii_note#add_from_clipboard(...) abort
   call s:realtime_sync_apply()
   silent write
   echo 'Added ' . len(l:links) . ' link(s)'
+endfunction
+
+" 本文中の連続する空行を 1 行に潰す（テンプレートの余白 2 行を 1 行にする）。
+" 見出し行は残す。`### Parent` より上だけを対象にする。
+function! s:squeeze_body_blanks() abort
+  " 空行の連続（2 行以上）を 1 行に潰す。`### Parent` より上が対象。
+  " テンプレートの余白 2 行を 1 行にして、本文リンクが中央に 1 つだけ見えるようにする。
+  let l:up = s:find_section_line('up')
+  let l:end = (l:up > 0) ? l:up - 1 : line('$')
+  let l:changes = 0
+  let l:i = 2
+  while l:i <= l:end
+    if trim(getline(l:i)) ==# '' && trim(getline(l:i - 1)) ==# ''
+      execute l:i . 'delete _'
+      let l:end -= 1
+      let l:changes += 1
+      continue
+    endif
+    let l:i += 1
+  endwhile
+  return l:changes
 endfunction
 
 " ### Parent の直前の行が本文（空行でない）なら、空行を 1 つ足す。
