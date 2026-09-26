@@ -343,3 +343,6 @@ README に以下のような文字列が見える場合は、Git のマージ競
 ## 参考
 
 - 詳細な操作リファレンス: `plugin/simple_yurii_note/README.txt`
+- ノート形式・同期の規則・引き継ぎ: [`docs/`](docs/README.md)（PKM システムの仕様ドキュメント）
+- 設計メモ: [`NAVIGATION.md`](NAVIGATION.md)
+- 旧フォーマット（v2 Relationship）の仕様: [`NOTE_FORMAT.md`](NOTE_FORMAT.md)
