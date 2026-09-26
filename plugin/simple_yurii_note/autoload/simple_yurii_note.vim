@@ -1,6 +1,6 @@
 " =============================================================================
-" autoload/yurii_pkm.vim
-" yurii_PKM - Vimwiki非依存 Markdown PKM プラグイン (autoload)
+" autoload/simple_yurii_note.vim
+" simple_yurii_note - Vimwiki非依存 Markdown PKM プラグイン (autoload)
 " =============================================================================
 
 " ---------------------------------------------------------------------------
@@ -30,8 +30,8 @@ function! s:is_markdown_target(target) abort
 endfunction
 
 function! s:run_sync(args_list) abort
-  if !filereadable(g:yurii_pkm_python)
-    echoerr 'yurii_PKM: Python script not found: ' . g:yurii_pkm_python
+  if !filereadable(g:simple_yurii_note_python)
+    echoerr 'simple_yurii_note: Python script not found: ' . g:simple_yurii_note_python
     return ''
   endif
   let l:cmd = s:python_cmd()
@@ -48,7 +48,7 @@ endfunction
 let s:title_cache = {}
 let s:filename_resolve_cache = {}
 
-function! yurii_pkm#clear_title_cache() abort
+function! simple_yurii_note#clear_title_cache() abort
   let s:title_cache = {}
   let s:filename_resolve_cache = {}
 endfunction
@@ -114,11 +114,11 @@ function! s:get_yaml_title(filepath) abort
   return ''
 endfunction
 
-function! yurii_pkm#current_file() abort
+function! simple_yurii_note#current_file() abort
   return expand('%:p')
 endfunction
 
-function! yurii_pkm#current_title() abort
+function! simple_yurii_note#current_title() abort
   let l:lines = getline(1, min([30, line('$')]))
   let l:in_yaml = 0
   for l:line in l:lines
@@ -199,15 +199,15 @@ function! s:outline_shift_range(first, last, delta) abort
   endfor
 endfunction
 
-function! yurii_pkm#outline_shift_current(delta) abort
+function! simple_yurii_note#outline_shift_current(delta) abort
   call s:outline_shift_range(line('.'), line('.'), a:delta)
 endfunction
 
-function! yurii_pkm#outline_shift_visual(delta) range abort
+function! simple_yurii_note#outline_shift_visual(delta) range abort
   call s:outline_shift_range(a:firstline, a:lastline, a:delta)
 endfunction
 
-function! yurii_pkm#outline_editor_apply() abort
+function! simple_yurii_note#outline_editor_apply() abort
   if !get(b:, 'yurii_outline_editor', 0)
     return
   endif
@@ -237,22 +237,22 @@ function! yurii_pkm#outline_editor_apply() abort
   echom 'OutlineEdit: 反映しました'
 endfunction
 
-function! yurii_pkm#outline_edit() abort
+function! simple_yurii_note#outline_edit() abort
   if !s:is_markdown_file(expand('%:p'))
-    echoerr 'yurii_PKM: OutlineEdit は Markdown ファイルでのみ利用できます'
+    echoerr 'simple_yurii_note: OutlineEdit は Markdown ファイルでのみ利用できます'
     return
   endif
 
   let l:items = s:outline_collect()
 
   if empty(l:items)
-    echom 'yurii_PKM: 見出しが見つかりませんでした'
+    echom 'simple_yurii_note: 見出しが見つかりませんでした'
     return
   endif
 
   let l:origin_win = win_getid()
   vertical botright new
-  execute 'file ' . fnameescape('[YuriiOutlineEdit]')
+  execute 'file ' . fnameescape('[SimpleOutlineEdit]')
 
   call setline(1, s:outline_editor_lines(l:items))
 
@@ -273,19 +273,19 @@ function! yurii_pkm#outline_edit() abort
   setlocal nowrap
   setlocal modifiable
 
-  augroup yurii_pkm_outline_editor
+  augroup simple_yurii_note_outline_editor
     autocmd! * <buffer>
-    autocmd BufWriteCmd <buffer> call yurii_pkm#outline_editor_apply()
+    autocmd BufWriteCmd <buffer> call simple_yurii_note#outline_editor_apply()
   augroup END
-  command! -buffer OutlineApply call yurii_pkm#outline_editor_apply()
-  nnoremap <silent><buffer> q  <Cmd>call yurii_pkm#outline_editor_apply()<CR><Cmd>bd!<CR>
+  command! -buffer OutlineApply call simple_yurii_note#outline_editor_apply()
+  nnoremap <silent><buffer> q  <Cmd>call simple_yurii_note#outline_editor_apply()<CR><Cmd>bd!<CR>
   nnoremap <silent><buffer> Q  <Cmd>bd!<CR>
-  nnoremap <silent><buffer> ZZ <Cmd>call yurii_pkm#outline_editor_apply()<CR><Cmd>bd!<CR>
+  nnoremap <silent><buffer> ZZ <Cmd>call simple_yurii_note#outline_editor_apply()<CR><Cmd>bd!<CR>
 
-  nnoremap <silent><buffer> <Left>  <Cmd>call yurii_pkm#outline_shift_current(-1)<CR>
-  nnoremap <silent><buffer> <Right> <Cmd>call yurii_pkm#outline_shift_current(1)<CR>
-  xnoremap <silent><buffer> <Left>  :<C-u>call yurii_pkm#outline_shift_visual(-1)<CR>
-  xnoremap <silent><buffer> <Right> :<C-u>call yurii_pkm#outline_shift_visual(1)<CR>
+  nnoremap <silent><buffer> <Left>  <Cmd>call simple_yurii_note#outline_shift_current(-1)<CR>
+  nnoremap <silent><buffer> <Right> <Cmd>call simple_yurii_note#outline_shift_current(1)<CR>
+  xnoremap <silent><buffer> <Left>  :<C-u>call simple_yurii_note#outline_shift_visual(-1)<CR>
+  xnoremap <silent><buffer> <Right> :<C-u>call simple_yurii_note#outline_shift_visual(1)<CR>
 
   call cursor(b:yurii_outline_base, 1)
 endfunction
@@ -293,9 +293,9 @@ endfunction
 
 function! s:state_dir() abort
   if exists('*stdpath')
-    return stdpath('data') . s:sep() . 'yurii_pkm'
+    return stdpath('data') . s:sep() . 'simple_yurii_note'
   endif
-  return expand('~/.vim/yurii_pkm')
+  return expand('~/.vim/simple_yurii_note')
 endfunction
 
 function! s:root_state_file() abort
@@ -331,13 +331,13 @@ endfunction
 
 function! s:get_pkm_root() abort
   let l:root = ''
-  if exists('g:yurii_pkm_root')
-    let l:root = trim(get(g:, 'yurii_pkm_root', ''))
+  if exists('g:simple_yurii_note_root')
+    let l:root = trim(get(g:, 'simple_yurii_note_root', ''))
   endif
   if empty(l:root)
     let l:root = s:load_persisted_root()
     if !empty(l:root)
-      let g:yurii_pkm_root = l:root
+      let g:simple_yurii_note_root = l:root
     endif
   endif
   if empty(l:root)
@@ -364,7 +364,7 @@ function! s:is_root_note_path(path) abort
 endfunction
 
 function! s:pkm_format() abort
-  return get(g:, 'yurii_pkm_format', 'v2')
+  return get(g:, 'simple_yurii_note_format', 'v2')
 endfunction
 
 " 索引テンプレート。a:with_guide が真のときだけ操作ガイドへのリンクを 1 本
@@ -379,7 +379,7 @@ function! s:index_template(...) abort
   let l:v2 = s:pkm_format() ==# 'v2'
   let l:head = [
         \ '---',
-        \ 'time: ' . yurii_pkm#timestamp_yaml(),
+        \ 'time: ' . simple_yurii_note#timestamp_yaml(),
         \ 'title: Index',
         \ ] + (l:v2 ? ['attribute: group'] : []) + [
         \ '---',
@@ -398,14 +398,14 @@ function! s:index_template(...) abort
 endfunction
 
 " Index 作成時に生成する操作ガイド。全コマンドを簡略にまとめる。
-let s:guide_name = 'yurii_pkm_guide.md'
+let s:guide_name = 'simple_yurii_note_guide.md'
 
 function! s:guide_link() abort
-  return '[yurii_pkm 操作ガイド](' . s:guide_name . ')'
+  return '[simple_yurii_note 操作ガイド](' . s:guide_name . ')'
 endfunction
 
 function! s:guide_template() abort
-  let l:title = 'yurii_pkm 操作ガイド'
+  let l:title = 'simple_yurii_note 操作ガイド'
   let l:body = [
         \ '## ノート作成',
         \ '',
@@ -454,7 +454,7 @@ function! s:guide_template() abort
         \ ]
   return [
         \ '---',
-        \ 'time: ' . yurii_pkm#timestamp_yaml(),
+        \ 'time: ' . simple_yurii_note#timestamp_yaml(),
         \ 'title: ' . l:title,
         \ '---',
         \ '',
@@ -486,7 +486,7 @@ function! s:refresh_guide(root) abort
 endfunction
 
 " 公開: 既存の操作ガイドを最新にする（VimEnter 用。無ければ何もしない）。
-function! yurii_pkm#refresh_guide() abort
+function! simple_yurii_note#refresh_guide() abort
   let l:root = s:get_pkm_root()
   if empty(l:root) || !isdirectory(l:root)
     return
@@ -497,15 +497,15 @@ function! yurii_pkm#refresh_guide() abort
   call s:refresh_guide(l:root)
 endfunction
 
-" 公開: 操作ガイドを作り直す（無ければ作る。:YuriiGuide 用）。
-function! yurii_pkm#write_guide() abort
+" 公開: 操作ガイドを作り直す（無ければ作る。:SimpleGuide 用）。
+function! simple_yurii_note#write_guide() abort
   let l:root = s:get_pkm_root()
   if empty(l:root) || !isdirectory(l:root)
-    echo 'yurii_PKM: PKM root 未設定'
+    echo 'simple_yurii_note: PKM root 未設定'
     return
   endif
   call s:refresh_guide(l:root)
-  echo 'yurii_PKM: 操作ガイドを更新: ' . s:guide_name
+  echo 'simple_yurii_note: 操作ガイドを更新: ' . s:guide_name
 endfunction
 
 " index.md と操作ガイドをまとめて作る（ガイドは常に最新へ）。
@@ -521,7 +521,7 @@ function! s:write_index_and_guide(root) abort
 endfunction
 
 function! s:setup_persistent_undo_for_root(root) abort
-  if !get(g:, 'yurii_pkm_persistent_undo', 1)
+  if !get(g:, 'simple_yurii_note_persistent_undo', 1)
     return
   endif
   if empty(a:root)
@@ -540,7 +540,7 @@ function! s:setup_persistent_undo_for_root(root) abort
       endif
       let l:undo_dir = l:fallback
       echohl WarningMsg
-      echom 'yurii_PKM: persistent undo dir could not be created under root; fallback to ~/.vim/undo'
+      echom 'simple_yurii_note: persistent undo dir could not be created under root; fallback to ~/.vim/undo'
       echohl None
     endtry
   endif
@@ -550,7 +550,7 @@ function! s:setup_persistent_undo_for_root(root) abort
   set undoreload=100000
 endfunction
 
-function! yurii_pkm#init_persistent_undo_if_ready() abort
+function! simple_yurii_note#init_persistent_undo_if_ready() abort
   let l:root = s:get_pkm_root()
   if empty(l:root) || !isdirectory(l:root)
     return
@@ -595,7 +595,7 @@ function! s:timer_redraw_cb(timer) abort
 endfunction
 
 function! s:open_index_with_delay(index_path) abort
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   call timer_start(0, function('s:timer_edit_file_cb', [a:index_path]))
   call timer_start(50, function('s:timer_redraw_cb'))
 endfunction
@@ -606,7 +606,7 @@ function! s:startup_recover_missing_root() abort
     return ''
   endif
 
-  let g:yurii_pkm_root = l:new_root
+  let g:simple_yurii_note_root = l:new_root
   call s:save_persisted_root(l:new_root)
 
   let l:index = s:index_path(l:new_root)
@@ -621,7 +621,7 @@ function! s:startup_recover_missing_root() abort
     endif
     call s:setup_persistent_undo_for_root(l:new_root)
     call s:write_index_and_guide(l:new_root)
-    call yurii_pkm#clear_title_cache()
+    call simple_yurii_note#clear_title_cache()
     echom 'Created: ' . l:index
   endif
 
@@ -630,14 +630,14 @@ function! s:startup_recover_missing_root() abort
     if s:consume_index_created_flag()
       call s:open_index_with_delay(l:index)
     else
-      call yurii_pkm#push_history()
+      call simple_yurii_note#push_history()
       execute 'edit ' . fnameescape(l:index)
     endif
   endif
   return l:new_root
 endfunction
 
-function! yurii_pkm#startup_restore_root() abort
+function! simple_yurii_note#startup_restore_root() abort
   if get(s:, 'startup_root_recovery_active', 0)
     return
   endif
@@ -648,7 +648,7 @@ function! yurii_pkm#startup_restore_root() abort
       return
     endif
     if isdirectory(l:root) && filereadable(s:index_path(l:root))
-      let g:yurii_pkm_root = l:root
+      let g:simple_yurii_note_root = l:root
       call s:setup_persistent_undo_for_root(l:root)
       return
     endif
@@ -662,7 +662,7 @@ function! yurii_pkm#startup_restore_root() abort
     " root は覚えているが Index が無い → 勝手には作らず、どこに作るか・
     " 作ってよいかを聞く（s:setup_root_and_index が両方を尋ねる）。
     echom 'Remembered index not found: ' . s:index_path(l:root)
-    let g:yurii_pkm_root = l:root
+    let g:simple_yurii_note_root = l:root
     call s:save_persisted_root(l:root)
     call s:setup_persistent_undo_for_root(l:root)
     call s:setup_root_and_index(1)
@@ -696,7 +696,7 @@ function! s:setup_root_and_index(open_index) abort
   if !isdirectory(l:root)
     call mkdir(l:root, 'p')
   endif
-  let g:yurii_pkm_root = l:root
+  let g:simple_yurii_note_root = l:root
   call s:save_persisted_root(l:root)
   call s:setup_persistent_undo_for_root(l:root)
 
@@ -706,7 +706,7 @@ function! s:setup_root_and_index(open_index) abort
     let l:ans = tolower(trim(input('Create index.md? y/n: ')))
     if l:ans ==# 'y'
       call s:write_index_and_guide(l:root)
-      call yurii_pkm#clear_title_cache()
+      call simple_yurii_note#clear_title_cache()
       echom 'Created: ' . l:index
     else
       echom 'index.md not created'
@@ -720,7 +720,7 @@ function! s:setup_root_and_index(open_index) abort
     if s:consume_index_created_flag()
       call s:open_index_with_delay(l:index)
     else
-      call yurii_pkm#push_history()
+      call simple_yurii_note#push_history()
       execute 'edit ' . fnameescape(l:index)
     endif
   endif
@@ -746,7 +746,7 @@ function! s:prompt_index_root() abort
   return fnamemodify(expand(l:dir), ':p')
 endfunction
 
-function! yurii_pkm#ensure_root_and_index() abort
+function! simple_yurii_note#ensure_root_and_index() abort
   let l:root = s:get_pkm_root()
 
   if get(s:, 'startup_root_recovery_active', 0)
@@ -758,7 +758,7 @@ function! yurii_pkm#ensure_root_and_index() abort
 
   " rootもIndexも正常
   if !empty(l:root) && filereadable(s:index_path(l:root))
-    let g:yurii_pkm_root = l:root
+    let g:simple_yurii_note_root = l:root
     call s:save_persisted_root(l:root)
     call s:setup_persistent_undo_for_root(l:root)
     return l:root
@@ -771,14 +771,14 @@ function! yurii_pkm#ensure_root_and_index() abort
 
   " rootは設定済みでディレクトリはあるがIndexがない → Index作成だけ
   if !empty(l:root)
-    let g:yurii_pkm_root = l:root
+    let g:simple_yurii_note_root = l:root
     call s:save_persisted_root(l:root)
     call s:setup_persistent_undo_for_root(l:root)
     let l:index = s:index_path(l:root)
     let l:ans = tolower(trim(input('Create index.md? y/n: ')))
     if l:ans ==# 'y'
       call s:write_index_and_guide(l:root)
-      call yurii_pkm#clear_title_cache()
+      call simple_yurii_note#clear_title_cache()
       echom 'Created: ' . l:index
       return l:root
     else
@@ -791,7 +791,7 @@ function! yurii_pkm#ensure_root_and_index() abort
   return s:setup_root_and_index(0)
 endfunction
 
-function! yurii_pkm#choose_index_root() abort
+function! simple_yurii_note#choose_index_root() abort
   let l:current_root = s:get_pkm_root()
   let l:new_root = s:setup_root_and_index(1)
   if empty(l:new_root)
@@ -862,11 +862,11 @@ function! s:rename_missing_prefix_files(dir, files) abort
   return l:renamed
 endfunction
 
-function! yurii_pkm#check_missing_prefix_in_current_dir() abort
+function! simple_yurii_note#check_missing_prefix_in_current_dir() abort
   return 1
 endfunction
 
-function! yurii_pkm#check_missing_prefix_in_current_dir_once() abort
+function! simple_yurii_note#check_missing_prefix_in_current_dir_once() abort
   return
 endfunction
 
@@ -1099,14 +1099,14 @@ function! s:append_link_to_buffer_section(name, link) abort
   let l:end = s:section_end_line(a:name)
   if l:end > l:sec
     let l:new_target = s:extract_target(a:link)
-    let l:new_fp = empty(l:new_target) ? '' : fnamemodify(yurii_pkm#resolve_link(l:new_target, expand('%:p:h')), ':p')
+    let l:new_fp = empty(l:new_target) ? '' : fnamemodify(simple_yurii_note#resolve_link(l:new_target, expand('%:p:h')), ':p')
     for l:line in getline(l:sec + 1, l:end)
       if l:line ==# a:link
         return 0
       endif
       let l:old_target = s:extract_target(l:line)
       if !empty(l:new_fp) && !empty(l:old_target)
-        let l:old_fp = fnamemodify(yurii_pkm#resolve_link(l:old_target, expand('%:p:h')), ':p')
+        let l:old_fp = fnamemodify(simple_yurii_note#resolve_link(l:old_target, expand('%:p:h')), ':p')
         if l:old_fp ==# l:new_fp
           return 0
         endif
@@ -1129,14 +1129,14 @@ function! s:append_structural_link_to_buffer(link) abort
   endif
 
   let l:new_target = s:extract_target(a:link)
-  let l:new_fp = empty(l:new_target) ? '' : fnamemodify(yurii_pkm#resolve_link(l:new_target, expand('%:p:h')), ':p')
+  let l:new_fp = empty(l:new_target) ? '' : fnamemodify(simple_yurii_note#resolve_link(l:new_target, expand('%:p:h')), ':p')
   for l:i in range(1, line('$'))
     let l:old_target = s:extract_target(getline(l:i))
     if getline(l:i) ==# a:link
       return 0
     endif
     if !empty(l:new_fp) && !empty(l:old_target)
-      let l:old_fp = fnamemodify(yurii_pkm#resolve_link(l:old_target, expand('%:p:h')), ':p')
+      let l:old_fp = fnamemodify(simple_yurii_note#resolve_link(l:old_target, expand('%:p:h')), ':p')
       if l:old_fp ==# l:new_fp
         return 0
       endif
@@ -1215,7 +1215,7 @@ function! s:section_link_targets_from_lines(lines, name, base_dir) abort
       let l:raw = l:m[0]
       let l:target = s:extract_target(l:raw)
       if !empty(l:target)
-        let l:fp = yurii_pkm#resolve_link(l:target, a:base_dir)
+        let l:fp = simple_yurii_note#resolve_link(l:target, a:base_dir)
         if filereadable(l:fp) && s:is_markdown_file(l:fp)
           let l:fp = fnamemodify(l:fp, ':p')
           if !has_key(l:seen, l:fp)
@@ -1270,7 +1270,7 @@ function! s:body_link_targets_from_lines(lines, base_dir) abort
       endif
       let l:target = s:extract_target(l:m[0])
       if !empty(l:target)
-        let l:fp = yurii_pkm#resolve_link(l:target, a:base_dir)
+        let l:fp = simple_yurii_note#resolve_link(l:target, a:base_dir)
         if filereadable(l:fp) && s:is_markdown_file(l:fp)
           let l:fp = fnamemodify(l:fp, ':p')
           if !has_key(l:seen, l:fp)
@@ -1286,7 +1286,7 @@ function! s:body_link_targets_from_lines(lines, base_dir) abort
 endfunction
 
 function! s:current_reciprocal_snapshot(...) abort
-  let l:include_back = a:0 > 0 ? a:1 : get(g:, 'yurii_pkm_realtime_backlink_sync', 0)
+  let l:include_back = a:0 > 0 ? a:1 : get(g:, 'simple_yurii_note_realtime_backlink_sync', 0)
   let l:file = expand('%:p')
   if empty(l:file)
     return {'up': [], 'down': [], 'back': []}
@@ -1300,15 +1300,15 @@ function! s:current_reciprocal_snapshot(...) abort
         \ }
 endfunction
 
-function! yurii_pkm#realtime_sync_snapshot() abort
+function! simple_yurii_note#realtime_sync_snapshot() abort
   if !s:is_markdown_file(expand('%:p'))
     return
   endif
-  if line('$') > get(g:, 'yurii_pkm_realtime_link_sync_max_lines', 2000)
-    let b:yurii_pkm_realtime_snapshot = {'up': [], 'down': [], 'back': []}
+  if line('$') > get(g:, 'simple_yurii_note_realtime_link_sync_max_lines', 2000)
+    let b:simple_yurii_note_realtime_snapshot = {'up': [], 'down': [], 'back': []}
     return
   endif
-  let b:yurii_pkm_realtime_snapshot = s:current_reciprocal_snapshot()
+  let b:simple_yurii_note_realtime_snapshot = s:current_reciprocal_snapshot()
 endfunction
 
 function! s:list_diff(new, old) abort
@@ -1379,7 +1379,7 @@ function! s:remove_link_to_path_from_lines_section(lines, name, target_path, bas
       endif
       let l:raw = l:m[0]
       let l:target_text = s:extract_target(l:raw)
-      let l:resolved = empty(l:target_text) ? '' : yurii_pkm#resolve_link(l:target_text, a:base_dir)
+      let l:resolved = empty(l:target_text) ? '' : simple_yurii_note#resolve_link(l:target_text, a:base_dir)
       let l:new_line .= strpart(l:line, l:last, l:m[1] - l:last)
       if !empty(l:resolved) && fnamemodify(l:resolved, ':p') ==# l:target
         let l:removed = 1
@@ -1431,7 +1431,7 @@ function! s:remove_reciprocal_link(target_path, section_name, current_file) abor
 endfunction
 
 function! s:realtime_sync_apply() abort
-  if s:realtime_sync_busy || !get(g:, 'yurii_pkm_realtime_link_sync', 1)
+  if s:realtime_sync_busy || !get(g:, 'simple_yurii_note_realtime_link_sync', 1)
     return
   endif
   if !s:is_markdown_file(expand('%:p')) || &buftype !=# ''
@@ -1443,14 +1443,14 @@ function! s:realtime_sync_apply() abort
     return
   endif
 
-  let l:old = get(b:, 'yurii_pkm_realtime_snapshot', {'up': [], 'down': []})
-  if line('$') > get(g:, 'yurii_pkm_realtime_link_sync_max_lines', 2000)
+  let l:old = get(b:, 'simple_yurii_note_realtime_snapshot', {'up': [], 'down': []})
+  if line('$') > get(g:, 'simple_yurii_note_realtime_link_sync_max_lines', 2000)
     return
   endif
   let l:new = s:current_reciprocal_snapshot()
-  let l:title = yurii_pkm#current_title()
+  let l:title = simple_yurii_note#current_title()
   let l:changed = 0
-  let l:back_changed = get(g:, 'yurii_pkm_realtime_backlink_sync', 0)
+  let l:back_changed = get(g:, 'simple_yurii_note_realtime_backlink_sync', 0)
         \ && (!empty(s:list_diff(l:new.back, get(l:old, 'back', [])))
         \ || !empty(s:list_diff(get(l:old, 'back', []), l:new.back)))
 
@@ -1478,7 +1478,7 @@ function! s:realtime_sync_apply() abort
     let s:realtime_sync_busy = 0
   endtry
 
-  let b:yurii_pkm_realtime_snapshot = s:current_reciprocal_snapshot()
+  let b:simple_yurii_note_realtime_snapshot = s:current_reciprocal_snapshot()
   if l:changed
     checktime
   endif
@@ -1488,15 +1488,15 @@ function! s:realtime_sync_timer(timer) abort
   call s:realtime_sync_apply()
 endfunction
 
-function! yurii_pkm#realtime_sync_on_text_changed() abort
-  if !get(g:, 'yurii_pkm_realtime_link_sync', 1)
+function! simple_yurii_note#realtime_sync_on_text_changed() abort
+  if !get(g:, 'simple_yurii_note_realtime_link_sync', 1)
     return
   endif
-  if exists('b:yurii_pkm_realtime_timer')
-    call timer_stop(b:yurii_pkm_realtime_timer)
+  if exists('b:simple_yurii_note_realtime_timer')
+    call timer_stop(b:simple_yurii_note_realtime_timer)
   endif
   if has('timers')
-    let b:yurii_pkm_realtime_timer = timer_start(get(g:, 'yurii_pkm_realtime_link_sync_delay', 800), function('s:realtime_sync_timer'))
+    let b:simple_yurii_note_realtime_timer = timer_start(get(g:, 'simple_yurii_note_realtime_link_sync_delay', 800), function('s:realtime_sync_timer'))
   else
     call s:realtime_sync_apply()
   endif
@@ -1576,7 +1576,7 @@ endfunction
 " Link navigation
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#jump_link(forward) abort
+function! simple_yurii_note#jump_link(forward) abort
   let l:flags = a:forward ? 'W' : 'bW'
   if !search(s:link_pat, l:flags)
     echo 'No more links'
@@ -1591,7 +1591,7 @@ function! s:jump_to_line(lnum) abort
   normal! zv
 endfunction
 
-function! yurii_pkm#jump_section_header(name) abort
+function! simple_yurii_note#jump_section_header(name) abort
   let l:sec = s:find_section_line(a:name)
   if l:sec <= 0
     echo '# ' . a:name . ' section not found'
@@ -1628,7 +1628,7 @@ function! s:section_link_positions(name) abort
   return l:positions
 endfunction
 
-function! yurii_pkm#jump_up() abort
+function! simple_yurii_note#jump_up() abort
   let l:up = s:find_section_line('up')
   if l:up <= 0
     echo 'Parent: section not found'
@@ -1639,7 +1639,7 @@ function! yurii_pkm#jump_up() abort
   if len(l:links) == 1
     call cursor(l:links[0].lnum, l:links[0].col)
     normal! zv
-    call yurii_pkm#open_link_under_cursor()
+    call simple_yurii_note#open_link_under_cursor()
     return
   endif
   if len(l:links) >= 2
@@ -1651,7 +1651,7 @@ function! yurii_pkm#jump_up() abort
   call s:jump_to_line(l:up)
 endfunction
 
-function! yurii_pkm#jump_down_top() abort
+function! simple_yurii_note#jump_down_top() abort
   let l:down = s:find_section_line('down')
   if l:down <= 0
     echo 'Child: section not found'
@@ -1662,7 +1662,7 @@ function! yurii_pkm#jump_down_top() abort
   call s:jump_to_line(l:end > l:down ? l:down + 1 : l:down)
 endfunction
 
-function! yurii_pkm#jump_down_bottom() abort
+function! simple_yurii_note#jump_down_bottom() abort
   let l:up_links = s:section_link_positions('up')
   if len(l:up_links) >= 2
     call cursor(l:up_links[0].lnum, l:up_links[0].col)
@@ -1680,7 +1680,7 @@ function! yurii_pkm#jump_down_bottom() abort
   call s:jump_to_line(l:end > l:down ? l:end : l:down)
 endfunction
 
-function! yurii_pkm#jump_last_link_before_up() abort
+function! simple_yurii_note#jump_last_link_before_up() abort
   let l:up = s:find_section_line('up')
   if l:up <= 0
     echo 'Parent section not found'
@@ -1768,7 +1768,7 @@ function! s:pos_after(a, b) abort
 endfunction
 
 " <Space> … parent/child（文中は対象外）のリンクを順に巡回。端で折り返す。
-function! yurii_pkm#jump_relation_link(forward) abort
+function! simple_yurii_note#jump_relation_link(forward) abort
   let l:pos = s:v2_relation_link_positions()
   if empty(l:pos)
     " ノートじゃない／関係リンクなし → 通常の <Space>/<BS> 相当
@@ -1957,7 +1957,7 @@ let s:rlp_want_cursor_init = 0
 let s:rlp_labels = '1234567890esrtuvwxzo'
 
 function! s:rlp_labels_str() abort
-  return get(g:, 'yurii_pkm_space_labels', s:rlp_labels)
+  return get(g:, 'simple_yurii_note_space_labels', s:rlp_labels)
 endfunction
 
 " --- 行の基本操作 -----------------------------------------------------------
@@ -2092,7 +2092,7 @@ endfunction
 function! s:rlp_build_index() abort
   let l:root = s:get_pkm_root()
   if empty(l:root) || !isdirectory(l:root) | let l:root = getcwd() | endif
-  let l:idx = get(g:, 'yurii_search_index', '')
+  let l:idx = get(g:, 'simple_yurii_search_index', '')
   let s:rlp_cands = []
   if !empty(l:idx) && filereadable(l:idx) && executable('python3')
     for l:ln in systemlist('python3 ' . shellescape(l:idx) . ' ' . shellescape(l:root))
@@ -2111,7 +2111,7 @@ function! s:rlp_build_index() abort
   endif
   " 最近訪問した順に固定する。無クエリでも絞り込み後でも並びが安定し、
   " 「決める時間」が減る（NAVIGATION.md 根本4）。
-  let l:recent = yurii_pkm#recent_map()
+  let l:recent = simple_yurii_note#recent_map()
   call map(s:rlp_cands, {_, c -> extend(c,
         \ {'r': get(l:recent, fnamemodify(c.p, ':p'), 0)})})
   call sort(s:rlp_cands, {a, b -> b.r == a.r ? (a.t < b.t ? -1 : 1) : b.r - a.r})
@@ -2120,7 +2120,7 @@ endfunction
 " --- ジオメトリ -------------------------------------------------------------
 
 function! s:rlp_geometry() abort
-  if get(g:, 'yurii_pkm_space_fullscreen', 1)
+  if get(g:, 'simple_yurii_note_space_fullscreen', 1)
     " popup 1 個の画面占有 = 宣言幅/高 + border(2) + padding(横2/縦0)
     let l:chrome_w = 4
     let l:chrome_h = 2
@@ -2128,7 +2128,7 @@ function! s:rlp_geometry() abort
     let l:gap = 1
     let l:top = 1 + l:outer
     let l:h = max([&lines - l:chrome_h - 2 * l:outer, 8])
-    let l:lw = get(g:, 'yurii_pkm_space_list_width', 0)
+    let l:lw = get(g:, 'simple_yurii_note_space_list_width', 0)
     if l:lw <= 0
       let l:lw = max([36, min([float2nr(&columns * 0.38), 58])])
     endif
@@ -2376,7 +2376,7 @@ function! s:rlp_preview() abort
     call popup_settext(s:rlp_pvwin, ['(ディレクトリ)', l:path])
     return
   endif
-  let l:body = readfile(l:path, '', get(g:, 'yurii_pkm_space_preview_lines', 400))
+  let l:body = readfile(l:path, '', get(g:, 'simple_yurii_note_space_preview_lines', 400))
   if !empty(l:body) && l:body[0] =~# '^---\s*$'
     let l:e = 1
     while l:e < len(l:body) && l:body[l:e] !~# '^\%(---\|\.\.\.\)\s*$'
@@ -2419,10 +2419,10 @@ endfunction
 
 " プレビュー内のヒット強調用。reverse なので配色を問わず必ず見える。
 function! s:rlp_ensure_hl() abort
-  highlight default YuriiNavMatch term=reverse cterm=reverse gui=reverse
+  highlight default SimpleNavMatch term=reverse cterm=reverse gui=reverse
   if empty(prop_type_get('yuriiNavMatch'))
     call prop_type_add('yuriiNavMatch',
-          \ {'highlight': 'YuriiNavMatch', 'combine': v:true})
+          \ {'highlight': 'SimpleNavMatch', 'combine': v:true})
   endif
 endfunction
 
@@ -2644,15 +2644,15 @@ endfunction
 function! s:rlp_link_apply(targets, below, ...) abort
   let l:anchor = s:rlp_path
   if empty(l:anchor) || !filereadable(l:anchor)
-    echohl WarningMsg | echo 'yurii_PKM: アンカーが不正' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: アンカーが不正' | echohl NONE
     return
   endif
   if empty(a:targets)
-    echo 'yurii_PKM: 対象なし'
+    echo 'simple_yurii_note: 対象なし'
     return
   endif
   let l:rel = (a:0 > 0 && a:1 !=# '') ? a:1 : s:v2_pick_relation()
-  if empty(l:rel) | echo 'yurii_PKM: キャンセル' | return | endif
+  if empty(l:rel) | echo 'simple_yurii_note: キャンセル' | return | endif
   let l:side = s:v2_relation_side(l:rel)
   let l:below = l:side >= 0 ? l:side : a:below
 
@@ -2682,17 +2682,17 @@ function! s:rlp_link_apply(targets, below, ...) abort
     call winrestview(l:view)
   endif
   let s:rlp_marks = {}
-  echo printf('yurii_PKM: %s %s %s += %d 件',
+  echo printf('simple_yurii_note: %s %s %s += %d 件',
         \ fnamemodify(l:anchor, ':t'), l:rel, l:below ? '↓そっちにとって' : '↑こっちにとって', l:n)
 endfunction
 
 function! s:rlp_open_path(path, ...) abort
   let l:it = a:0 > 0 ? a:1 : {}
   if empty(a:path) || (!filereadable(a:path) && !isdirectory(a:path))
-    echo 'yurii_PKM: 開けない: ' . a:path
+    echo 'simple_yurii_note: 開けない: ' . a:path
     return
   endif
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   silent! execute 'hide edit ' . fnameescape(a:path)
   if !empty(l:it) && get(l:it, 'kind', '') ==# 'link'
         \ && (l:it.side ==# 'up' || l:it.side ==# 'down')
@@ -2718,12 +2718,12 @@ function! s:rlp_done(winid, result) abort
     for l:t in a:result.yank
       call add(l:links, s:make_link_from_dir(l:t, s:get_title(l:t), expand('%:p:h')))
     endfor
-    if empty(l:links) | echo 'yurii_PKM: 対象なし' | return | endif
+    if empty(l:links) | echo 'simple_yurii_note: 対象なし' | return | endif
     let l:txt = join(l:links, "\n")
     let @" = l:txt
     if has('clipboard') | let @+ = l:txt | endif
     let s:rlp_marks = {}
-    echo 'yurii_PKM: ヤンク ' . len(l:links) . ' 件'
+    echo 'simple_yurii_note: ヤンク ' . len(l:links) . ' 件'
     return
   endif
 
@@ -2763,17 +2763,17 @@ endfunction
 " <Space> … 文中 / こっちにとって / そっちにとって ＋ 全ノート検索のナビゲータ。
 "   jk/ラベル 選択  l 潜る  h 戻る  ⏎ 開く  ␣ アンカーを開く  fb プレビュー
 "   c/p 子/親に追加  y ヤンク  m マーク  a アンカー移動  i 絞込  ⇥ local⇄global
-function! yurii_pkm#relation_link_popup() abort
-  call yurii_pkm#note_navigator('local')
+function! simple_yurii_note#relation_link_popup() abort
+  call simple_yurii_note#note_navigator('local')
 endfunction
 
 " gs … 同じナビゲータを global スコープ（全ノート検索）で開く
-function! yurii_pkm#note_search() abort
-  call yurii_pkm#note_navigator('global')
+function! simple_yurii_note#note_search() abort
+  call simple_yurii_note#note_navigator('global')
 endfunction
 
 " a:scope … 'local'（今のノートのリンク） / 'global'（全ノート検索）
-function! yurii_pkm#note_navigator(scope) abort
+function! simple_yurii_note#note_navigator(scope) abort
   let l:origin_path = expand('%:p')
   let l:is_note = !empty(l:origin_path) && s:is_markdown_file(l:origin_path)
   let l:groups0 = l:is_note
@@ -2781,7 +2781,7 @@ function! yurii_pkm#note_navigator(scope) abort
   if a:scope ==# 'local'
     if empty(get(l:groups0, 'body', [])) && empty(get(l:groups0, 'up', []))
           \ && empty(get(l:groups0, 'down', []))
-      call yurii_pkm#jump_relation_link(1)
+      call simple_yurii_note#jump_relation_link(1)
       return
     endif
   endif
@@ -2844,7 +2844,7 @@ endfunction
 "   1-9,0    … その番号のリンクを直接開く（生の数字キー、0は10番目）
 "   文字+数字 … 11番目以降（z1, z2, …, z9, z0, t1, … の2打、1→0順）
 " 実際に見えている番号・ラベルがリンクの手前に仮想テキストで表示されるので、
-" 数えなくても押すキーが分かる（g:yurii_pkm_link_hints=0 で無効化）。
+" 数えなくても押すキーが分かる（g:simple_yurii_note_link_hints=0 で無効化）。
 " 11番目以降の文字は、このプラグインがすでに2打コマンドの頭文字として
 " 使っている文字だけを使う（z, t, c, b, m, p, y ─ zc/zp/ta/tt/cu/ca/
 " bu/bc/mp/mx/pe/yn 等）。n は検索リピート（n/N）に使うので外してある。
@@ -2892,9 +2892,9 @@ endfunction
 
 function! s:hint_ensure_prop_type() abort
   if !has('textprop') | return 0 | endif
-  highlight default link YuriiLinkHint Special
+  highlight default link SimpleLinkHint Special
   if empty(prop_type_get(s:hint_prop_type))
-    call prop_type_add(s:hint_prop_type, {'highlight': 'YuriiLinkHint'})
+    call prop_type_add(s:hint_prop_type, {'highlight': 'SimpleLinkHint'})
   endif
   return 1
 endfunction
@@ -2904,7 +2904,7 @@ function! s:hint_go(pos) abort
   normal! m'
   call cursor(a:pos.lnum, a:pos.col)
   normal! zv
-  call yurii_pkm#open_link_under_cursor()
+  call simple_yurii_note#open_link_under_cursor()
 endfunction
 
 " 使わなくなった2文字ラベルの一時マッピングを外し、新しく必要な分を張る。
@@ -2921,15 +2921,15 @@ function! s:hint_sync_full_maps(labels) abort
   endfor
   for l:label in a:labels
     if index(l:have, l:label) < 0
-      execute printf('nnoremap <silent><buffer> %s <Cmd>call yurii_pkm#hint_goto(%s)<CR>', l:label, string(l:label))
+      execute printf('nnoremap <silent><buffer> %s <Cmd>call simple_yurii_note#hint_goto(%s)<CR>', l:label, string(l:label))
     endif
   endfor
   let b:yurii_hint_full_labels = a:labels
 endfunction
 
 " 本文・Parent/Child のリンク手前に、ラベル（1-9 / 文字+数字）を仮想テキストで表示する。
-function! yurii_pkm#refresh_link_hints() abort
-  if !get(g:, 'yurii_pkm_link_hints', 1) || !has('textprop') | return | endif
+function! simple_yurii_note#refresh_link_hints() abort
+  if !get(g:, 'simple_yurii_note_link_hints', 1) || !has('textprop') | return | endif
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki' | return | endif
   if !s:hint_ensure_prop_type() | return | endif
   call prop_remove({'type': s:hint_prop_type, 'all': v:true})
@@ -2948,7 +2948,7 @@ endfunction
 
 " 数字キー（生の 1-9,0）… 本文 → Parent/Child の順で通し番号にした N 番目の
 " リンクを直接開く（0は10番目）。該当が無ければ通常のカウント/行頭移動として送る。
-function! yurii_pkm#digit_key(idx, key) abort
+function! simple_yurii_note#digit_key(idx, key) abort
   let l:pos = s:hint_positions()
   if !empty(l:pos) && a:idx >= 1 && a:idx <= len(l:pos)
     call s:hint_go(l:pos[a:idx - 1])
@@ -2958,14 +2958,14 @@ function! yurii_pkm#digit_key(idx, key) abort
 endfunction
 
 " 文字+数字（11番目以降のラベル）… 対応する位置を開く。
-function! yurii_pkm#hint_goto(label) abort
+function! simple_yurii_note#hint_goto(label) abort
   let l:pos = get(b:, 'yurii_hint_map', {})
   if has_key(l:pos, a:label)
     call s:hint_go(l:pos[a:label])
   endif
 endfunction
 
-function! yurii_pkm#get_link_under_cursor() abort
+function! simple_yurii_note#get_link_under_cursor() abort
   let l:line   = getline('.')
   let l:cursor = col('.') - 1
   let l:start  = 0
@@ -3183,7 +3183,7 @@ function! s:display_target_from_current_dir(target) abort
   return substitute(s:expand_user_path(a:target), '\\', '/', 'g')
 endfunction
 
-function! yurii_pkm#resolve_link(target, ...) abort
+function! simple_yurii_note#resolve_link(target, ...) abort
   let l:base = a:0 ? a:1 : expand('%:p:h')
   let l:existing = s:resolve_existing_link_target(a:target, l:base)
   if !empty(l:existing)
@@ -3224,7 +3224,7 @@ function! s:resolve_link_for_navigation(target, ...) abort
     if filereadable(l:cwd_candidate) || isdirectory(l:cwd_candidate)
       return l:cwd_candidate
     endif
-  elseif get(g:, 'yurii_pkm_global_bare_link_navigation', 0)
+  elseif get(g:, 'simple_yurii_note_global_bare_link_navigation', 0)
     let l:global = s:find_unique_file_near_current_tree(l:base, l:target)
     if !empty(l:global)
       return l:global
@@ -3316,7 +3316,7 @@ function! s:is_filename_target(target) abort
 endfunction
 
 function! s:existing_title_for_target(target) abort
-  let l:path = yurii_pkm#resolve_link(a:target)
+  let l:path = simple_yurii_note#resolve_link(a:target)
   if filereadable(l:path) && s:is_markdown_target(a:target)
     return s:get_title(l:path)
   endif
@@ -3365,7 +3365,7 @@ function! s:retitle_markdown_links_in_line(line, base_dir) abort
     let l:target = get(l:parts, 2, '')
     let l:new_link = l:raw
     if !empty(l:target) && s:is_markdown_target(l:target)
-      let l:path = yurii_pkm#resolve_link(l:target, a:base_dir)
+      let l:path = simple_yurii_note#resolve_link(l:target, a:base_dir)
       let l:title = s:get_yaml_title(l:path)
       if !empty(l:title)
         let l:new_link = '[' . l:title . '](' . l:target . ')'
@@ -3382,7 +3382,7 @@ function! s:retitle_markdown_links_in_line(line, base_dir) abort
   return {'line': l:changed ? l:new_line : a:line, 'changed': l:changed}
 endfunction
 
-function! yurii_pkm#rename_down_links_to_yaml_title(line1, line2, range) range abort
+function! simple_yurii_note#rename_down_links_to_yaml_title(line1, line2, range) range abort
   let l:base = expand('%:p:h')
   if a:range > 0
     let l:start = a:line1
@@ -3481,35 +3481,35 @@ function! s:save_json_state(name, value) abort
 endfunction
 
 " 最近訪問（path -> epoch）。global スコープの無クエリ時の並び順に使う。
-function! yurii_pkm#recent_map() abort
-  if !exists('g:yurii_pkm_recent')
-    let g:yurii_pkm_recent = s:load_json_state('recent.json', {})
+function! simple_yurii_note#recent_map() abort
+  if !exists('g:simple_yurii_note_recent')
+    let g:simple_yurii_note_recent = s:load_json_state('recent.json', {})
   endif
-  return g:yurii_pkm_recent
+  return g:simple_yurii_note_recent
 endfunction
 
 function! s:recent_touch(path) abort
   if empty(a:path) || !s:is_markdown_file(a:path) | return | endif
-  let l:m = yurii_pkm#recent_map()
+  let l:m = simple_yurii_note#recent_map()
   let l:m[fnamemodify(a:path, ':p')] = localtime()
   " 上限を超えたら古いものから捨てる
-  let l:cap = get(g:, 'yurii_pkm_recent_max', 500)
+  let l:cap = get(g:, 'simple_yurii_note_recent_max', 500)
   if len(l:m) > l:cap
     let l:pairs = sort(items(l:m), {a, b -> a[1] - b[1]})
     for l:i in range(len(l:pairs) - l:cap)
       call remove(l:m, l:pairs[l:i][0])
     endfor
   endif
-  let g:yurii_pkm_recent = l:m
+  let g:simple_yurii_note_recent = l:m
   call s:save_json_state('recent.json', l:m)
 endfunction
 
 " ハブ（'1'..'9' -> path）
-function! yurii_pkm#hub_map() abort
-  if !exists('g:yurii_pkm_hubs')
-    let g:yurii_pkm_hubs = s:load_json_state('hubs.json', {})
+function! simple_yurii_note#hub_map() abort
+  if !exists('g:simple_yurii_note_hubs')
+    let g:simple_yurii_note_hubs = s:load_json_state('hubs.json', {})
   endif
-  return g:yurii_pkm_hubs
+  return g:simple_yurii_note_hubs
 endfunction
 
 " 引数が数値でも文字列でも '1'..'9' の文字列に揃える（string() は引用符を付ける）
@@ -3517,7 +3517,7 @@ function! s:hub_key(v) abort
   return type(a:v) == v:t_number ? printf('%d', a:v) : trim(a:v)
 endfunction
 
-function! yurii_pkm#hub_set(...) abort
+function! simple_yurii_note#hub_set(...) abort
   let l:n = a:0 > 0 ? s:hub_key(a:1) : ''
   if empty(l:n)
     echo 'ハブ番号 1-9: '
@@ -3526,33 +3526,33 @@ function! yurii_pkm#hub_set(...) abort
     let l:n = type(l:c) == v:t_number ? nr2char(l:c) : l:c
   endif
   if l:n !~# '^[1-9]$'
-    echo 'yurii_PKM: 1-9 で指定して' | return
+    echo 'simple_yurii_note: 1-9 で指定して' | return
   endif
   let l:file = expand('%:p')
   if empty(l:file) || !s:is_markdown_file(l:file)
-    echohl WarningMsg | echo 'yurii_PKM: ノート上で実行して' | echohl NONE | return
+    echohl WarningMsg | echo 'simple_yurii_note: ノート上で実行して' | echohl NONE | return
   endif
-  let l:m = yurii_pkm#hub_map()
+  let l:m = simple_yurii_note#hub_map()
   let l:m[l:n] = l:file
-  let g:yurii_pkm_hubs = l:m
+  let g:simple_yurii_note_hubs = l:m
   call s:save_json_state('hubs.json', l:m)
-  echo printf('yurii_PKM: ハブ %s = %s', l:n, s:get_title(l:file))
+  echo printf('simple_yurii_note: ハブ %s = %s', l:n, s:get_title(l:file))
 endfunction
 
-function! yurii_pkm#hub_jump(n) abort
-  let l:m = yurii_pkm#hub_map()
+function! simple_yurii_note#hub_jump(n) abort
+  let l:m = simple_yurii_note#hub_map()
   let l:p = get(l:m, s:hub_key(a:n), '')
   if empty(l:p) || !filereadable(l:p)
-    echo printf('yurii_PKM: ハブ %s は未登録（\H%s で登録）', a:n, a:n)
+    echo printf('simple_yurii_note: ハブ %s は未登録（\H%s で登録）', a:n, a:n)
     return
   endif
   if fnamemodify(expand('%:p'), ':p') ==# fnamemodify(l:p, ':p') | return | endif
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   silent! execute 'hide edit ' . fnameescape(l:p)
 endfunction
 
-function! yurii_pkm#hub_list() abort
-  let l:m = yurii_pkm#hub_map()
+function! simple_yurii_note#hub_list() abort
+  let l:m = simple_yurii_note#hub_map()
   let l:out = []
   for l:n in map(range(1, 9), 'string(v:val)')
     let l:p = get(l:m, l:n, '')
@@ -3562,61 +3562,61 @@ function! yurii_pkm#hub_list() abort
   echo join(l:out, "\n")
 endfunction
 
-function! yurii_pkm#push_history() abort
-  let l:file = yurii_pkm#current_file()
+function! simple_yurii_note#push_history() abort
+  let l:file = simple_yurii_note#current_file()
   if empty(l:file) | return | endif
-  call add(g:yurii_pkm_history, {'file': l:file, 'pos': getpos('.')})
-  if len(g:yurii_pkm_history) > g:yurii_pkm_history_max
-    call remove(g:yurii_pkm_history, 0)
+  call add(g:simple_yurii_note_history, {'file': l:file, 'pos': getpos('.')})
+  if len(g:simple_yurii_note_history) > g:simple_yurii_note_history_max
+    call remove(g:simple_yurii_note_history, 0)
   endif
   " 新しい移動が起きたら「進む」履歴は無効になる（ブラウザと同じ）
-  let g:yurii_pkm_forward = []
+  let g:simple_yurii_note_forward = []
   " 直前ノート（⌥ トグル用）
-  let g:yurii_pkm_alt = l:file
+  let g:simple_yurii_note_alt = l:file
   call s:recent_touch(l:file)
 endfunction
 
 " 直前に居たノートとの1キー往復。押すたび A→B→A→B。
-function! yurii_pkm#toggle_alternate() abort
+function! simple_yurii_note#toggle_alternate() abort
   let l:cur = expand('%:p')
-  let l:alt = get(g:, 'yurii_pkm_alt', '')
-  if empty(l:alt) && !empty(get(g:, 'yurii_pkm_history', []))
-    let l:alt = g:yurii_pkm_history[-1].file
+  let l:alt = get(g:, 'simple_yurii_note_alt', '')
+  if empty(l:alt) && !empty(get(g:, 'simple_yurii_note_history', []))
+    let l:alt = g:simple_yurii_note_history[-1].file
   endif
   if empty(l:alt) || !filereadable(l:alt)
-    echo 'yurii_PKM: 直前のノートがない'
+    echo 'simple_yurii_note: 直前のノートがない'
     return
   endif
   if fnamemodify(l:alt, ':p') ==# fnamemodify(l:cur, ':p')
-    echo 'yurii_PKM: 直前のノートが自分自身'
+    echo 'simple_yurii_note: 直前のノートが自分自身'
     return
   endif
-  call add(g:yurii_pkm_history, {'file': l:cur, 'pos': getpos('.')})
-  if len(g:yurii_pkm_history) > g:yurii_pkm_history_max
-    call remove(g:yurii_pkm_history, 0)
+  call add(g:simple_yurii_note_history, {'file': l:cur, 'pos': getpos('.')})
+  if len(g:simple_yurii_note_history) > g:simple_yurii_note_history_max
+    call remove(g:simple_yurii_note_history, 0)
   endif
-  let g:yurii_pkm_forward = []
-  let g:yurii_pkm_alt = l:cur
+  let g:simple_yurii_note_forward = []
+  let g:simple_yurii_note_alt = l:cur
   silent! execute 'hide edit ' . fnameescape(l:alt)
   call s:recent_touch(l:alt)
 endfunction
 
 " 履歴を前に進む（⌫ の対）。戻るが可逆になる。
-function! yurii_pkm#go_forward() abort
-  if !exists('g:yurii_pkm_forward') || empty(g:yurii_pkm_forward)
-    echo 'yurii_PKM: これ以上進めない'
+function! simple_yurii_note#go_forward() abort
+  if !exists('g:simple_yurii_note_forward') || empty(g:simple_yurii_note_forward)
+    echo 'simple_yurii_note: これ以上進めない'
     return
   endif
-  let l:item = remove(g:yurii_pkm_forward, -1)
-  if get(g:, 'yurii_pkm_sync_before_link_navigation', 0)
+  let l:item = remove(g:simple_yurii_note_forward, -1)
+  if get(g:, 'simple_yurii_note_sync_before_link_navigation', 0)
     call s:write_current_and_sync_now()
-  elseif get(g:, 'yurii_pkm_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
+  elseif get(g:, 'simple_yurii_note_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
     silent update
   endif
   let l:cur = expand('%:p')
   if !empty(l:cur)
-    call add(g:yurii_pkm_history, {'file': l:cur, 'pos': getpos('.')})
-    let g:yurii_pkm_alt = l:cur
+    call add(g:simple_yurii_note_history, {'file': l:cur, 'pos': getpos('.')})
+    let g:simple_yurii_note_alt = l:cur
   endif
   silent! execute 'hide edit ' . fnameescape(l:item.file)
   call setpos('.', l:item.pos)
@@ -3624,8 +3624,8 @@ function! yurii_pkm#go_forward() abort
   call s:recent_touch(l:item.file)
 endfunction
 
-function! yurii_pkm#open_link_under_cursor() abort
-  let l:link = yurii_pkm#get_link_under_cursor()
+function! simple_yurii_note#open_link_under_cursor() abort
+  let l:link = simple_yurii_note#get_link_under_cursor()
   if empty(l:link) || empty(l:link.target)
     echo 'No link under cursor'
     return
@@ -3638,12 +3638,12 @@ function! yurii_pkm#open_link_under_cursor() abort
   let l:source_name = expand('%:t')
   let l:from_back = s:in_back_section(line('.'))
   let l:from_up = s:in_up_section(line('.'))
-  if get(g:, 'yurii_pkm_sync_before_link_navigation', 0)
+  if get(g:, 'simple_yurii_note_sync_before_link_navigation', 0)
     call s:write_current_and_sync_now()
-  elseif get(g:, 'yurii_pkm_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
+  elseif get(g:, 'simple_yurii_note_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
     silent update
   endif
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   silent! execute 'hide edit ' . fnameescape(l:path)
   if l:from_back || l:from_up
     let l:pos = s:find_reciprocal_link_pos(l:path, l:source_name)
@@ -3654,26 +3654,26 @@ function! yurii_pkm#open_link_under_cursor() abort
 endfunction
 
 
-function! yurii_pkm#go_back() abort
-  if !exists('g:yurii_pkm_history') || empty(g:yurii_pkm_history)
+function! simple_yurii_note#go_back() abort
+  if !exists('g:simple_yurii_note_history') || empty(g:simple_yurii_note_history)
     echo 'History is empty'
     return
   endif
-  let l:item = remove(g:yurii_pkm_history, -1)
-  if get(g:, 'yurii_pkm_sync_before_link_navigation', 0)
+  let l:item = remove(g:simple_yurii_note_history, -1)
+  if get(g:, 'simple_yurii_note_sync_before_link_navigation', 0)
     call s:write_current_and_sync_now()
-  elseif get(g:, 'yurii_pkm_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
+  elseif get(g:, 'simple_yurii_note_save_before_link_navigation', 0) && &modified && &buftype ==# '' && &modifiable
     silent update
   endif
   " 戻る前に「今いる場所」を進む履歴へ積む（戻りを可逆にする）
   let l:cur = expand('%:p')
   if !empty(l:cur)
-    if !exists('g:yurii_pkm_forward') | let g:yurii_pkm_forward = [] | endif
-    call add(g:yurii_pkm_forward, {'file': l:cur, 'pos': getpos('.')})
-    if len(g:yurii_pkm_forward) > g:yurii_pkm_history_max
-      call remove(g:yurii_pkm_forward, 0)
+    if !exists('g:simple_yurii_note_forward') | let g:simple_yurii_note_forward = [] | endif
+    call add(g:simple_yurii_note_forward, {'file': l:cur, 'pos': getpos('.')})
+    if len(g:simple_yurii_note_forward) > g:simple_yurii_note_history_max
+      call remove(g:simple_yurii_note_forward, 0)
     endif
-    let g:yurii_pkm_alt = l:cur
+    let g:simple_yurii_note_alt = l:cur
   endif
   silent! execute 'hide edit ' . fnameescape(l:item.file)
   call setpos('.', l:item.pos)
@@ -3709,11 +3709,11 @@ endfunction
 " Note template
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#timestamp_filename() abort
+function! simple_yurii_note#timestamp_filename() abort
   return strftime('%y%m%d%H%M%S')
 endfunction
 
-function! yurii_pkm#timestamp_yaml() abort
+function! simple_yurii_note#timestamp_yaml() abort
   return strftime('%Y-%m-%d %H:%M:%S')
 endfunction
 
@@ -3721,7 +3721,7 @@ function! s:k_note_template(title) abort
   if s:pkm_format() ==# 'v2'
     return [
           \ '---',
-          \ 'time: ' . yurii_pkm#timestamp_yaml(),
+          \ 'time: ' . simple_yurii_note#timestamp_yaml(),
           \ 'title: ' . a:title,
           \ '---',
           \ '',
@@ -3733,7 +3733,7 @@ function! s:k_note_template(title) abort
   endif
   return [
         \ '---',
-        \ 'time: ' . yurii_pkm#timestamp_yaml(),
+        \ 'time: ' . simple_yurii_note#timestamp_yaml(),
         \ 'filetype: K',
         \ 'title: ' . a:title,
         \ '---',
@@ -3794,11 +3794,11 @@ function! s:body_top_insert_line() abort
 endfunction
 
 " a:1 = v2 で 1 なら `attribute: グループ` を付ける（容器ノート）
-function! yurii_pkm#note_template(title, ...) abort
+function! simple_yurii_note#note_template(title, ...) abort
   let l:is_cat = (a:0 > 0 && s:pkm_format() ==# 'v2' && a:1)
   let l:header = [
         \ '---',
-        \ 'time: ' . yurii_pkm#timestamp_yaml(),
+        \ 'time: ' . simple_yurii_note#timestamp_yaml(),
         \ 'title: ' . a:title,
         \ ]
   if l:is_cat
@@ -3983,7 +3983,7 @@ endfunction
 " 任意の .md ファイル（現ノートからの相対パス）の front matter attribute 値。無ければ空文字
 " （旧名 カテゴリー / キーワード は グループ / 小グループ へ読み替えて返す）
 function! s:v2_target_attr(tgt) abort
-  let l:path = yurii_pkm#resolve_link(a:tgt)
+  let l:path = simple_yurii_note#resolve_link(a:tgt)
   if !filereadable(l:path) | return '' | endif
   let l:lines = readfile(l:path, '', 30)
   if empty(l:lines) || l:lines[0] !~# '^---\s*$' | return '' | endif
@@ -4053,11 +4053,11 @@ function! s:v2_insert_link_in_lines(lines, target_dir, rel, linktext, below) abo
 
   let l:new_tgt = s:extract_target(a:linktext)
   if !empty(l:new_tgt)
-    let l:new_fp = fnamemodify(yurii_pkm#resolve_link(l:new_tgt, a:target_dir), ':p')
+    let l:new_fp = fnamemodify(simple_yurii_note#resolve_link(l:new_tgt, a:target_dir), ':p')
     for l:i in range(l:lo + 1, min([l:hi - 1, l:n]))
       let l:old = s:extract_target(get(l:lines, l:i - 1, ''))
       if empty(l:old) | continue | endif
-      if fnamemodify(yurii_pkm#resolve_link(l:old, a:target_dir), ':p') ==# l:new_fp
+      if fnamemodify(simple_yurii_note#resolve_link(l:old, a:target_dir), ':p') ==# l:new_fp
         return {'lines': l:lines, 'ok': 0, 'reason': 'dup'}
       endif
     endfor
@@ -4119,7 +4119,7 @@ function! s:v2_insert_link(rel, linktext, ...) abort
   let [l:up_m, l:dn_m] = s:v2_boundaries()
   if l:up_m == 0
     echohl WarningMsg
-    echo 'yurii_PKM: このノートは v2 形式じゃない（見張りコメントなし）。:V2Migrate で変換して'
+    echo 'simple_yurii_note: このノートは v2 形式じゃない（見張りコメントなし）。:V2Migrate で変換して'
     echohl NONE
     return 0
   endif
@@ -4135,12 +4135,12 @@ function! s:v2_insert_link(rel, linktext, ...) abort
   " 同じ相手が既にこの区間に居れば二重に足さない（c を2回押しても増えない）
   let l:new_tgt = s:extract_target(a:linktext)
   if !empty(l:new_tgt)
-    let l:new_fp = fnamemodify(yurii_pkm#resolve_link(l:new_tgt, expand('%:p:h')), ':p')
+    let l:new_fp = fnamemodify(simple_yurii_note#resolve_link(l:new_tgt, expand('%:p:h')), ':p')
     for l:i in range(l:lo + 1, min([l:hi - 1, line('$')]))
       let l:old = s:extract_target(getline(l:i))
       if empty(l:old) | continue | endif
-      if fnamemodify(yurii_pkm#resolve_link(l:old, expand('%:p:h')), ':p') ==# l:new_fp
-        echo 'yurii_PKM: すでに登録済み — ' . l:new_tgt
+      if fnamemodify(simple_yurii_note#resolve_link(l:old, expand('%:p:h')), ':p') ==# l:new_fp
+        echo 'simple_yurii_note: すでに登録済み — ' . l:new_tgt
         return 0
       endif
     endfor
@@ -4202,7 +4202,7 @@ endfunction
 "   a:4 … 1 なら逆モード（\ca/\at）。今開いているノート側を `(ラベル)` にし、
 "          相手側には生のラベルをその場で（質問なしで）書く。通常モード
 "          （ca/at）とは括弧が付く側が逆になるだけで、他のロジックは共通。
-function! yurii_pkm#v2_add_link(...) abort
+function! simple_yurii_note#v2_add_link(...) abort
   let l:raw = a:0 > 0 && a:1 !=# '' ? a:1 : trim(getreg('+'))
   if l:raw ==# '' | let l:raw = trim(getreg('"')) | endif
   let l:below_default = a:0 > 2 ? a:3 : 0
@@ -4210,7 +4210,7 @@ function! yurii_pkm#v2_add_link(...) abort
 
   let l:targets = filter(s:extract_targets_from_clipboard(l:raw), 'v:val =~# ''\.md$''')
   if empty(l:targets)
-    echohl WarningMsg | echo 'yurii_PKM: .md のファイル名 / リンクが見つからない' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: .md のファイル名 / リンクが見つからない' | echohl NONE
     return
   endif
 
@@ -4231,13 +4231,13 @@ function! yurii_pkm#v2_add_link(...) abort
   if empty(l:batch_rel)
     if len(l:targets) == 1
       let l:batch_rel = s:v2_pick_relation(l:all_attr)
-      if l:batch_rel ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+      if l:batch_rel ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
     else
       let l:mode = s:v2_pick('複数件の関係', ['一括で同じ関係', '一つずつ選ぶ'])
-      if l:mode ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+      if l:mode ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
       if l:mode ==# '一括で同じ関係'
         let l:batch_rel = s:v2_pick_relation(l:all_attr)
-        if l:batch_rel ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+        if l:batch_rel ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
       endif
     endif
   endif
@@ -4251,12 +4251,12 @@ function! yurii_pkm#v2_add_link(...) abort
     let l:manual_name = 0
   elseif !empty(l:attr_targets) && len(l:attr_targets) > 1
     let l:nm = s:v2_pick('属性ノートの表示名', ['一つずつ入力', 'タイトルのまま'])
-    if l:nm ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+    if l:nm ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
     let l:manual_name = (l:nm ==# '一つずつ入力')
   endif
 
   let l:cur_path  = expand('%:p')
-  let l:cur_title = yurii_pkm#current_title()
+  let l:cur_title = simple_yurii_note#current_title()
   if l:cur_title ==# '' | let l:cur_title = fnamemodify(l:cur_path, ':t:r') | endif
 
   " まず各対象の関係・向き・表示名を決めるだけ決める（挿入はまだしない）。
@@ -4267,7 +4267,7 @@ function! yurii_pkm#v2_add_link(...) abort
     let l:is_attr = has_key(l:attr_targets, l:tgt)
     let l:rel = !empty(l:batch_rel) ? l:batch_rel : s:v2_pick_relation(l:self_attr || l:is_attr)
     if l:rel ==# ''
-      echo 'yurii_PKM: ' . l:tgt . ' はキャンセルしてスキップ'
+      echo 'simple_yurii_note: ' . l:tgt . ' はキャンセルしてスキップ'
       continue
     endif
     " 関係ごとの向きの制約（グループ=こっちにとって / 関連=対称）
@@ -4312,7 +4312,7 @@ function! yurii_pkm#v2_add_link(...) abort
     " ピッカーの選択肢（索引/補足/資料 等）は聞かず常に書く。自由入力の
     " 言葉だけ、上で聞いた結果（l:write_asked）に従う。
     let l:do_write = l:is_custom && (s:v2_is_menu_relation(l:e.rel) || l:write_asked)
-    let l:tgt_path = yurii_pkm#resolve_link(l:e.tgt)
+    let l:tgt_path = simple_yurii_note#resolve_link(l:e.tgt)
     if l:reverse
       " \ca/\at: 相手側は常に（質問なしで）生のラベルをその場で書く。
       " 自分側は聞かれる側: 書くなら (ラベル) をその場で書き、
@@ -4328,10 +4328,10 @@ function! yurii_pkm#v2_add_link(...) abort
         let l:own_rel = l:is_custom ? '(' . l:e.rel . ')' : l:e.rel
         if s:v2_insert_link(l:own_rel, '[' . l:e.title . '](' . l:e.tgt . ')', l:e.below)
           let l:added += 1
-          echo 'yurii_PKM: ' . l:own_rel . (l:e.below ? ' ↓ ' : ' ') . '+= ' . l:e.title
+          echo 'simple_yurii_note: ' . l:own_rel . (l:e.below ? ' ↓ ' : ' ') . '+= ' . l:e.title
         endif
       else
-        echo 'yurii_PKM: ' . l:e.rel . (l:e.below ? ' ↓ ' : ' ') . '(相手のみ) += ' . l:e.title
+        echo 'simple_yurii_note: ' . l:e.rel . (l:e.below ? ' ↓ ' : ' ') . '(相手のみ) += ' . l:e.title
       endif
     else
       " ca/at/bc/cu: 自分側は常に生のラベルをその場で書く。相手側は
@@ -4341,7 +4341,7 @@ function! yurii_pkm#v2_add_link(...) abort
       let l:own_write_rel = (l:is_custom && !l:do_write) ? l:e.rel . ';' : l:e.rel
       if s:v2_insert_link(l:own_write_rel, '[' . l:e.title . '](' . l:e.tgt . ')', l:e.below)
         let l:added += 1
-        echo 'yurii_PKM: ' . l:own_write_rel . (l:e.below ? ' ↓ ' : ' ') . '+= ' . l:e.title
+        echo 'simple_yurii_note: ' . l:own_write_rel . (l:e.below ? ' ↓ ' : ' ') . '+= ' . l:e.title
         if l:do_write
           call s:v2_write_other_side_label(l:tgt_path, '(' . l:e.rel . ')', l:cur_path, l:cur_title, l:e.below)
           let l:other_written = 1
@@ -4365,11 +4365,11 @@ endfunction
 " a:1(可変) … 関係名（省略時は数字ピッカー）
 function! s:v2_new_related(below, attr, ...) abort
   if s:pkm_format() !=# 'v2'
-    echo 'yurii_PKM: v2 専用（g:yurii_pkm_format = ''v2''）' | return
+    echo 'simple_yurii_note: v2 専用（g:simple_yurii_note_format = ''v2''）' | return
   endif
   let l:cur = expand('%:p')
   if empty(l:cur)
-    echohl WarningMsg | echo 'yurii_PKM: 名前付きバッファで実行して' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE
     return
   endif
   " 現ノートが属性ノート（グループ / 小グループ）なら、関係ピッカーは
@@ -4382,7 +4382,7 @@ function! s:v2_new_related(below, attr, ...) abort
     let l:write = a:0 > 1 ? a:2 : 1
   else
     let l:pick = s:v2_pick_relation2(!empty(l:cur_attr))
-    if empty(l:pick) | echo 'yurii_PKM: キャンセル' | return | endif
+    if empty(l:pick) | echo 'simple_yurii_note: キャンセル' | return | endif
     let l:rel   = l:pick.rel
     let l:write = l:pick.write
   endif
@@ -4394,7 +4394,7 @@ function! s:v2_new_related(below, attr, ...) abort
 
   " 現ノート（＝新ノートの相手）の情報
   let l:cur_name  = expand('%:t')
-  let l:cur_title = yurii_pkm#current_title()
+  let l:cur_title = simple_yurii_note#current_title()
   if l:cur_title ==# '' | let l:cur_title = fnamemodify(l:cur, ':t:r') | endif
   " 現ノートが属性ノートなら、新ノート側のラベルを上書きする。
   " below=1（nc: backlink は新ノートの こっちにとって）: 相手（現ノート）が
@@ -4425,7 +4425,7 @@ function! s:v2_new_related(below, attr, ...) abort
   endif
 
   let l:dir = expand('%:p:h')
-  let l:ts  = yurii_pkm#timestamp_filename()
+  let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
 
   let l:save_ai = &autoindent | let l:save_si = &smartindent
@@ -4442,7 +4442,7 @@ function! s:v2_new_related(below, attr, ...) abort
   " を選んだ）なら新ノートには何も書かず、sync が既定の『ノート』を生成する。
   let l:backlink = empty(l:back_rel) ? [] :
         \ [l:back_rel . ':', '[' . l:cur_title . '](' . l:cur_name . ')']
-  let l:fm = ['---', 'time: ' . yurii_pkm#timestamp_yaml(), 'title: ' . l:ts]
+  let l:fm = ['---', 'time: ' . simple_yurii_note#timestamp_yaml(), 'title: ' . l:ts]
   if !empty(a:attr) | call add(l:fm, 'attribute: ' . a:attr) | endif
   call add(l:fm, '---')
   let l:up   = a:below ? l:backlink : []
@@ -4473,16 +4473,16 @@ endfunction
 
 " zc: 子ノート（リンクは現ノートの そっちにとって 側）
 " zc/zp は zn に一本化して廃止。コマンド :NC / :NP からの互換のためだけに残す。
-function! yurii_pkm#v2_new_child(...) abort
+function! simple_yurii_note#v2_new_child(...) abort
   call s:v2_new_interactive('')
 endfunction
 
-function! yurii_pkm#v2_new_parent(...) abort
+function! simple_yurii_note#v2_new_parent(...) abort
   call s:v2_new_interactive('')
 endfunction
 
 " zw は廃止して zk（グループノート）に置き換え。互換のため名前だけ残す。
-function! yurii_pkm#v2_new_attr() abort
+function! simple_yurii_note#v2_new_attr() abort
   call s:v2_new_interactive('group')
 endfunction
 
@@ -4492,29 +4492,29 @@ endfunction
 " ROOT/.pkm_expand_prefs.json に記録され、次回「保存済み設定を使う」で
 " 再利用できる）を選ぶ。出力は ROOT/_tmp/T_<timestamp>.md（sync 管理外、
 " 編集しても元ノートへは反映されない使い捨てスナップショット）。
-function! yurii_pkm#v2_expand() abort
+function! simple_yurii_note#v2_expand() abort
   let l:cur = expand('%:p')
   if empty(l:cur)
-    echohl WarningMsg | echo 'yurii_PKM: 名前付きバッファで実行して' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE
     return
   endif
   let l:root = s:get_pkm_root()
   if empty(l:root)
-    echohl WarningMsg | echo 'yurii_PKM: PKM root が未設定' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: PKM root が未設定' | echohl NONE
     return
   endif
-  let l:py = get(g:, 'yurii_pkm_expand_v2_python', '')
+  let l:py = get(g:, 'simple_yurii_note_expand_v2_python', '')
   if empty(l:py) || !filereadable(l:py)
-    echohl WarningMsg | echo 'yurii_PKM: expand_v2.py が見つからない: ' . l:py | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: expand_v2.py が見つからない: ' . l:py | echohl NONE
     return
   endif
 
   let l:mode = s:v2_pick('展開', ['シンプル', '詳細'])
-  if l:mode ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+  if l:mode ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
 
   if l:mode ==# 'シンプル'
     let l:n = input('深さ（数字）: ', '1')
-    if l:n !~# '^\d\+$' | echo 'yurii_PKM: キャンセル' | return | endif
+    if l:n !~# '^\d\+$' | echo 'simple_yurii_note: キャンセル' | return | endif
     let l:args = [s:python_cmd(), l:py, 'simple', l:root, l:cur, l:n]
   else
     let l:prefs = s:v2_expand_prefs(l:root, l:py)
@@ -4523,7 +4523,7 @@ function! yurii_pkm#v2_expand() abort
       let l:pm = s:v2_pick('詳細設定', [
             \ '保存済み(子' . l:prefs.child . ' 親' . l:prefs.parent . ' 文中' . l:prefs.backlink . ')を使う',
             \ '新しく設定する'])
-      if l:pm ==# '' | echo 'yurii_PKM: キャンセル' | return | endif
+      if l:pm ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
       let l:use_saved = (l:pm =~# '^保存済み')
     endif
     if l:use_saved
@@ -4535,7 +4535,7 @@ function! yurii_pkm#v2_expand() abort
       let l:pd = input('親の深さ: ', '1')
       let l:bd = input('文中の深さ: ', '0')
       if l:cd !~# '^\d\+$' || l:pd !~# '^\d\+$' || l:bd !~# '^\d\+$'
-        echo 'yurii_PKM: キャンセル' | return
+        echo 'simple_yurii_note: キャンセル' | return
       endif
     endif
     let l:args = [s:python_cmd(), l:py, 'detailed', l:root, l:cur, l:cd, l:pd, l:bd]
@@ -4543,12 +4543,12 @@ function! yurii_pkm#v2_expand() abort
 
   let l:out = systemlist(join(map(copy(l:args), 'shellescape(v:val)'), ' '))
   if v:shell_error != 0 || empty(l:out)
-    echohl WarningMsg | echo 'yurii_PKM: 展開に失敗: ' . join(l:out, ' ') | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: 展開に失敗: ' . join(l:out, ' ') | echohl NONE
     return
   endif
   let l:result_path = l:out[-1]
   if !filereadable(l:result_path)
-    echohl WarningMsg | echo 'yurii_PKM: 展開ファイルが見つからない: ' . l:result_path | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: 展開ファイルが見つからない: ' . l:result_path | echohl NONE
     return
   endif
   execute 'edit ' . fnameescape(l:result_path)
@@ -4568,19 +4568,19 @@ endfunction
 
 " カーソル直下ノート（zh）: 新ノートを作り、そのリンクをカーソル行の直下（本文）に置く。
 " 関係セクションには入れない → 相手には バックリンク: として現れる。
-function! yurii_pkm#v2_new_here() abort
+function! simple_yurii_note#v2_new_here() abort
   if s:pkm_format() !=# 'v2'
-    echo 'yurii_PKM: v2 専用' | return
+    echo 'simple_yurii_note: v2 専用' | return
   endif
   let l:cur = expand('%:p')
   if empty(l:cur)
-    echohl WarningMsg | echo 'yurii_PKM: 名前付きバッファで実行して' | echohl NONE
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE
     return
   endif
   let l:dir = expand('%:p:h')
-  let l:ts  = yurii_pkm#timestamp_filename()
+  let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
-  call writefile(yurii_pkm#note_template(l:ts, 0), l:file)
+  call writefile(simple_yurii_note#note_template(l:ts, 0), l:file)
   let l:save_ai = &autoindent | let l:save_si = &smartindent
   setlocal noautoindent nosmartindent
   call append(line('.'), '[' . l:ts . '](' . l:ts . '.md)')
@@ -4591,12 +4591,12 @@ function! yurii_pkm#v2_new_here() abort
 endfunction
 
 " zn: ノート作成。リレーションは書かず、位置だけ h/Enter/o/p で選ぶ。
-function! yurii_pkm#v2_new_plain() abort
+function! simple_yurii_note#v2_new_plain() abort
   call s:v2_new_interactive('')
 endfunction
 
 " zk: グループノート作成（attribute: グループ）。位置は zn と同じ h/Enter/o/p。
-function! yurii_pkm#v2_new_group() abort
+function! simple_yurii_note#v2_new_group() abort
   call s:v2_new_interactive('group')
 endfunction
 
@@ -4660,26 +4660,26 @@ endfunction
 
 function! s:v2_new_interactive(attr) abort
   if s:pkm_format() !=# 'v2'
-    echo 'yurii_PKM: v2 専用' | return
+    echo 'simple_yurii_note: v2 専用' | return
   endif
   let l:cur = expand('%:p')
   if empty(l:cur)
-    echohl WarningMsg | echo 'yurii_PKM: 名前付きバッファで実行して' | echohl NONE | return
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE | return
   endif
-  let l:cur_title = yurii_pkm#current_title()
+  let l:cur_title = simple_yurii_note#current_title()
   let l:dir = expand('%:p:h')
-  let l:ts  = yurii_pkm#timestamp_filename()
+  let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
 
   echo 'h=カーソル直下 / Enter=本文の最後 / o=リンク無し(孤立)  (Esc/q キャンセル)'
   let l:ch = nr2char(getchar())
   redraw
   if l:ch ==? 'q' || char2nr(l:ch) == 27 || char2nr(l:ch) == 3
-    echo 'yurii_PKM: キャンセル' | return
+    echo 'simple_yurii_note: キャンセル' | return
   endif
 
   " 新ノートを先に作る（sync がリンク先を解決できるように）
-  call writefile(yurii_pkm#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
+  call writefile(simple_yurii_note#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
 
   let l:link = '[' . l:ts . '](' . l:ts . '.md)'
   let l:added = 0
@@ -4700,7 +4700,7 @@ function! s:v2_new_interactive(attr) abort
     call s:simple_add_parent(l:file, l:cur, l:cur_title)
     call s:run_update_one_for(l:cur)
   endif
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   execute 'edit ' . fnameescape(l:file)
   " 本文入力位置へ。zn は余白 2 行なので 2 行下、zk（グループ）は 1 行下。
   let l:h1 = search('^#\s', 'nw')
@@ -4711,13 +4711,13 @@ endfunction
 " 旧形式（v1 の Parent:/Child: / 旧 `---`）を v2 へ明示変換。
 "   :V2Migrate       … PKM ルート全体
 "   :V2Migrate %     … 現在のファイルだけ
-function! yurii_pkm#v2_migrate(...) abort
+function! simple_yurii_note#v2_migrate(...) abort
   if s:pkm_format() !=# 'v2'
-    echo 'yurii_PKM: v2 のみ' | return
+    echo 'simple_yurii_note: v2 のみ' | return
   endif
   let l:root = s:get_pkm_root()
-  if empty(l:root) | echoerr 'yurii_PKM: PKM ルート未設定' | return | endif
-  let l:args = [s:python_cmd(), g:yurii_pkm_python, 'migrate', l:root]
+  if empty(l:root) | echoerr 'simple_yurii_note: PKM ルート未設定' | return | endif
+  let l:args = [s:python_cmd(), g:simple_yurii_note_python, 'migrate', l:root]
   if a:0 > 0 && a:1 !=# ''
     call add(l:args, a:1 ==# '%' ? expand('%:p') : a:1)
   endif
@@ -4727,7 +4727,7 @@ endfunction
 
 function! s:v2_link_dispatch() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link()
+    call simple_yurii_note#v2_add_link()
     return 1
   endif
   return 0
@@ -4746,7 +4746,7 @@ function! s:make_link_from_dir(path, title, base_dir) abort
   return '[' . l:text . '](' . l:file . ')'
 endfunction
 
-function! yurii_pkm#make_link(path, title) abort
+function! simple_yurii_note#make_link(path, title) abort
   return s:make_link_from_dir(a:path, a:title, expand('%:p:h'))
 endfunction
 
@@ -4774,7 +4774,7 @@ endfunction
 " Update link titles in current buffer (Vim-side, lightweight)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#update_current_buffer() abort
+function! simple_yurii_note#update_current_buffer() abort
   let l:in_branch = 0
   let l:in_back   = 0
   let l:after_sep = 0
@@ -4836,7 +4836,7 @@ function! yurii_pkm#update_current_buffer() abort
   endfor
 
   if l:modified
-    echo 'yurii_PKM: link titles updated'
+    echo 'simple_yurii_note: link titles updated'
   endif
 endfunction
 
@@ -4844,21 +4844,21 @@ endfunction
 " UpdateMD / UpdateAll
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#update_md(arg) abort
-  let l:root = empty(a:arg) ? yurii_pkm#ensure_root_and_index() : fnamemodify(expand(a:arg), ':p')
+function! simple_yurii_note#update_md(arg) abort
+  let l:root = empty(a:arg) ? simple_yurii_note#ensure_root_and_index() : fnamemodify(expand(a:arg), ':p')
   if empty(l:root)
     return
   endif
   if !empty(a:arg)
-    let g:yurii_pkm_root = l:root
+    let g:simple_yurii_note_root = l:root
     if !isdirectory(l:root)
       call mkdir(l:root, 'p')
     endif
     call s:save_persisted_root(l:root)
     call s:setup_persistent_undo_for_root(l:root)
   endif
-  call yurii_pkm#check_missing_prefix_in_current_dir()
-  let l:out = s:run_sync([g:yurii_pkm_python, 'update', l:root])
+  call simple_yurii_note#check_missing_prefix_in_current_dir()
+  let l:out = s:run_sync([g:simple_yurii_note_python, 'update', l:root])
   if v:shell_error
     echoerr substitute(l:out, '\n\+$', '', '')
     return
@@ -4867,8 +4867,8 @@ function! yurii_pkm#update_md(arg) abort
   call s:reload_current()
 endfunction
 
-function! yurii_pkm#update_all(arg) abort
-  call yurii_pkm#update_md(a:arg)
+function! simple_yurii_note#update_all(arg) abort
+  call simple_yurii_note#update_md(a:arg)
 endfunction
 
 " 現在バッファをディスクから再読み込み（未変更の場合のみ、カーソル位置保持）
@@ -4909,8 +4909,8 @@ endfunction
 "   - 完了後 checktime で Vim バッファを更新
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#autosync_on_save() abort
-  if !filereadable(g:yurii_pkm_python)
+function! simple_yurii_note#autosync_on_save() abort
+  if !filereadable(g:simple_yurii_note_python)
     return
   endif
 
@@ -4925,7 +4925,7 @@ function! yurii_pkm#autosync_on_save() abort
   endif
 
   let l:py   = s:python_cmd()
-  let l:args = [l:py, g:yurii_pkm_python, 'update_one', l:file, l:root]
+  let l:args = [l:py, g:simple_yurii_note_python, 'update_one', l:file, l:root]
 
   if has('job') && has('channel')
     " 非同期実行
@@ -4953,8 +4953,8 @@ endfunction
 " 任意のファイルパスに対して update_one を起動するヘルパー
 function! s:update_one_command(target_fp, ...) abort
   let l:force = a:0 > 0 ? a:1 : 0
-  if !l:force && !g:yurii_pkm_autosync | return '' | endif
-  if !filereadable(g:yurii_pkm_python) | return '' | endif
+  if !l:force && !g:simple_yurii_note_autosync | return '' | endif
+  if !filereadable(g:simple_yurii_note_python) | return '' | endif
   let l:root = s:get_pkm_root()
   if empty(l:root) || !filereadable(s:index_path(l:root))
     return ''
@@ -4963,19 +4963,19 @@ function! s:update_one_command(target_fp, ...) abort
     return ''
   endif
   let l:py = s:python_cmd()
-  return l:py . ' ' . shellescape(g:yurii_pkm_python)
+  return l:py . ' ' . shellescape(g:simple_yurii_note_python)
         \ . ' update_one ' . shellescape(a:target_fp)
         \ . ' ' . shellescape(l:root)
 endfunction
 
 function! s:reparent_down_children_for_sync(new_parent_fp, old_parent_fp) abort
-  if !g:yurii_pkm_autosync | return | endif
-  if !filereadable(g:yurii_pkm_python) | return | endif
+  if !g:simple_yurii_note_autosync | return | endif
+  if !filereadable(g:simple_yurii_note_python) | return | endif
   let l:root = s:get_pkm_root()
   if empty(l:root) || !filereadable(s:index_path(l:root))
     return
   endif
-  let l:cmd = s:python_cmd() . ' ' . shellescape(g:yurii_pkm_python)
+  let l:cmd = s:python_cmd() . ' ' . shellescape(g:simple_yurii_note_python)
         \ . ' reparent_down_children ' . shellescape(a:new_parent_fp)
         \ . ' ' . shellescape(a:old_parent_fp)
         \ . ' ' . shellescape(l:root)
@@ -5025,17 +5025,17 @@ function! s:write_current_and_sync_now() abort
   call s:run_update_one_for_sync(l:file, 1)
 endfunction
 
-function! yurii_pkm#save_before_normal_jump(keys) abort
+function! simple_yurii_note#save_before_normal_jump(keys) abort
   if &buftype ==# '' && &modifiable && &modified
     let l:file = expand('%:p')
     if empty(l:file)
-      echohl ErrorMsg | echom 'yurii_PKM: file name is empty; cannot auto-save before jump' | echohl None
+      echohl ErrorMsg | echom 'simple_yurii_note: file name is empty; cannot auto-save before jump' | echohl None
       return
     endif
     try
       silent update
     catch
-      echohl ErrorMsg | echom 'yurii_PKM: auto-save before jump failed: ' . v:exception | echohl None
+      echohl ErrorMsg | echom 'simple_yurii_note: auto-save before jump failed: ' . v:exception | echohl None
       return
     endtry
     if s:is_markdown_file(l:file)
@@ -5058,7 +5058,7 @@ function! s:run_retitle_links_for_title_change(target_fp, old_title, new_title) 
   if a:old_title ==# a:new_title
     return
   endif
-  if !filereadable(g:yurii_pkm_python)
+  if !filereadable(g:simple_yurii_note_python)
     return
   endif
   let l:root = s:get_pkm_root()
@@ -5067,7 +5067,7 @@ function! s:run_retitle_links_for_title_change(target_fp, old_title, new_title) 
   endif
 
   let l:py  = s:python_cmd()
-  let l:cmd = l:py . ' ' . shellescape(g:yurii_pkm_python)
+  let l:cmd = l:py . ' ' . shellescape(g:simple_yurii_note_python)
         \    . ' retitle_links ' . shellescape(a:target_fp)
         \    . ' ' . shellescape(l:root)
         \    . ' ' . shellescape(a:old_title)
@@ -5093,8 +5093,8 @@ endfunction
 " rename_link_text
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#rename_link_text_with_default(default) abort
-  let l:link = yurii_pkm#get_link_under_cursor()
+function! simple_yurii_note#rename_link_text_with_default(default) abort
+  let l:link = simple_yurii_note#get_link_under_cursor()
   if empty(l:link) || empty(get(l:link, 'target', ''))
     echo 'No link under cursor'
     return
@@ -5114,22 +5114,22 @@ function! yurii_pkm#rename_link_text_with_default(default) abort
   call cursor(line('.'), l:start + 2)
 endfunction
 
-function! yurii_pkm#rename_link_text(args) abort
-  let l:link = yurii_pkm#get_link_under_cursor()
+function! simple_yurii_note#rename_link_text(args) abort
+  let l:link = simple_yurii_note#get_link_under_cursor()
   if empty(l:link) || empty(get(l:link, 'target', ''))
     echo 'No link under cursor'
     return
   endif
   let l:default = a:args ==# '' ? l:link.text : a:args
-  call yurii_pkm#rename_link_text_with_default(l:default)
+  call simple_yurii_note#rename_link_text_with_default(l:default)
 endfunction
 
 " ---------------------------------------------------------------------------
 " rename_title (:NT)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#rename_title_with_default(default) abort
-  let l:old_title = yurii_pkm#current_title()
+function! simple_yurii_note#rename_title_with_default(default) abort
+  let l:old_title = simple_yurii_note#current_title()
   let l:title = input('new title: ', a:default)
 
   if empty(l:title)
@@ -5164,7 +5164,7 @@ function! yurii_pkm#rename_title_with_default(default) abort
       call insert(l:lines, 'title: ' . l:title, l:yaml_start + 1)
     endif
   else
-    let l:header = ['---', 'time: ' . yurii_pkm#timestamp_yaml(),
+    let l:header = ['---', 'time: ' . simple_yurii_note#timestamp_yaml(),
           \ 'title: ' . l:title, '---', '']
     let l:lines = l:header + l:lines
   endif
@@ -5187,21 +5187,21 @@ function! yurii_pkm#rename_title_with_default(default) abort
     execute (len(l:lines) + 1) . ',$delete _'
   endif
   write
-  call yurii_pkm#clear_title_cache()
+  call simple_yurii_note#clear_title_cache()
   call s:run_retitle_links_for_title_change(expand('%:p'), l:old_title, l:title)
 endfunction
 
-function! yurii_pkm#rename_title(args) abort
-  let l:default = a:args ==# '' ? yurii_pkm#current_title() : a:args
-  call yurii_pkm#rename_title_with_default(l:default)
+function! simple_yurii_note#rename_title(args) abort
+  let l:default = a:args ==# '' ? simple_yurii_note#current_title() : a:args
+  call simple_yurii_note#rename_title_with_default(l:default)
 endfunction
 
 " ---------------------------------------------------------------------------
 " create_note (internal)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#create_note(prefix, title, open_after, insert_mode) abort
-  let l:root = yurii_pkm#ensure_root_and_index()
+function! simple_yurii_note#create_note(prefix, title, open_after, insert_mode) abort
+  let l:root = simple_yurii_note#ensure_root_and_index()
   if empty(l:root)
     return {}
   endif
@@ -5209,7 +5209,7 @@ function! yurii_pkm#create_note(prefix, title, open_after, insert_mode) abort
   if empty(l:dir)
     let l:dir = l:root
   endif
-  let l:fname = a:prefix . '_' . yurii_pkm#timestamp_filename() . '.md'
+  let l:fname = a:prefix . '_' . simple_yurii_note#timestamp_filename() . '.md'
   let l:file  = l:dir . s:sep() . l:fname
   if filereadable(l:file)
     echoerr 'File already exists: ' . l:file
@@ -5217,14 +5217,14 @@ function! yurii_pkm#create_note(prefix, title, open_after, insert_mode) abort
   endif
 
   let l:parent_file  = expand('%:p')
-  let l:parent_title = yurii_pkm#current_title()
+  let l:parent_title = simple_yurii_note#current_title()
 
   if a:insert_mode ==# 'branch' && s:structural_link_append_line() <= 0
-    echoerr 'yurii_PKM: Child: section not found'
+    echoerr 'simple_yurii_note: Child: section not found'
     return {}
   endif
 
-  let l:tmpl = yurii_pkm#note_template(a:title, a:prefix)
+  let l:tmpl = simple_yurii_note#note_template(a:title, a:prefix)
   if filereadable(l:parent_file)
     let l:parent_link = s:make_link_from_dir(l:parent_file, l:parent_title, l:dir)
     let l:up_idx = s:find_section_index_in_lines(l:tmpl, 'up')
@@ -5236,7 +5236,7 @@ function! yurii_pkm#create_note(prefix, title, open_after, insert_mode) abort
   endif
   call writefile(l:tmpl, l:file)
 
-  let l:link = yurii_pkm#make_link(l:file, a:title)
+  let l:link = simple_yurii_note#make_link(l:file, a:title)
   let l:save_ai = &autoindent
   let l:save_si = &smartindent
   setlocal noautoindent nosmartindent
@@ -5254,7 +5254,7 @@ function! yurii_pkm#create_note(prefix, title, open_after, insert_mode) abort
   let &smartindent = l:save_si
 
   if a:open_after
-    call yurii_pkm#push_history()
+    call simple_yurii_note#push_history()
     execute 'edit ' . fnameescape(l:file)
     let &autoindent = l:save_ai
     let &smartindent = l:save_si
@@ -5271,7 +5271,7 @@ endfunction
 " :NC - New Child (常に C プレフィックス、タイトルのみ入力)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#new_child(args) abort
+function! simple_yurii_note#new_child(args) abort
   try
     let l:title = input('title: ', a:args)
   catch /^Vim:Interrupt$/
@@ -5279,9 +5279,9 @@ function! yurii_pkm#new_child(args) abort
     return
   endtry
   if empty(l:title)
-    let l:title = yurii_pkm#timestamp_filename()
+    let l:title = simple_yurii_note#timestamp_filename()
   endif
-  call yurii_pkm#create_note('C', l:title, 1, 'branch')
+  call simple_yurii_note#create_note('C', l:title, 1, 'branch')
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -5289,7 +5289,7 @@ endfunction
 "             現在ファイルの 本文末尾に追加する
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#new_here_typed(prefix) abort
+function! simple_yurii_note#new_here_typed(prefix) abort
   try
     let l:title = input('title: ')
   catch /^Vim:Interrupt$/
@@ -5297,9 +5297,9 @@ function! yurii_pkm#new_here_typed(prefix) abort
     return
   endtry
   if empty(l:title)
-    let l:title = yurii_pkm#timestamp_filename()
+    let l:title = simple_yurii_note#timestamp_filename()
   endif
-  call yurii_pkm#create_note(a:prefix, l:title, 1, 'branch')
+  call simple_yurii_note#create_note(a:prefix, l:title, 1, 'branch')
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -5321,16 +5321,16 @@ endfunction
 
 function! s:new_note_no_title(prefix) abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_new_child()
+    call simple_yurii_note#v2_new_child()
     return
   endif
   let l:parent_line  = line('.')
   let l:parent_path  = expand('%:p')
   let l:parent_dir   = expand('%:p:h')
-  let l:parent_title = yurii_pkm#current_title()
+  let l:parent_title = simple_yurii_note#current_title()
   let l:filetype = toupper(a:prefix)
   let l:is_k = (l:filetype ==# 'K')
-  let l:timestamp = yurii_pkm#timestamp_filename()
+  let l:timestamp = simple_yurii_note#timestamp_filename()
   let l:title = l:timestamp
 
   if l:is_k
@@ -5381,7 +5381,7 @@ function! s:new_note_no_title(prefix) abort
   let l:link  = s:make_link_from_dir(l:file, l:title, l:parent_dir)
 
   if !l:no_parent_link && !l:reverse_link && !l:insert_at_cursor && s:structural_link_append_line() <= 0
-    echoerr 'yurii_PKM: Child: section not found'
+    echoerr 'simple_yurii_note: Child: section not found'
     return
   endif
 
@@ -5421,7 +5421,7 @@ function! s:new_note_no_title(prefix) abort
       " # title / (空) / Parent / Child / [親リンク] / Back / [index]
       let l:content = [
             \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
+            \ 'time: ' . simple_yurii_note#timestamp_yaml(),
             \ 'title: ' . l:title,
             \ '---',
             \ '',
@@ -5446,7 +5446,7 @@ function! s:new_note_no_title(prefix) abort
     " mm/nf の h/Enter/o モード: 従来どおり
     let l:content = [
           \ '---',
-          \ 'time: ' . yurii_pkm#timestamp_yaml(),
+          \ 'time: ' . simple_yurii_note#timestamp_yaml(),
           \ 'title: ' . l:title,
           \ '---',
           \ '',
@@ -5486,7 +5486,7 @@ function! s:new_note_no_title(prefix) abort
     endtry
   endif
 
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   execute 'edit ' . fnameescape(l:file)
 
   startinsert
@@ -5516,10 +5516,10 @@ function! s:visual_new_note(prefix, mode, ...) abort
 
   let l:parent_path  = expand('%:p')
   let l:parent_dir   = expand('%:p:h')
-  let l:parent_title = yurii_pkm#current_title()
+  let l:parent_title = simple_yurii_note#current_title()
   let l:dir          = s:cwd_note_dir()
 
-  let l:timestamp = yurii_pkm#timestamp_filename()
+  let l:timestamp = simple_yurii_note#timestamp_filename()
   let l:title = (a:0 >= 1 && !empty(a:1)) ? a:1 : l:timestamp
   let l:filetype = toupper(a:prefix)
   let l:no_prefix_name = (l:filetype ==# 'N')
@@ -5541,7 +5541,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
     else
       let l:content = [
             \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
+            \ 'time: ' . simple_yurii_note#timestamp_yaml(),
             \ 'title: ' . l:title,
             \ '---',
             \ '',
@@ -5569,7 +5569,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
     else
       let l:content = [
             \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
+            \ 'time: ' . simple_yurii_note#timestamp_yaml(),
             \ 'title: ' . l:title,
             \ '---',
             \ '',
@@ -5647,7 +5647,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
 endfunction
 
 " ビジュアル選択から nf / mm / nk を呼ぶエントリポイント
-function! yurii_pkm#visual_new_quick_no_title() abort
+function! simple_yurii_note#visual_new_quick_no_title() abort
   echo 'prefix (a-z): '
   let l:char = getchar()
   redraw
@@ -5663,7 +5663,7 @@ function! yurii_pkm#visual_new_quick_no_title() abort
   call s:visual_select_mode(toupper(l:ch))
 endfunction
 
-function! yurii_pkm#visual_new_prefix_note(prefix) abort
+function! simple_yurii_note#visual_new_prefix_note(prefix) abort
   call s:visual_select_mode(a:prefix)
 endfunction
 
@@ -5703,14 +5703,14 @@ function! s:new_k_note_with_title() abort
     return
   endif
 
-  let l:fname = yurii_pkm#timestamp_filename() . '.md'
+  let l:fname = simple_yurii_note#timestamp_filename() . '.md'
   let l:dir   = expand('%:p:h')
   let l:file  = l:dir . s:sep() . l:fname
-  let l:link  = yurii_pkm#make_link(l:fname, l:title)
+  let l:link  = simple_yurii_note#make_link(l:fname, l:title)
 
   let l:ins = s:structural_link_append_line()
   if l:ins <= 0
-    echoerr 'yurii_PKM: Child: section not found'
+    echoerr 'simple_yurii_note: Child: section not found'
     return
   endif
   let l:save_ai = &autoindent
@@ -5730,7 +5730,7 @@ function! s:new_k_note_with_title() abort
   redraw | echon 'Created: ' . l:fname
 endfunction
 
-function! yurii_pkm#new_quick_no_title() abort
+function! simple_yurii_note#new_quick_no_title() abort
   echo 'prefix (a-z): '
   let l:char = getchar()
   redraw
@@ -5748,7 +5748,7 @@ endfunction
 
 " mm / nk用: prefix固定 → o/b/h選択（Enter=ChildLast）
 
-function! yurii_pkm#new_prefix_note(prefix) abort
+function! simple_yurii_note#new_prefix_note(prefix) abort
   call s:new_note_no_title(a:prefix)
 endfunction
 
@@ -5760,15 +5760,15 @@ endfunction
 
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#new_quick(args) abort
+function! simple_yurii_note#new_quick(args) abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_new_child()
+    call simple_yurii_note#v2_new_child()
     return
   endif
   let l:parent_bufnr = bufnr('%')
   let l:parent_line = line('.')
   let l:parent_file  = expand('%:t')
-  let l:parent_title = yurii_pkm#current_title()
+  let l:parent_title = simple_yurii_note#current_title()
 
   echo 'prefix (a-z): '
   let l:raw = getchar()
@@ -5812,16 +5812,16 @@ function! yurii_pkm#new_quick(args) abort
   endif
 
   if empty(l:title)
-    let l:title = yurii_pkm#timestamp_filename()
+    let l:title = simple_yurii_note#timestamp_filename()
   endif
 
-  let l:fname = l:prefix . '_' . yurii_pkm#timestamp_filename() . '.md'
+  let l:fname = l:prefix . '_' . simple_yurii_note#timestamp_filename() . '.md'
   let l:dir   = expand('%:p:h')
   let l:file  = l:dir . s:sep() . l:fname
-  let l:link = yurii_pkm#make_link(l:fname, l:title)
+  let l:link = simple_yurii_note#make_link(l:fname, l:title)
 
   if !l:no_parent_link && !l:reverse_link && !l:insert_at_cursor && s:structural_link_append_line() <= 0
-    echoerr 'yurii_PKM: Child: section not found'
+    echoerr 'simple_yurii_note: Child: section not found'
     return
   endif
 
@@ -5853,7 +5853,7 @@ function! yurii_pkm#new_quick(args) abort
     else
       let l:content = [
             \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
+            \ 'time: ' . simple_yurii_note#timestamp_yaml(),
             \ 'title: ' . l:title,
             \ '---',
             \ '',
@@ -5876,7 +5876,7 @@ function! yurii_pkm#new_quick(args) abort
   else
     let l:content = [
           \ '---',
-          \ 'time: ' . yurii_pkm#timestamp_yaml(),
+          \ 'time: ' . simple_yurii_note#timestamp_yaml(),
           \ 'title: ' . l:title,
           \ '---',
           \ '',
@@ -5906,7 +5906,7 @@ function! yurii_pkm#new_quick(args) abort
     if &modified
       silent noautocmd write
     endif
-    let l:new_link = yurii_pkm#make_link(l:fname, l:title)
+    let l:new_link = simple_yurii_note#make_link(l:fname, l:title)
     let l:parent_fp = l:dir . s:sep() . l:parent_file
     if filereadable(l:parent_fp)
       let l:plines = readfile(l:parent_fp)
@@ -5942,7 +5942,7 @@ function! yurii_pkm#new_quick(args) abort
     endtry
   endif
 
-  call yurii_pkm#push_history()
+  call simple_yurii_note#push_history()
   execute 'edit ' . fnameescape(l:file)
 
   startinsert
@@ -5954,13 +5954,13 @@ endfunction
 " :CA - Create Atomic note (本文末尾に追加、新ファイルを開く)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#create_atomic(args) abort
-  let l:prefix = g:yurii_pkm_default_atomic_prefix
+function! simple_yurii_note#create_atomic(args) abort
+  let l:prefix = g:simple_yurii_note_default_atomic_prefix
   let l:prefix = toupper(input('prefix [' . l:prefix . ']: ', l:prefix))
-  if empty(l:prefix) | let l:prefix = g:yurii_pkm_default_atomic_prefix | endif
+  if empty(l:prefix) | let l:prefix = g:simple_yurii_note_default_atomic_prefix | endif
   let l:title = input('title: ', a:args)
   if empty(l:title) | echo 'Cancelled' | return | endif
-  call yurii_pkm#create_note(l:prefix, l:title, 1, 'branch')
+  call simple_yurii_note#create_note(l:prefix, l:title, 1, 'branch')
 endfunction
 
 
@@ -5968,9 +5968,9 @@ endfunction
 " :BC - Add from clipboard before Back
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#add_from_clipboard(...) abort
+function! simple_yurii_note#add_from_clipboard(...) abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link(a:0 > 0 ? a:1 : '')
+    call simple_yurii_note#v2_add_link(a:0 > 0 ? a:1 : '')
     return
   endif
   let l:clipboard = s:clipboard_text()
@@ -5992,7 +5992,7 @@ function! yurii_pkm#add_from_clipboard(...) abort
     if empty(l:target)
       continue
     endif
-    let l:path = yurii_pkm#resolve_link(l:target)
+    let l:path = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:path)
       echo 'Warning: not found: ' . l:target
       continue
@@ -6029,7 +6029,7 @@ function! yurii_pkm#add_from_clipboard(...) abort
   echo 'Added ' . len(l:links) . ' link(s)'
 endfunction
 
-function! yurii_pkm#paste_clipboard_link_here() abort
+function! simple_yurii_note#paste_clipboard_link_here() abort
   let l:clipboard = s:clipboard_text()
   if empty(l:clipboard)
     echo 'Error: clipboard is empty'
@@ -6044,7 +6044,7 @@ function! yurii_pkm#paste_clipboard_link_here() abort
     endif
     " md ファイルは存在チェックあり、非md（.svc 等）は存在チェックなしでリンク化
     if s:is_markdown_target(l:target)
-      let l:path = yurii_pkm#resolve_link(l:target)
+      let l:path = simple_yurii_note#resolve_link(l:target)
       if !filereadable(l:path)
         echo 'Warning: not found: ' . l:target
         continue
@@ -6068,9 +6068,9 @@ function! yurii_pkm#paste_clipboard_link_here() abort
   call s:write_current_and_sync_now()
 endfunction
 
-function! yurii_pkm#add_clipboard_to_branch() abort
+function! simple_yurii_note#add_clipboard_to_branch() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link()
+    call simple_yurii_note#v2_add_link()
     return
   endif
   let l:clipboard = s:clipboard_text()
@@ -6085,7 +6085,7 @@ function! yurii_pkm#add_clipboard_to_branch() abort
     if empty(l:target)
       continue
     endif
-    let l:path = yurii_pkm#resolve_link(l:target)
+    let l:path = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:path)
       echo 'Warning: not found: ' . l:target
       continue
@@ -6115,31 +6115,31 @@ endfunction
 
 " za: ca と同じ そっちにとって 側だが、関係は常に既定の「ノート」固定
 " （ピッカーも「相手にも書くか」の質問も出さない）。
-function! yurii_pkm#add_clipboard_before_up_note() abort
+function! simple_yurii_note#add_clipboard_before_up_note() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link('', 'ノート', 1)
+    call simple_yurii_note#v2_add_link('', 'ノート', 1)
     return
   endif
-  call yurii_pkm#add_clipboard_before_up()
+  call simple_yurii_note#add_clipboard_before_up()
 endfunction
 
 " \ca: ca と同じ そっちにとって 側だが、括弧が付く側が逆。今開いているノート
 " 側を `(ラベル)` にし、相手側にはその場で生のラベルを書く（質問なし）。
-function! yurii_pkm#add_clipboard_before_up_reverse() abort
+function! simple_yurii_note#add_clipboard_before_up_reverse() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link('', '', 1, 1)
+    call simple_yurii_note#v2_add_link('', '', 1, 1)
     return
   endif
-  call yurii_pkm#add_clipboard_before_up()
+  call simple_yurii_note#add_clipboard_before_up()
 endfunction
 
-function! yurii_pkm#add_clipboard_before_up() abort
+function! simple_yurii_note#add_clipboard_before_up() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link('', '', 1)  " ca: そっちにとって 側へ
+    call simple_yurii_note#v2_add_link('', '', 1)  " ca: そっちにとって 側へ
     return
   endif
   let l:current_file = expand('%:p')
-  let l:current_title = yurii_pkm#current_title()
+  let l:current_title = simple_yurii_note#current_title()
 
   let l:clipboard = s:clipboard_text()
   if empty(l:clipboard)
@@ -6154,7 +6154,7 @@ function! yurii_pkm#add_clipboard_before_up() abort
     if empty(l:target)
       continue
     endif
-    let l:path = yurii_pkm#resolve_link(l:target)
+    let l:path = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:path)
       echo 'Warning: not found: ' . l:target
       continue
@@ -6175,7 +6175,7 @@ function! yurii_pkm#add_clipboard_before_up() abort
   let l:up_added = 0
   for l:i in range(0, len(l:links) - 1)
     let l:link = l:links[l:i]
-    let l:target_path = yurii_pkm#resolve_link(l:targets[l:i])
+    let l:target_path = simple_yurii_note#resolve_link(l:targets[l:i])
 
     if s:append_link_to_buffer_section('down', l:link)
       let l:down_added += 1
@@ -6194,7 +6194,7 @@ function! yurii_pkm#add_clipboard_before_up() abort
   echo 'ca: Child added ' . l:down_added . ', reciprocal Parent added ' . l:up_added
 endfunction
 
-function! yurii_pkm#add_clipboard_to_top() abort
+function! simple_yurii_note#add_clipboard_to_top() abort
   let l:clipboard = s:clipboard_text()
   if empty(l:clipboard)
     echo 'Error: clipboard is empty'
@@ -6207,7 +6207,7 @@ function! yurii_pkm#add_clipboard_to_top() abort
     if empty(l:target)
       continue
     endif
-    let l:path = yurii_pkm#resolve_link(l:target)
+    let l:path = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:path)
       echo 'Warning: not found: ' . l:target
       continue
@@ -6231,13 +6231,13 @@ function! yurii_pkm#add_clipboard_to_top() abort
   silent write
 endfunction
 
-function! yurii_pkm#linkify_filename_under_cursor() abort
+function! simple_yurii_note#linkify_filename_under_cursor() abort
   let l:word = expand('<cfile>')
   if empty(l:word)
     echo 'Error: no filename under cursor'
     return
   endif
-  let l:path = yurii_pkm#resolve_link(l:word)
+  let l:path = simple_yurii_note#resolve_link(l:word)
   if !filereadable(l:path)
     echo 'Error: not found: ' . l:word
     return
@@ -6282,7 +6282,7 @@ function! s:replace_visual_selection_with_link(link, is_linewise, sline, eline, 
   endif
 endfunction
 
-function! yurii_pkm#linkify_selection_new_note() abort range
+function! simple_yurii_note#linkify_selection_new_note() abort range
 
   let l:vmode = visualmode()
   let l:is_linewise = (l:vmode ==# 'V')
@@ -6338,16 +6338,16 @@ function! yurii_pkm#linkify_selection_new_note() abort range
     return
   endif
 
-  let l:target = yurii_pkm#timestamp_filename() . '.md'
+  let l:target = simple_yurii_note#timestamp_filename() . '.md'
   let l:new_file = expand('%:p:h') . s:sep() . l:target
   let l:parent_file = expand('%:p')
-  let l:parent_title = yurii_pkm#current_title()
+  let l:parent_title = simple_yurii_note#current_title()
   let l:parent_link_lines = s:parent_link_lines(l:parent_file, l:parent_title, expand('%:p:h'))
 
   if !filereadable(l:new_file)
     let l:new_content = [
           \ '---',
-          \ 'time: ' . yurii_pkm#timestamp_yaml(),
+          \ 'time: ' . simple_yurii_note#timestamp_yaml(),
           \ 'title: ' . l:text,
           \ '---',
           \ '',
@@ -6369,11 +6369,11 @@ function! yurii_pkm#linkify_selection_new_note() abort range
 endfunction
 
 " Backward compatibility: :LinkifySelection から呼ばれる既存関数名
-function! yurii_pkm#linkify_selection() abort range
-  return yurii_pkm#linkify_selection_new_note()
+function! simple_yurii_note#linkify_selection() abort range
+  return simple_yurii_note#linkify_selection_new_note()
 endfunction
 
-function! yurii_pkm#linkify_selection_from_clipboard() abort range
+function! simple_yurii_note#linkify_selection_from_clipboard() abort range
   let l:vmode = visualmode()
   let l:is_linewise = (l:vmode ==# 'V')
 
@@ -6442,7 +6442,7 @@ function! yurii_pkm#linkify_selection_from_clipboard() abort range
   endif
 
   if s:is_markdown_target(l:target)
-    let l:path = yurii_pkm#resolve_link(l:target)
+    let l:path = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:path)
       return
     endif
@@ -6453,9 +6453,9 @@ function! yurii_pkm#linkify_selection_from_clipboard() abort range
   call s:replace_visual_selection_with_link(l:link, l:is_linewise, l:sline, l:eline, l:scol, l:ecol, l:lines)
   " simple: 今のノートを相手の親に追加するか聞く
   if s:ask_yes_no('今のノートを 「' . s:v2_title_for(l:target) . '」 の親に追加する？')
-    let l:tgt_path = yurii_pkm#resolve_link(l:target)
+    let l:tgt_path = simple_yurii_note#resolve_link(l:target)
     if filereadable(l:tgt_path)
-      call s:simple_add_parent(l:tgt_path, expand('%:p'), yurii_pkm#current_title())
+      call s:simple_add_parent(l:tgt_path, expand('%:p'), simple_yurii_note#current_title())
     endif
   endif
   call s:write_current_and_sync_now()
@@ -6469,7 +6469,7 @@ endfunction
 " :YN - Yank Note name (拡張子なし)
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#yank_name() abort
+function! simple_yurii_note#yank_name() abort
   let l:name = expand('%:t')
   let @+ = l:name
   let @" = l:name
@@ -6480,7 +6480,7 @@ endfunction
 " gp helper: システムクリップボード優先で、末尾改行を落として行下に追加
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#paste_charwise() abort
+function! simple_yurii_note#paste_charwise() abort
   let l:text = @+
   if empty(l:text)
     let l:text = @"
@@ -6497,21 +6497,21 @@ endfunction
 
 " \at: at と同じ こっちにとって 側だが、括弧が付く側が逆。今開いているノート
 " 側を `(ラベル)` にし、相手側にはその場で生のラベルを書く（質問なし）。
-function! yurii_pkm#at_add_reverse() abort
+function! simple_yurii_note#at_add_reverse() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link('', '', 0, 1)
+    call simple_yurii_note#v2_add_link('', '', 0, 1)
     return
   endif
-  call yurii_pkm#at_add()
+  call simple_yurii_note#at_add()
 endfunction
 
-function! yurii_pkm#at_add() abort
+function! simple_yurii_note#at_add() abort
   if s:pkm_format() ==# 'v2'
-    call yurii_pkm#v2_add_link('', '', 0)  " at: こっちにとって 側へ（相方は sync）
+    call simple_yurii_note#v2_add_link('', '', 0)  " at: こっちにとって 側へ（相方は sync）
     return
   endif
   let l:current_file  = expand('%:p')
-  let l:current_title = yurii_pkm#current_title()
+  let l:current_title = simple_yurii_note#current_title()
 
   let l:cb = s:clipboard_text()
   if empty(l:cb)
@@ -6531,7 +6531,7 @@ function! yurii_pkm#at_add() abort
   let l:missing = 0
 
   for l:target in l:targets
-    let l:target_fp = yurii_pkm#resolve_link(l:target)
+    let l:target_fp = simple_yurii_note#resolve_link(l:target)
     if !filereadable(l:target_fp)
       let l:missing += 1
       echom 'Warning: not found: ' . l:target
@@ -6567,8 +6567,8 @@ endfunction
 " SortYomi (Child セクション yomi ソート) - Python 経由
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#open_index() abort
-  let l:root = yurii_pkm#ensure_root_and_index()
+function! simple_yurii_note#open_index() abort
+  let l:root = simple_yurii_note#ensure_root_and_index()
   if empty(l:root)
     return
   endif
@@ -6578,7 +6578,7 @@ function! yurii_pkm#open_index() abort
     if s:consume_index_created_flag()
       call s:open_index_with_delay(l:index)
     else
-      call yurii_pkm#push_history()
+      call simple_yurii_note#push_history()
       execute 'edit ' . fnameescape(l:index)
     endif
   else
@@ -6586,9 +6586,9 @@ function! yurii_pkm#open_index() abort
   endif
 endfunction
 
-function! yurii_pkm#sort_yomi() abort
+function! simple_yurii_note#sort_yomi() abort
   " sort_yomi.py が同ディレクトリにあれば呼び出す
-  let l:py_dir = fnamemodify(g:yurii_pkm_python, ':h')
+  let l:py_dir = fnamemodify(g:simple_yurii_note_python, ':h')
   let l:sort_script = l:py_dir . s:sep() . 'sort_yomi.py'
   if !filereadable(l:sort_script)
     echohl ErrorMsg
@@ -6618,7 +6618,7 @@ function! s:link_time_key(line) abort
     return '00000000000000'
   endif
 
-  let l:path = yurii_pkm#resolve_link(l:target)
+  let l:path = simple_yurii_note#resolve_link(l:target)
   if filereadable(l:path)
     let l:head = readfile(l:path, '', 40)
     let l:in_yaml = 0
@@ -6662,7 +6662,7 @@ function! s:sort_time_compare(a, b) abort
   return l:ka <# l:kb ? -1 : 1
 endfunction
 
-function! yurii_pkm#sort_time(...) abort
+function! simple_yurii_note#sort_time(...) abort
   let l:descending = a:0 >= 1 ? a:1 : 0
   let l:line1 = a:0 >= 2 ? a:2 : 0
   let l:line2 = a:0 >= 3 ? a:3 : 0
@@ -6728,7 +6728,7 @@ endfunction
 "   現在のファイルのプレフィクスを変更し、PKMルート配下の全リンクを更新する
 " ---------------------------------------------------------------------------
 
-function! yurii_pkm#rename_prefix() abort
+function! simple_yurii_note#rename_prefix() abort
   let l:lines = getline(1, '$')
   let l:cur_type = ''
   let l:yaml_start = -1
@@ -6797,7 +6797,7 @@ endfunction
 
 
 
-function! yurii_pkm#expand_s_under_cursor(...) abort
+function! simple_yurii_note#expand_s_under_cursor(...) abort
   let l:source_path = expand('%:p')
   if empty(l:source_path) || !filereadable(l:source_path)
     echoerr 'expand_s: current file is not readable'
@@ -6806,7 +6806,7 @@ function! yurii_pkm#expand_s_under_cursor(...) abort
 
   let l:depth_arg = a:0 ? trim(a:1) : ''
   if empty(l:depth_arg)
-    let l:depth = get(g:, 'yurii_pkm_expand_default_depth', 1)
+    let l:depth = get(g:, 'simple_yurii_note_expand_default_depth', 1)
   else
     let l:depth = str2nr(l:depth_arg)
   endif
@@ -6815,13 +6815,13 @@ function! yurii_pkm#expand_s_under_cursor(...) abort
     return
   endif
 
-  let l:expand_py = g:yurii_pkm_expand_s_python
+  let l:expand_py = g:simple_yurii_note_expand_s_python
   if !filereadable(l:expand_py)
     echoerr 'expand_s.py not found: ' . l:expand_py
     return
   endif
 
-  let l:root = yurii_pkm#ensure_root_and_index()
+  let l:root = simple_yurii_note#ensure_root_and_index()
   if empty(l:root)
     return
   endif
@@ -7077,7 +7077,7 @@ function! s:find_next_table_data_line(start_lnum, last_lnum) abort
   return 0
 endfunction
 
-function! yurii_pkm#table_align_current() abort
+function! simple_yurii_note#table_align_current() abort
   let [l:start, l:end] = s:table_block_range(line('.'))
   if l:start == 0
     echo 'Not on a table'
@@ -7086,7 +7086,7 @@ function! yurii_pkm#table_align_current() abort
   call s:table_align_block(l:start, l:end)
 endfunction
 
-function! yurii_pkm#table_new(args) abort
+function! simple_yurii_note#table_new(args) abort
   let l:cols = 3
   let l:body_rows = 1
   let l:parts = split(trim(a:args))
@@ -7127,7 +7127,7 @@ function! s:feedkeys_insert(keys) abort
   call feedkeys("\<C-g>u" . a:keys, 'in')
 endfunction
 
-function! yurii_pkm#table_tab_action() abort
+function! simple_yurii_note#table_tab_action() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     call s:feedkeys_insert("\<Tab>")
     return
@@ -7170,7 +7170,7 @@ function! yurii_pkm#table_tab_action() abort
   call cursor(l:new_lnum, s:table_cell_startcol(getline(l:new_lnum), 1))
 endfunction
 
-function! yurii_pkm#table_stab_action() abort
+function! simple_yurii_note#table_stab_action() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     call s:feedkeys_insert("\<C-d>")
     return
@@ -7201,7 +7201,7 @@ function! yurii_pkm#table_stab_action() abort
   endif
 endfunction
 
-function! yurii_pkm#table_cr_action() abort
+function! simple_yurii_note#table_cr_action() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     call s:feedkeys_insert("\<CR>")
     return
@@ -7240,7 +7240,7 @@ function! yurii_pkm#table_cr_action() abort
   call s:table_align_block(l:start, l:end + 1)
   call cursor(l:new_lnum, s:table_cell_startcol(getline(l:new_lnum), l:target_cell))
 endfunction
-function! yurii_pkm#table_tab() abort
+function! simple_yurii_note#table_tab() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     return "\<Tab>"
   endif
@@ -7280,7 +7280,7 @@ function! yurii_pkm#table_tab() abort
   return ''
 endfunction
 
-function! yurii_pkm#table_stab() abort
+function! simple_yurii_note#table_stab() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     return "\<S-Tab>"
   endif
@@ -7310,7 +7310,7 @@ function! yurii_pkm#table_stab() abort
   return ''
 endfunction
 
-function! yurii_pkm#table_cr() abort
+function! simple_yurii_note#table_cr() abort
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki'
     return "\<CR>"
   endif
@@ -7355,7 +7355,7 @@ function! s:table_row_editor_lines(headers, cells) abort
   return l:lines
 endfunction
 
-function! yurii_pkm#table_row_edit() abort
+function! simple_yurii_note#table_row_edit() abort
   let l:cur_lnum = line('.')
   let [l:start, l:end] = s:table_block_range(l:cur_lnum)
   if l:start == 0
@@ -7403,14 +7403,14 @@ function! yurii_pkm#table_row_edit() abort
   setlocal textwidth=0
   setlocal modifiable
 
-  execute 'autocmd! BufWriteCmd <buffer> call yurii_pkm#table_row_editor_apply()'
+  execute 'autocmd! BufWriteCmd <buffer> call simple_yurii_note#table_row_editor_apply()'
   nnoremap <silent><buffer> q  <Cmd>bd!<CR>
   nnoremap <silent><buffer> ZZ <Cmd>write<Bar>bd!<CR>
 
   call cursor(4, 1)
 endfunction
 
-function! yurii_pkm#table_row_editor_apply() abort
+function! simple_yurii_note#table_row_editor_apply() abort
   if !exists('b:yurii_table_editor') || !b:yurii_table_editor
     return
   endif
@@ -7601,7 +7601,7 @@ function! s:csv_branch_link(csv_path) abort
   return '[' . fnamemodify(l:name, ':r') . '](' . l:name . ')'
 endfunction
 
-function! yurii_pkm#csv_new() abort
+function! simple_yurii_note#csv_new() abort
   let l:src_name = expand('%:p')
   let l:base_dir = empty(l:src_name) ? getcwd() : fnamemodify(l:src_name, ':p:h')
   let l:csv_path = s:next_t_csv_path(l:base_dir, 1)
@@ -7611,7 +7611,7 @@ function! yurii_pkm#csv_new() abort
   execute 'edit ' . fnameescape(l:csv_path)
 endfunction
 
-function! yurii_pkm#table_to_csv() abort
+function! simple_yurii_note#table_to_csv() abort
   let [l:start, l:end] = s:table_block_range(line('.'))
   if l:start == 0
     echo 'Not on a table'
@@ -7628,11 +7628,11 @@ function! yurii_pkm#table_to_csv() abort
   execute 'edit ' . fnameescape(l:csv_path)
 endfunction
 
-function! yurii_pkm#csv_to_table() abort
-  return yurii_pkm#csv_to_table_current()
+function! simple_yurii_note#csv_to_table() abort
+  return simple_yurii_note#csv_to_table_current()
 endfunction
 
-function! yurii_pkm#table_to_csv_current() abort
+function! simple_yurii_note#table_to_csv_current() abort
   let [l:start, l:end] = s:table_block_range(line('.'))
   if l:start == 0
     echo 'Not on a table'
@@ -7646,7 +7646,7 @@ function! yurii_pkm#table_to_csv_current() abort
   echo 'Converted table to CSV'
 endfunction
 
-function! yurii_pkm#csv_to_table_current() abort
+function! simple_yurii_note#csv_to_table_current() abort
   let [l:start, l:end] = s:csv_block_range(line('.'))
   if l:start == 0
     echo 'Not on CSV lines'
@@ -7696,11 +7696,11 @@ function! s:table_csv_apply_to_source(csv_lines, src_buf, src_start, src_end, in
 endfunction
 
 
-function! yurii_pkm#table_csv_editor_cleanup(...) abort
+function! simple_yurii_note#table_csv_editor_cleanup(...) abort
   return
 endfunction
 
-function! yurii_pkm#table_csv_edit() abort
+function! simple_yurii_note#table_csv_edit() abort
   let l:cur_lnum = line('.')
   let [l:start, l:end] = s:table_block_range(l:cur_lnum)
   if l:start == 0
@@ -7738,7 +7738,7 @@ function! yurii_pkm#table_csv_edit() abort
   echo 'TableCsvEdit: editing ' . fnamemodify(l:csv_path, ':t') . ' (use :TableCsvApplySaved to apply)'
 endfunction
 
-function! yurii_pkm#table_csv_editor_apply(...) abort
+function! simple_yurii_note#table_csv_editor_apply(...) abort
   if a:0 >= 1
     let l:buf = a:1
   else
@@ -7797,9 +7797,9 @@ function! yurii_pkm#table_csv_editor_apply(...) abort
   echo 'CSV changes applied to table'
 endfunction
 
-function! yurii_pkm#table_csv_editor_apply_saved(...) abort
+function! simple_yurii_note#table_csv_editor_apply_saved(...) abort
   let l:buf = a:0 >= 1 ? a:1 : bufnr('%')
-  call yurii_pkm#table_csv_editor_apply(l:buf)
+  call simple_yurii_note#table_csv_editor_apply(l:buf)
 endfunction
 
 
@@ -7808,7 +7808,7 @@ endfunction
 " ---------------------------------------------------------------------------
 
 " カーソル行をテーブルから削除（ヘッダ行・セパレータ行は削除不可）
-function! yurii_pkm#table_del_row() abort
+function! simple_yurii_note#table_del_row() abort
   let l:lnum = line('.')
   if !s:is_table_line(getline(l:lnum))
     echo 'Not on a table row'
@@ -7838,7 +7838,7 @@ function! yurii_pkm#table_del_row() abort
 endfunction
 
 " カーソル列をテーブルから削除
-function! yurii_pkm#table_del_col() abort
+function! simple_yurii_note#table_del_col() abort
   let l:lnum = line('.')
   if !s:is_table_line(getline(l:lnum))
     echo 'Not on a table column'
@@ -7872,7 +7872,7 @@ function! yurii_pkm#table_del_col() abort
 endfunction
 
 " カーソル行の下に空行を追加
-function! yurii_pkm#table_add_row() abort
+function! simple_yurii_note#table_add_row() abort
   let l:lnum = line('.')
   if !s:is_table_line(getline(l:lnum))
     echo 'Not on a table row'
@@ -7891,7 +7891,7 @@ function! yurii_pkm#table_add_row() abort
 endfunction
 
 " カーソル列の右に空列を追加
-function! yurii_pkm#table_add_col() abort
+function! simple_yurii_note#table_add_col() abort
   let l:lnum = line('.')
   if !s:is_table_line(getline(l:lnum))
     echo 'Not on a table column'
@@ -7981,14 +7981,14 @@ function! s:stack_copy_finish(copy_to_clipboard) abort
   let s:stack_copy_lines = []
 endfunction
 
-function! yurii_pkm#stack_copy_toggle() abort
+function! simple_yurii_note#stack_copy_toggle() abort
   if !s:stack_copy_mode
     let s:stack_copy_mode  = 1
     let s:stack_copy_lines = []
-    nnoremap <buffer> <silent> <nowait> y :<C-u>call yurii_pkm#stack_copy_yank_line()<CR>
-    xnoremap <buffer> <silent> <nowait> y :<C-u>call yurii_pkm#stack_copy_yank_visual()<CR>
-    nnoremap <buffer> <silent> <nowait> d :<C-u>call yurii_pkm#stack_copy_delete_line()<CR>
-    xnoremap <buffer> <silent> <nowait> d :<C-u>call yurii_pkm#stack_copy_delete_visual()<CR>
+    nnoremap <buffer> <silent> <nowait> y :<C-u>call simple_yurii_note#stack_copy_yank_line()<CR>
+    xnoremap <buffer> <silent> <nowait> y :<C-u>call simple_yurii_note#stack_copy_yank_visual()<CR>
+    nnoremap <buffer> <silent> <nowait> d :<C-u>call simple_yurii_note#stack_copy_delete_line()<CR>
+    xnoremap <buffer> <silent> <nowait> d :<C-u>call simple_yurii_note#stack_copy_delete_visual()<CR>
     call s:stack_copy_statusline_on()
     
   else
@@ -7996,13 +7996,13 @@ function! yurii_pkm#stack_copy_toggle() abort
   endif
 endfunction
 
-function! yurii_pkm#stack_copy_yank_line() abort
+function! simple_yurii_note#stack_copy_yank_line() abort
   let l:line = getline('.')
   call add(s:stack_copy_lines, l:line)
   
 endfunction
 
-function! yurii_pkm#stack_copy_yank_visual() abort range
+function! simple_yurii_note#stack_copy_yank_visual() abort range
   let l:s = line("'<")
   let l:e = line("'>")
   for l:i in range(l:s, l:e)
@@ -8011,14 +8011,14 @@ function! yurii_pkm#stack_copy_yank_visual() abort range
   
 endfunction
 
-function! yurii_pkm#stack_copy_delete_line() abort
+function! simple_yurii_note#stack_copy_delete_line() abort
   let l:line = getline('.')
   call add(s:stack_copy_lines, l:line)
   execute 'delete _'
   
 endfunction
 
-function! yurii_pkm#stack_copy_delete_visual() abort range
+function! simple_yurii_note#stack_copy_delete_visual() abort range
   let l:s = line("'<")
   let l:e = line("'>")
   for l:i in range(l:s, l:e)
@@ -8057,7 +8057,7 @@ function! s:toggle_checkbox_in_line(lnum) abort
   return 1
 endfunction
 
-function! yurii_pkm#toggle_checkbox(first, last, has_range) abort range
+function! simple_yurii_note#toggle_checkbox(first, last, has_range) abort range
   if a:has_range
     for l:lnum in range(a:first, a:last)
       call s:toggle_checkbox_in_line(l:lnum)
@@ -8115,7 +8115,7 @@ function! s:index_root_from_path(path) abort
 endfunction
 
 function! s:gallery_root() abort
-  let l:root = fnamemodify(expand(get(g:, 'yurii_pkm_root', '')), ':p')
+  let l:root = fnamemodify(expand(get(g:, 'simple_yurii_note_root', '')), ':p')
   if !empty(l:root) && isdirectory(l:root)
     return l:root
   endif
@@ -8123,34 +8123,34 @@ function! s:gallery_root() abort
 endfunction
 
 function! s:run_gallery_command(args, label) abort
-  let l:py = get(g:, 'yurii_pkm_gallery_python', '')
+  let l:py = get(g:, 'simple_yurii_note_gallery_python', '')
   if empty(l:py) || !filereadable(l:py)
-    echoerr 'yurii_PKM: gallery.py not found: ' . l:py
+    echoerr 'simple_yurii_note: gallery.py not found: ' . l:py
     return
   endif
-  let l:port = get(g:, 'yurii_pkm_gallery_port', 8765)
+  let l:port = get(g:, 'simple_yurii_note_gallery_port', 8765)
   let l:cmd = [s:python_executable(), l:py] + a:args + ['--port', string(l:port)]
 
   if exists('*jobstart')
     call jobstart(l:cmd, {'detach': v:true})
-    echom 'yurii_PKM: opening gallery for ' . a:label
+    echom 'simple_yurii_note: opening gallery for ' . a:label
     return
   endif
   if exists('*job_start')
     call job_start(l:cmd, {'out_io': 'null', 'err_io': 'null'})
-    echom 'yurii_PKM: opening gallery for ' . a:label
+    echom 'simple_yurii_note: opening gallery for ' . a:label
     return
   endif
 
   let l:result = system(join(map(copy(l:cmd), 'shellescape(v:val)'), ' '))
   if v:shell_error
-    echohl ErrorMsg | echom 'yurii_PKM Gallery failed: ' . l:result | echohl None
+    echohl ErrorMsg | echom 'simple_yurii_note Gallery failed: ' . l:result | echohl None
   else
-    echom 'yurii_PKM: opening gallery for ' . a:label
+    echom 'simple_yurii_note: opening gallery for ' . a:label
   endif
 endfunction
 
-function! yurii_pkm#open_folder_gallery(...) abort
+function! simple_yurii_note#open_folder_gallery(...) abort
   let l:target = a:0 >= 1 && !empty(a:1) ? a:1 : s:gallery_root()
   if empty(l:target)
     let l:target = expand('%:p')
@@ -8161,28 +8161,28 @@ function! yurii_pkm#open_folder_gallery(...) abort
   let l:path = fnamemodify(expand(l:target), ':p')
   let l:dir = isdirectory(l:path) ? l:path : fnamemodify(l:path, ':h')
   if empty(l:dir) || !isdirectory(l:dir)
-    echoerr 'yurii_PKM: folder not found: ' . l:dir
+    echoerr 'simple_yurii_note: folder not found: ' . l:dir
     return
   endif
   call s:run_gallery_command(['--open-folder', l:dir], fnamemodify(l:dir, ':t'))
 endfunction
 
-function! yurii_pkm#open_gallery(...) abort
+function! simple_yurii_note#open_gallery(...) abort
   let l:file = a:0 >= 1 && !empty(a:1) ? a:1 : expand('%:p')
   if empty(l:file)
-    echoerr 'yurii_PKM: Gallery requires a Markdown file'
+    echoerr 'simple_yurii_note: Gallery requires a Markdown file'
     return
   endif
   let l:file = fnamemodify(expand(l:file), ':p')
   if !filereadable(l:file)
-    echoerr 'yurii_PKM: file not found: ' . l:file
+    echoerr 'simple_yurii_note: file not found: ' . l:file
     return
   endif
   if l:file !~? '\.md$'
-    echoerr 'yurii_PKM: Gallery can only open Markdown files'
+    echoerr 'simple_yurii_note: Gallery can only open Markdown files'
     return
   endif
-  if get(g:, 'yurii_pkm_auto_save_on_command', 1) && expand('%:p') ==# l:file && &modified
+  if get(g:, 'simple_yurii_note_auto_save_on_command', 1) && expand('%:p') ==# l:file && &modified
     silent write
   endif
   let l:args = ['--open', l:file]
@@ -8194,10 +8194,10 @@ function! yurii_pkm#open_gallery(...) abort
 endfunction
 
 
-function! yurii_pkm#open_gallery_smart() abort
+function! simple_yurii_note#open_gallery_smart() abort
   if s:is_markdown_file(expand('%:p')) && s:buffer_has_image_link()
-    call yurii_pkm#open_gallery()
+    call simple_yurii_note#open_gallery()
   else
-    call yurii_pkm#open_folder_gallery()
+    call simple_yurii_note#open_folder_gallery()
   endif
 endfunction

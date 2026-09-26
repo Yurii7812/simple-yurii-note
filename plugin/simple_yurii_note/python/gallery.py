@@ -345,7 +345,7 @@ def render_gallery_page(source_path: Path, images: list[dict[str, object]], erro
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} - Yurii PKM Gallery</title>
+<title>{html.escape(title)} - Simple PKM Gallery</title>
 <style>
 :root {{ color-scheme: dark; --bg:#101318; --panel:#181d24; --text:#eef2f8; --muted:#99a3b3; --accent:#6cc6ff; --selected:#84f0a3; }}
 * {{ box-sizing: border-box; }}
@@ -571,7 +571,7 @@ def render_folder_gallery(folder: str, port: int) -> bytes:
 
 
 class GalleryHandler(BaseHTTPRequestHandler):
-    server_version = "YuriiPKMGallery/1.0"
+    server_version = "SimplePKMGallery/1.0"
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -692,7 +692,7 @@ def open_folder_gallery(folder: str, port: int) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Yurii PKM Markdown image gallery")
+    parser = argparse.ArgumentParser(description="Simple PKM Markdown image gallery")
     parser.add_argument("--port", type=int, default=int(os.environ.get("YURII_PKM_GALLERY_PORT", DEFAULT_PORT)))
     parser.add_argument("--serve", action="store_true", help="run the localhost gallery server")
     parser.add_argument("--open", metavar="NOTE.md", help="start server if needed and open NOTE.md gallery")

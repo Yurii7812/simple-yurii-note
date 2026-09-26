@@ -5,8 +5,8 @@
 `BackLink:` 見出しとは別物 ── コロンも中身の直書きも無く、見張りだけの行）。
 見張りは Markdown の H2（`##`）にしてあるので、そのまま見出しとして表示される。
 
-実装: `plugin/yurii_PKM/python/note_format_v2.py` + `autoload/yurii_pkm.vim`。
-既定でこれ。旧エンジンに固定したい時だけ `let g:yurii_pkm_format = 'v1'`。
+実装: `plugin/simple_yurii_note/python/note_format_v2.py` + `autoload/simple_yurii_note.vim`。
+既定でこれ。旧エンジンに固定したい時だけ `let g:simple_yurii_note_format = 'v1'`。
 
 ---
 
@@ -199,13 +199,13 @@ merge（両方 14 桁タイムスタンプ）: `note_format_v2.py dupcheck A B` 
 | `zk` | グループノート作成（`attribute: group`）。位置キーは `zn` と同じ `h`/`Enter`/`o`/`p` |
 | `zh`（`:NH`） | 新ノート作成、リンクを **カーソル行の直下（本文）**へ（`zn` の `h` と同じ）。関係に入れない → 相手には `バックリンク:` |
 | `pe` | 展開。現ノートを起点に 親（こっちにとって）/ 子（そっちにとって）/ 文中（本文中のリンク・双方向）を辿り、集めたノートの本文を 1 つの `_tmp/T_<timestamp>.md` へ集約する。§8 参照 |
-| `bc` / `cu` / `at` | `yurii_pkm#v2_add_link()`。関係を数字で選択（末尾 = 自由入力）→ **現ノートの こっちにとって 側**へ 1 行。`グループ`/`関連` は関係の制約でそっちにとって側へ |
-| `ca` | 同じく `yurii_pkm#v2_add_link()`。既定は逆で **現ノートの そっちにとって 側**へ 1 行（子リンクの意味）。`グループ`/`関連` は制約でそのままそっちにとって側 |
+| `bc` / `cu` / `at` | `simple_yurii_note#v2_add_link()`。関係を数字で選択（末尾 = 自由入力）→ **現ノートの こっちにとって 側**へ 1 行。`グループ`/`関連` は関係の制約でそっちにとって側へ |
+| `ca` | 同じく `simple_yurii_note#v2_add_link()`。既定は逆で **現ノートの そっちにとって 側**へ 1 行（子リンクの意味）。`グループ`/`関連` は制約でそのままそっちにとって側 |
 | `\at` / `\ca` | `at`/`ca` の逆括弧版。向き（こっちにとって / そっちにとって）は同じだが、「質問なしで即座に生のラベルを書く側」と「質問で聞かれる側」が逆になる。相手側には常に（質問なしで）生の関係名をそのまま書き込み、今開いているノート側は「書く？」と聞かれる（§6 参照。`ca`/`at` とは聞かれる側が逆） |
 | 関係ピッカー | 数字 + 末尾 = 自由入力。`Esc` / `q` でキャンセル（ファイルを作らない） |
 | `:V2Migrate [%]` | 旧形式 → v2 変換（明示） |
 | `:UpdateMD` / AutoSync | sync（`note_format_v2.py update` / `update_one`） |
-| `:YuriiGuide` | 操作ガイド `yurii_pkm_guide.md` を作り直す。起動時（VimEnter）にも既存ガイドを最新テンプレートへ自動更新する。Index へのリンクはガイド新規作成の初回だけ Index の**本文**に置く。本文リンクは sync が再生成しないため、自分で消せば復活せず、ディレクトリ移動で Index を作り直しても付かない。ガイド自体は通常ノートとして sync 管理下（Parent/Child は普通に反映） |
+| `:SimpleGuide` | 操作ガイド `simple_yurii_note_guide.md` を作り直す。起動時（VimEnter）にも既存ガイドを最新テンプレートへ自動更新する。Index へのリンクはガイド新規作成の初回だけ Index の**本文**に置く。本文リンクは sync が再生成しないため、自分で消せば復活せず、ディレクトリ移動で Index を作り直しても付かない。ガイド自体は通常ノートとして sync 管理下（Parent/Child は普通に反映） |
 | テンプレート | front matter + H1 + 見張り 2 行のみ |
 | 移動系（`,,` / `,.` / `,/` / 番号ジャンプ / 覗き見） | **別途設計**（後日） |
 
@@ -243,7 +243,7 @@ merge（両方 14 桁タイムスタンプ）: `note_format_v2.py dupcheck A B` 
 ## 7. 展開（`pe`、`expand_v2.py`）
 
 現ノートの周辺を 1 つの読み物として集約する使い捨て機能。実装は
-`plugin/yurii_PKM/python/expand_v2.py`。旧 v1 時代の `expand_s.py`
+`plugin/simple_yurii_note/python/expand_v2.py`。旧 v1 時代の `expand_s.py`
 （`\se` / `:ExpandLinks`）とは別物 ── あちらは `Parent:`/`Child:`/`Back:`
 という v1 の見出し名を前提にしており、v2 の見張りコメント形式には
 対応していない（v2 ノートに対して壊れた出力になる）。

@@ -83,18 +83,18 @@ inoremap <Down> <C-o>gj
 " 設定編集
 " =========================================================
 " 固定パスに依存させない。必要な場合だけ .vimrc 側で
-"   let g:yurii_pkm_vimrc = expand('~/.vimrc')
+"   let g:simple_yurii_note_vimrc = expand('~/.vimrc')
 " のように指定する。
-if exists('g:yurii_pkm_vimrc') && !empty(trim(get(g:, "yurii_pkm_vimrc", "")))
-  execute "nnoremap <silent> <leader>ev :edit " . fnameescape(expand(g:yurii_pkm_vimrc)) . "<CR>"
-  execute "nnoremap <silent> <leader>sv :source " . fnameescape(expand(g:yurii_pkm_vimrc)) . "<CR>"
+if exists('g:simple_yurii_note_vimrc') && !empty(trim(get(g:, "simple_yurii_note_vimrc", "")))
+  execute "nnoremap <silent> <leader>ev :edit " . fnameescape(expand(g:simple_yurii_note_vimrc)) . "<CR>"
+  execute "nnoremap <silent> <leader>sv :source " . fnameescape(expand(g:simple_yurii_note_vimrc)) . "<CR>"
 endif
 
 " =========================================================
-" yurii_PKM 見た目設定
+" simple_yurii_note 見た目設定
 " =========================================================
-let g:yurii_pkm_link_color_gui = '#66CCFF'
-let g:yurii_pkm_link_color_cterm = '81'
+let g:simple_yurii_note_link_color_gui = '#66CCFF'
+let g:simple_yurii_note_link_color_cterm = '81'
 
 " =========================================================
 " 自作プラグイン
@@ -154,7 +154,7 @@ function! s:activate_app_window(base) abort
   if empty(a:base) || !executable('qdbus6') || $XDG_SESSION_TYPE !=# 'wayland'
     return
   endif
-  let l:dir = expand('~/.vim/yurii_pkm')
+  let l:dir = expand('~/.vim/simple_yurii_note')
   if !isdirectory(l:dir)
     call mkdir(l:dir, 'p')
   endif
@@ -275,11 +275,11 @@ set autowriteall
 set nobackup
 set nowritebackup
 
-" indexを最初から開く（不要なら let g:yurii_pkm_open_index_on_startup = 0）
-if get(g:, 'yurii_pkm_open_index_on_startup', 1)
-  augroup yurii_pkm_other_startup_index
+" indexを最初から開く（不要なら let g:simple_yurii_note_open_index_on_startup = 0）
+if get(g:, 'simple_yurii_note_open_index_on_startup', 1)
+  augroup simple_yurii_note_other_startup_index
     autocmd!
-    autocmd VimEnter * call timer_start(0, {-> execute('YuriiIndex')})
+    autocmd VimEnter * call timer_start(0, {-> execute('SimpleIndex')})
   augroup END
 endif
 
@@ -295,8 +295,8 @@ autocmd FileType markdown highlight link htmlError Normal
 " Rg検索のショートカット
 nnoremap rg :Rg<CR>
 
-let g:yurii_pkm_link_color_gui = '#2F6690'
-let g:yurii_pkm_link_color_cterm = '24'
+let g:simple_yurii_note_link_color_gui = '#2F6690'
+let g:simple_yurii_note_link_color_cterm = '24'
 
 set background=light
 colorscheme kalisi

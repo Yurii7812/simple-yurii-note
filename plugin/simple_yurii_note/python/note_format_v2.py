@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Yurii_PKM ノート形式 v2 の parse / render / sync。
+"""simple_yurii_note ノート形式 v2 の parse / render / sync。
 
 詳細仕様は repo ルートの NOTE_FORMAT.md。要点:
 
@@ -1117,7 +1117,7 @@ def sync_vault(root) -> int:
 
 def update_one(file_path, root) -> str:
     changed = sync_vault(root)
-    return f"yurii_PKM: v2 synced {changed} file(s)" if changed else "yurii_PKM: no changes"
+    return f"simple_yurii_note: v2 synced {changed} file(s)" if changed else "simple_yurii_note: no changes"
 
 
 # ---------------------------------------------------------------------------
@@ -1147,7 +1147,7 @@ def main(argv: list[str]) -> int:
     mode = argv[1]
     if mode == "update":
         changed = sync_vault(argv[2])
-        print(f"yurii_PKM: v2 updated {changed} file(s) under {argv[2]}")
+        print(f"simple_yurii_note: v2 updated {changed} file(s) under {argv[2]}")
         return 0
     if mode == "update_one":
         if len(argv) < 4:
@@ -1167,7 +1167,7 @@ def main(argv: list[str]) -> int:
     if mode == "retitle_links":
         if len(argv) >= 4:
             sync_vault(argv[3])
-        print("yurii_PKM: v2 retitle via sync")
+        print("simple_yurii_note: v2 retitle via sync")
         return 0
     if mode == "migrate":
         # 明示的な変換。sync は旧形式を触らないので、これを 1 回走らせて v2 化する。
@@ -1188,7 +1188,7 @@ def main(argv: list[str]) -> int:
                 done += 1
         if done:
             sync_vault(root)
-        print(f"yurii_PKM: v2 migrated {done} file(s)")
+        print(f"simple_yurii_note: v2 migrated {done} file(s)")
         return 0
     if mode == "dupcheck":
         # 2 つの vault を merge する前に、同名 .md（＝タイムスタンプ衝突）を洗い出す。
@@ -1206,7 +1206,7 @@ def main(argv: list[str]) -> int:
         print("衝突なし（index.md を除く）")
         return 0
     if mode in {"update_titles", "rename_prefix", "reparent_down_children", "nf"}:
-        print(f"yurii_PKM: v2 ignores mode '{mode}'", file=sys.stderr)
+        print(f"simple_yurii_note: v2 ignores mode '{mode}'", file=sys.stderr)
         return 0
     print(f"unsupported mode: {mode}", file=sys.stderr)
     return 2

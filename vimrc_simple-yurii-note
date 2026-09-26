@@ -50,7 +50,7 @@ endif
 
 let g:yurii_fcitx_restore_on_insert = 0
 
-function! s:YuriiFcitxRemoteCmd() abort
+function! s:SimpleFcitxRemoteCmd() abort
   if exists('g:yurii_fcitx_remote_cmd') && !empty(g:yurii_fcitx_remote_cmd)
     return g:yurii_fcitx_remote_cmd
   endif
@@ -69,8 +69,8 @@ function! s:YuriiFcitxRemoteCmd() abort
   return ''
 endfunction
 
-function! s:YuriiFcitxState() abort
-  let l:cmd = s:YuriiFcitxRemoteCmd()
+function! s:SimpleFcitxState() abort
+  let l:cmd = s:SimpleFcitxRemoteCmd()
   if empty(l:cmd)
     return ''
   endif
@@ -81,8 +81,8 @@ function! s:YuriiFcitxState() abort
   return l:state
 endfunction
 
-function! s:YuriiFcitxRun(arg) abort
-  let l:cmd = s:YuriiFcitxRemoteCmd()
+function! s:SimpleFcitxRun(arg) abort
+  let l:cmd = s:SimpleFcitxRemoteCmd()
   if empty(l:cmd)
     return
   endif
@@ -93,39 +93,39 @@ function! s:YuriiFcitxRun(arg) abort
   endif
 endfunction
 
-function! s:YuriiFcitxInsertLeave() abort
+function! s:SimpleFcitxInsertLeave() abort
   if !get(g:, 'yurii_fcitx_auto_switch', 1)
     return
   endif
   if get(g:, 'yurii_fcitx_restore_previous_state', 0)
-    let l:state = s:YuriiFcitxState()
+    let l:state = s:SimpleFcitxState()
     let g:yurii_fcitx_restore_on_insert = (l:state ==# '2')
   else
     let g:yurii_fcitx_restore_on_insert = 0
   endif
-  call s:YuriiFcitxRun('-c')
+  call s:SimpleFcitxRun('-c')
 endfunction
 
-function! s:YuriiFcitxInsertEnter() abort
+function! s:SimpleFcitxInsertEnter() abort
   if !get(g:, 'yurii_fcitx_auto_switch', 1)
     return
   endif
   if get(g:, 'yurii_fcitx_restore_on_insert', 0)
-    call s:YuriiFcitxRun('-o')
+    call s:SimpleFcitxRun('-o')
     let g:yurii_fcitx_restore_on_insert = 0
   endif
 endfunction
 
-command! YuriiFcitxOff call s:YuriiFcitxRun('-c')
-command! YuriiFcitxOn call s:YuriiFcitxRun('-o')
-command! YuriiFcitxStatus echo s:YuriiFcitxState()
+command! SimpleFcitxOff call s:SimpleFcitxRun('-c')
+command! SimpleFcitxOn call s:SimpleFcitxRun('-o')
+command! SimpleFcitxStatus echo s:SimpleFcitxState()
 
 augroup yurii_fcitx_auto_switch
   autocmd!
   if exists('##InsertLeavePre')
-    autocmd InsertLeavePre * call s:YuriiFcitxInsertLeave()
+    autocmd InsertLeavePre * call s:SimpleFcitxInsertLeave()
   else
-    autocmd InsertLeave * call s:YuriiFcitxInsertLeave()
+    autocmd InsertLeave * call s:SimpleFcitxInsertLeave()
   endif
-  autocmd InsertEnter * call s:YuriiFcitxInsertEnter()
+  autocmd InsertEnter * call s:SimpleFcitxInsertEnter()
 augroup END

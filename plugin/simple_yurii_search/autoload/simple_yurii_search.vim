@@ -1,4 +1,4 @@
-" autoload/yurii_search.vim
+" autoload/simple_yurii_search.vim
 " ファイル単位のキーワード AND 検索。ネイティブのポップアップ。
 " 一度に 10 件だけ表示し、下に「残り N 件」を出す。
 " ヒット語は一覧・プレビュー（ポップアップ内）だけで強調する。
@@ -30,16 +30,16 @@ let s:pvwin = -1
 let s:rows  = 15
 let s:mode  = 'input'   " 'input' = 打つと絞り込み / 'pick' = 数字で行を開く
 " ポップアップ内のヒット強調用。reverse なら配色を問わず必ず見える。
-function! yurii_search#ensure_hl_group() abort
-  highlight default YuriiSearchMatch term=reverse cterm=reverse gui=reverse
+function! simple_yurii_search#ensure_hl_group() abort
+  highlight default SimpleSearchMatch term=reverse cterm=reverse gui=reverse
   if empty(prop_type_get('yuriiSearchMatch'))
-    call prop_type_add('yuriiSearchMatch', {'highlight': 'YuriiSearchMatch', 'combine': v:true})
+    call prop_type_add('yuriiSearchMatch', {'highlight': 'SimpleSearchMatch', 'combine': v:true})
   endif
 endfunction
-call yurii_search#ensure_hl_group()
-augroup yurii_search_hl
+call simple_yurii_search#ensure_hl_group()
+augroup simple_yurii_search_hl
   autocmd!
-  autocmd ColorScheme * call yurii_search#ensure_hl_group()
+  autocmd ColorScheme * call simple_yurii_search#ensure_hl_group()
 augroup END
 
 " 現在の検索語（全角スペースも区切り）
@@ -77,25 +77,25 @@ function! s:hit_props(text, prefix_len, terms) abort
   return l:props
 endfunction
 
-" gs は yurii_PKM の統一ナビゲータ（global スコープ）に寄せた。
+" gs は simple_yurii_note の統一ナビゲータ（global スコープ）に寄せた。
 " 一覧・プレビュー・キー体系が <Space> と同じになり、ヒットから l でそのまま
-" 潜れる。旧ポップアップに戻したい時だけ g:yurii_search_legacy = 1。
-function! yurii_search#run(...) abort
-  if !get(g:, 'yurii_search_legacy', 0) && exists('*yurii_pkm#note_navigator')
-    call yurii_pkm#note_navigator('global')
+" 潜れる。旧ポップアップに戻したい時だけ g:simple_yurii_search_legacy = 1。
+function! simple_yurii_search#run(...) abort
+  if !get(g:, 'simple_yurii_search_legacy', 0) && exists('*simple_yurii_note#note_navigator')
+    call simple_yurii_note#note_navigator('global')
     return
   endif
-  return call('yurii_search#run_legacy', a:000)
+  return call('simple_yurii_search#run_legacy', a:000)
 endfunction
 
-function! yurii_search#run_legacy(...) abort
-  let l:idx = get(g:, 'yurii_search_index', '')
+function! simple_yurii_search#run_legacy(...) abort
+  let l:idx = get(g:, 'simple_yurii_search_index', '')
   if empty(l:idx) || !filereadable(l:idx)
     " python ヘルパーが無ければ旧 TUI
     call s:tui_run()
     return
   endif
-  let l:root = get(g:, 'yurii_pkm_root', '')
+  let l:root = get(g:, 'simple_yurii_note_root', '')
   if empty(l:root) || !isdirectory(l:root)
     let l:root = getcwd()
   endif
@@ -108,7 +108,7 @@ function! yurii_search#run_legacy(...) abort
     endif
   endfor
   if empty(s:cands)
-    echo 'yurii_search: ノートが見つかりません（' . l:root . '）'
+    echo 'simple_yurii_search: ノートが見つかりません（' . l:root . '）'
     return
   endif
 
@@ -368,7 +368,7 @@ endfunction
 
 " --- 旧 curses TUI（python ヘルパーが無い時のみ）----------------------------
 function! s:tui_run() abort
-  let l:script = get(g:, 'yurii_search_tui', '')
+  let l:script = get(g:, 'simple_yurii_search_tui', '')
   if !filereadable(l:script)
     echoerr 'notes_index.py も fsearch_tui.py も見つかりません'
     return

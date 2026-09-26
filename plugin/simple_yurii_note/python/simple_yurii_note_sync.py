@@ -98,7 +98,7 @@ def resolve_existing_note_link(
 ) -> Path | None:
     """Resolve an existing note link like Vim's link opener.
 
-    Markdown links are normally relative to the current note's folder, but Yurii
+    Markdown links are normally relative to the current note's folder, but Simple
     PKM also allows a bare filename to point to a unique note elsewhere under
     the PKM root.  This is important for notes moved into dated subfolders while
     keeping older bare links such as ``260529001336.md``.
@@ -1558,8 +1558,8 @@ def update_one(file_path: Path, root: Path) -> str:
         changed_files.append(f"backlink:{backlink_changed}")
 
     if changed_files:
-        return "yurii_PKM: updated " + ", ".join(changed_files)
-    return "yurii_PKM: no changes"
+        return "simple_yurii_note: updated " + ", ".join(changed_files)
+    return "simple_yurii_note: no changes"
 
 
 # ---------------------------------------------------------------------------
@@ -1708,11 +1708,11 @@ def retitle_links(target_file: Path, root: Path, old_title: str, new_title: str)
 def main(argv: list[str]) -> int:
     if len(argv) < 3:
         print("usage:\n"
-              "  yurii_pkm_sync.py update ROOT\n"
-              "  yurii_pkm_sync.py update_one FILE ROOT\n"
-              "  yurii_pkm_sync.py update_titles FILE\n"
-              "  yurii_pkm_sync.py retitle_links FILE ROOT OLD_TITLE NEW_TITLE\n"
-              "  yurii_pkm_sync.py rename_prefix FILE NEW_PREFIX ROOT",
+              "  simple_yurii_note_sync.py update ROOT\n"
+              "  simple_yurii_note_sync.py update_one FILE ROOT\n"
+              "  simple_yurii_note_sync.py update_titles FILE\n"
+              "  simple_yurii_note_sync.py retitle_links FILE ROOT OLD_TITLE NEW_TITLE\n"
+              "  simple_yurii_note_sync.py rename_prefix FILE NEW_PREFIX ROOT",
               file=sys.stderr)
         return 2
 
@@ -1728,14 +1728,14 @@ def main(argv: list[str]) -> int:
                 title_changed += 1
         structural_changed = update_up_sections(root)
         print(
-            f"yurii_PKM: updated {title_changed} title file(s), "
+            f"simple_yurii_note: updated {title_changed} title file(s), "
             f"{structural_changed} structural file(s) under {root}"
         )
         return 0
 
     if mode == "update_one":
         if len(argv) < 4:
-            print("usage: yurii_pkm_sync.py update_one FILE ROOT", file=sys.stderr)
+            print("usage: simple_yurii_note_sync.py update_one FILE ROOT", file=sys.stderr)
             return 2
         file_path = Path(argv[2])
         root = Path(argv[3])
@@ -1744,21 +1744,21 @@ def main(argv: list[str]) -> int:
 
     if mode == "reparent_down_children":
         if len(argv) < 5:
-            print("usage: yurii_pkm_sync.py reparent_down_children NEW_PARENT OLD_PARENT ROOT", file=sys.stderr)
+            print("usage: simple_yurii_note_sync.py reparent_down_children NEW_PARENT OLD_PARENT ROOT", file=sys.stderr)
             return 2
         changed = reparent_down_children(Path(argv[2]), Path(argv[3]), Path(argv[4]))
-        print(f"yurii_PKM: reparented {changed} child parent link(s)")
+        print(f"simple_yurii_note: reparented {changed} child parent link(s)")
         return 0
 
     if mode == "update_titles":
         path = Path(argv[2])
         changed = update_titles_in_file(path)
-        print(f"yurii_PKM: {'updated' if changed else 'no changes in'} {path.name}")
+        print(f"simple_yurii_note: {'updated' if changed else 'no changes in'} {path.name}")
         return 0
 
     if mode == "retitle_links":
         if len(argv) < 6:
-            print("usage: yurii_pkm_sync.py retitle_links FILE ROOT OLD_TITLE NEW_TITLE",
+            print("usage: simple_yurii_note_sync.py retitle_links FILE ROOT OLD_TITLE NEW_TITLE",
                   file=sys.stderr)
             return 2
         target_file = Path(argv[2])
@@ -1766,12 +1766,12 @@ def main(argv: list[str]) -> int:
         old_title = argv[4]
         new_title = argv[5]
         changed = retitle_links(target_file, root, old_title, new_title)
-        print(f"yurii_PKM: retitled {changed} file(s)")
+        print(f"simple_yurii_note: retitled {changed} file(s)")
         return 0
 
     if mode == "nf":
         if len(argv) < 4:
-            print("usage: yurii_pkm_sync.py nf FILE ROOT", file=sys.stderr)
+            print("usage: simple_yurii_note_sync.py nf FILE ROOT", file=sys.stderr)
             return 2
         file_path = Path(argv[2])
         root = Path(argv[3])
@@ -1781,7 +1781,7 @@ def main(argv: list[str]) -> int:
 
     if mode == "rename_prefix":
         if len(argv) < 5:
-            print("usage: yurii_pkm_sync.py rename_prefix FILE NEW_PREFIX ROOT",
+            print("usage: simple_yurii_note_sync.py rename_prefix FILE NEW_PREFIX ROOT",
                   file=sys.stderr)
             return 2
         old_file   = Path(argv[2])

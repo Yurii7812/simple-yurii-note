@@ -1,4 +1,4 @@
-# Yurii_PKM
+# simple_yurii_note
 
 Vim/Neovim 上で Markdown ベースのノートを管理するための PKM（Personal Knowledge Management）プラグインです。  
 ノート作成・リンク移動・タイトル同期・表編集までを 1 つのワークフローで扱えます。
@@ -13,7 +13,7 @@ Vim 上で Markdown ノートを運用するための PKM（Personal Knowledge M
 `~/.vimrc`（または `init.vim`）に以下を書いてください。
 
 ```vim
-Plug 'Yurii7812/Yurii_PKM'
+Plug 'Yurii7812/simple_yurii_note'
 ```
 
 その後、Vim/Neovim で以下を実行します。
@@ -29,14 +29,14 @@ Plug 'Yurii7812/Yurii_PKM'
 ノートを保存するルートディレクトリを指定します。
 
 ```vim
-let g:yurii_pkm_root = expand('~/memo')
+let g:simple_yurii_note_root = expand('~/memo')
 ```
 
 ---
 
 ## 使い方（最短）
 
-1. `:YuriiIndex` で `index.md` を開く。
+1. `:SimpleIndex` で `index.md` を開く。
 2. `nf` / `mm` / `nk` で新規ノートを作成する。
 3. `<Tab>` / `<S-Tab>` でリンク移動、`<Enter>` でリンクを開く。
 4. `zt` でタイトル編集、`bc` / `ta` でリンク操作を行う。
@@ -56,38 +56,38 @@ let g:yurii_fcitx_auto_switch = 1
 let g:yurii_fcitx_remote_cmd = 'fcitx5-remote'
 
 " 保存時 AutoSync（既定: 1）
-let g:yurii_pkm_autosync = 1
+let g:simple_yurii_note_autosync = 1
 
 " Parent/Child リンクのリアルタイム双方向同期（既定: 1）
-let g:yurii_pkm_realtime_link_sync = 1
+let g:simple_yurii_note_realtime_link_sync = 1
 " TextChanged 後に同期を走らせるまでの待ち時間 ms（既定: 800）
-let g:yurii_pkm_realtime_link_sync_delay = 800
+let g:simple_yurii_note_realtime_link_sync_delay = 800
 " 大きいノートでは TextChanged 直後の同期をスキップ（保存時 AutoSync は有効）
-let g:yurii_pkm_realtime_link_sync_max_lines = 2000
+let g:simple_yurii_note_realtime_link_sync_max_lines = 2000
 " 本文リンクから BackLink をリアルタイム同期する重い処理（既定: 0 / 保存時に同期）
-let g:yurii_pkm_realtime_backlink_sync = 0
+let g:simple_yurii_note_realtime_backlink_sync = 0
 
 " 長い PDF リンクなどで conceal が重い場合の自動抑止しきい値
-let g:yurii_pkm_markdown_conceal_max_lines = 2000
-let g:yurii_pkm_markdown_conceal_max_line_length = 1000
+let g:simple_yurii_note_markdown_conceal_max_lines = 2000
+let g:simple_yurii_note_markdown_conceal_max_line_length = 1000
 
 " コマンド実行前に自動保存（既定: 1）
-let g:yurii_pkm_auto_save_on_command = 1
+let g:simple_yurii_note_auto_save_on_command = 1
 
 " 履歴件数（既定: 200）
-let g:yurii_pkm_history_max = 200
+let g:simple_yurii_note_history_max = 200
 
 " 新規ノートの既定プレフィクス
-let g:yurii_pkm_default_child_prefix = 'C'
-let g:yurii_pkm_default_quick_prefix = 'F'
-let g:yurii_pkm_default_atomic_prefix = 'C'
+let g:simple_yurii_note_default_child_prefix = 'C'
+let g:simple_yurii_note_default_quick_prefix = 'F'
+let g:simple_yurii_note_default_atomic_prefix = 'C'
 ```
 
 ---
 
 ### fcitx の入力モード自動切り替え
 
-`vimrc_yurii_PKM` では、fcitx の日本語入力中に Insert モードから Normal モードへ戻ると自動で英語入力へ切り替えます。<br>
+`vimrc_simple_yurii_note` では、fcitx の日本語入力中に Insert モードから Normal モードへ戻ると自動で英語入力へ切り替えます。<br>
 そのとき日本語入力だった場合だけ、次に Insert モードへ入ると日本語入力へ戻します。
 Normal モードへ戻ったときの英語入力化は、状態取得に失敗しても必ず実行します。
 
@@ -95,14 +95,14 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 - `fcitx5-remote` が無い場合は `fcitx-remote` を使います。
 - 無効化する場合は `let g:yurii_fcitx_auto_switch = 0` を設定してください。
 - コマンドを固定したい場合は `let g:yurii_fcitx_remote_cmd = 'fcitx5-remote'` のように設定してください。
-- 動作確認用に `:YuriiFcitxOff`、`:YuriiFcitxOn`、`:YuriiFcitxStatus` を使えます。`:YuriiFcitxStatus` が `2` を返す状態が「次回 Insert で日本語入力へ戻す」対象です。
+- 動作確認用に `:SimpleFcitxOff`、`:SimpleFcitxOn`、`:SimpleFcitxStatus` を使えます。`:SimpleFcitxStatus` が `2` を返す状態が「次回 Insert で日本語入力へ戻す」対象です。
 
 ---
 
 
 ## 基本的な仕組み（設計の考え方）
 
-このアプリ（`yurii_PKM`）は、**1ファイル=1ノートの Markdown** を前提に、
+このアプリ（`simple_yurii_note`）は、**1ファイル=1ノートの Markdown** を前提に、
 ノート間の関係をリンクとセクション構造で管理します。
 
 - ノート実体: `*.md` ファイル
@@ -150,7 +150,7 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 
 - 役割: **このノートを参照しているノートの一覧（逆リンク）**。
 - 生成タイミング:
-  - `.md` 保存時 AutoSync（`g:yurii_pkm_autosync=1`）
+  - `.md` 保存時 AutoSync（`g:simple_yurii_note_autosync=1`）
   - もしくは `:UpdateMD` / `:UpdateAll` の一括更新
 - 表示ルール:
   - Back セクションに、他ノートからのリンクに応じて逆リンクを自動反映
@@ -216,7 +216,7 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 - `_` : **直前のノートと1キーで往復**（A⇄B）。読むもの・選ぶものゼロの最速移動
 - `<S-BS>` / `\.` : 履歴を**前へ進む**（`<BS>` の対。戻りが可逆になる）
 - `\1`〜`\9` : **ハブへ直行**。`\H` で今のノートをハブに登録（番号を1打）、`\0` で一覧。登録は再起動後も残る
-- `1`〜`9` / `\`+文字+数字（`\a1`〜） : 本文 → `Parent`/`Child` の順で通し番号にしたリンクを**そのまま開く**（移動して `<Enter>` まで含む）。**リンクの手前にラベルが仮想テキストで表示される**ので、数えずにどのキーを押せばいいか分かる。1〜9番目は数字1打、10番目以降は `\a1`〜`\a9`、`\b1`…（既存の `\ca` 等と同じ `\` リーダー、3打）。生の `a` `i` `o` などは一切奪わない ── 10番目以降のラベルも `\` から始まるので、素のキー入力の速さには影響しない。該当リンクが無い数字キーはそのままカウント（`5j` 等）として素通しされる。表示は `g:yurii_pkm_link_hints = 0` で無効化できる（移動・オープン自体は無効化されず、番号は数えて押す必要がある）
+- `1`〜`9` / `\`+文字+数字（`\a1`〜） : 本文 → `Parent`/`Child` の順で通し番号にしたリンクを**そのまま開く**（移動して `<Enter>` まで含む）。**リンクの手前にラベルが仮想テキストで表示される**ので、数えずにどのキーを押せばいいか分かる。1〜9番目は数字1打、10番目以降は `\a1`〜`\a9`、`\b1`…（既存の `\ca` 等と同じ `\` リーダー、3打）。生の `a` `i` `o` などは一切奪わない ── 10番目以降のラベルも `\` から始まるので、素のキー入力の速さには影響しない。該当リンクが無い数字キーはそのままカウント（`5j` 等）として素通しされる。表示は `g:simple_yurii_note_link_hints = 0` で無効化できる（移動・オープン自体は無効化されず、番号は数えて押す必要がある）
 - `<Enter>` : カーソル下リンクを開く
 - `<BS>` : 履歴を戻る（戻った直後はカーソルがリンク上に寄る）
 - `bu` : `Parent:` 近傍のリンクへ移動
@@ -252,8 +252,8 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 - 自動同期で表示名を上書きするのは `[xxx](xxx.md)` のように表示名がターゲットstemと一致するリンクのみ（手動表示名は維持）
 - Back セクションは、該当リンクがあるときだけ `category:`（K系）/`note:`（N系）見出しを自動表示
 
-- Parent/Child リンクは `g:yurii_pkm_realtime_link_sync=1` 時に追加・削除直後に相手ノートへ反映
-- `.md` 保存時に AutoSync（`g:yurii_pkm_autosync=1` 時）は編集中ファイルのタイトルと直接リンク先だけを軽量同期
+- Parent/Child リンクは `g:simple_yurii_note_realtime_link_sync=1` 時に追加・削除直後に相手ノートへ反映
+- `.md` 保存時に AutoSync（`g:simple_yurii_note_autosync=1` 時）は編集中ファイルのタイトルと直接リンク先だけを軽量同期
 
 ### 6) 変換・リネーム
 
@@ -262,8 +262,8 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 
 ### 7) インデックス・ユーティリティ
 
-- `:YuriiIndex` : `index.md` を開く
-- `:YuriiChooseIndexDir` : index ルート選択
+- `:SimpleIndex` : `index.md` を開く
+- `:SimpleChooseIndexDir` : index ルート選択
 - `:SortYomi` : Child の読み順ソート
 - `:CheckPrefix` : プレフィクスチェック
 - `:OutlineEdit` / `\oe` : アウトライン編集（別バッファで見出し編集、`←/→` で `#` 数変更、`q` / `:write` / `ZZ` / `:OutlineApply` で反映）
@@ -271,7 +271,7 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 
 ### 8) Markdown テーブル編集
 
-- 作成: `:TN`, `:NewTable`, `:YuriiTable`
+- 作成: `:TN`, `:NewTable`, `:SimpleTable`
 - 整形: `:TA`
 - 行編集: `:TRE`
 - CSV編集: `:TCSV`, `:TableCsvEdit`, `:TableCsvApplySaved`
@@ -292,7 +292,7 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 | 作成 | `:NF`, `:NA`, `:CA` |
 | 更新 | `:UpdateMD`, `:UpdateAll`, `:UpdateALL` |
 | 編集 | `:NT`, `:RP`, `:OutlineEdit` |
-| 移動 | `:YuriiIndex`, `:YuriiChooseIndexDir` |
+| 移動 | `:SimpleIndex`, `:SimpleChooseIndexDir` |
 | 変換 | `:ExpandLinks`（旧 `:SE` / `:ExpandToT`）, `:SortYomi`, `:Linkify`, `:LinkifySelection`, `:PasteLink` |
 
 | テーブル | `:TN`, `:TA`, `:TRE`, `:TCSV`, `:TableToCsv`, `:CsvToTable`, `:TAR`, `:TAC`, `:TDR`, `:TDC` |
@@ -303,26 +303,26 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 
 | 変数 | 既定値 | 内容 |
 |---|---:|---|
-| `g:yurii_pkm_root` | `''` | PKM ルートディレクトリ |
-| `g:yurii_pkm_default_child_prefix` | `'C'` | 子ノート既定プレフィクス |
-| `g:yurii_pkm_default_quick_prefix` | `'F'` | クイック作成既定プレフィクス |
-| `g:yurii_pkm_default_atomic_prefix` | `'C'` | Atomic 作成既定プレフィクス |
-| `g:yurii_pkm_history_max` | `200` | 履歴最大件数 |
-| `g:yurii_pkm_autosync` | `1` | 保存時 AutoSync 有効/無効 |
-| `g:yurii_pkm_auto_save_on_command` | `0` | コマンド前自動保存 |
-| `g:yurii_pkm_sync_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に同期まで実行するか（既定OFFで移動優先） |
-| `g:yurii_pkm_save_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に保存するか（既定OFFでEnter移動優先） |
-| `g:yurii_pkm_global_bare_link_navigation` | `0` | ファイル名だけのリンクをEnter移動時にPKMルート全体から一意検索するか |
-| `g:yurii_pkm_space_fullscreen` | `1` | `<Space>` を画面いっぱいの2ペインにする（`0` で従来の中央小窓） |
-| `g:yurii_pkm_space_list_width` | `0` | `<Space>` 一覧の幅（`0` = 自動、34〜50） |
-| `g:yurii_pkm_space_labels` | `'1234567890asdfwertzxcvbnmuiop'` | `<Space>` の行ジャンプに使うラベルキー列 |
-| `g:yurii_pkm_space_preview_lines` | `400` | `<Space>` プレビューで読み込む行数 |
-| `g:yurii_pkm_recent_max` | `500` | 最近訪問を覚えるノート数 |
-| `g:yurii_search_legacy` | `0` | `gs` を旧ポップアップに戻す |
-| `g:yurii_pkm_link_hints` | `1` | `1`〜`9`/文字+数字リンクジャンプのラベル仮想テキスト表示（`0` で非表示。移動機能自体は残る） |
-| `g:yurii_pkm_timeoutlen` | `500` | `&timeoutlen`（ms）をこの値に短縮。`zk`/`ca`等の2文字マッピングと素の`z`/`c`等の単発コマンドが1文字目を共有するため、既定の1000msだと素のキーの反応が遅く感じる。短すぎると`zt`等が2文字目の入力前にタイムアウトして無反応になるので、体感と両立する値として500に調整。`0`で変更しない |
-| `g:yurii_pkm_python` | `{plugin}/python/yurii_pkm_sync.py` | 同期スクリプト |
-| `g:yurii_pkm_expand_s_python` | `{plugin}/python/expand_s.py` | S展開スクリプト |
+| `g:simple_yurii_note_root` | `''` | PKM ルートディレクトリ |
+| `g:simple_yurii_note_default_child_prefix` | `'C'` | 子ノート既定プレフィクス |
+| `g:simple_yurii_note_default_quick_prefix` | `'F'` | クイック作成既定プレフィクス |
+| `g:simple_yurii_note_default_atomic_prefix` | `'C'` | Atomic 作成既定プレフィクス |
+| `g:simple_yurii_note_history_max` | `200` | 履歴最大件数 |
+| `g:simple_yurii_note_autosync` | `1` | 保存時 AutoSync 有効/無効 |
+| `g:simple_yurii_note_auto_save_on_command` | `0` | コマンド前自動保存 |
+| `g:simple_yurii_note_sync_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に同期まで実行するか（既定OFFで移動優先） |
+| `g:simple_yurii_note_save_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に保存するか（既定OFFでEnter移動優先） |
+| `g:simple_yurii_note_global_bare_link_navigation` | `0` | ファイル名だけのリンクをEnter移動時にPKMルート全体から一意検索するか |
+| `g:simple_yurii_note_space_fullscreen` | `1` | `<Space>` を画面いっぱいの2ペインにする（`0` で従来の中央小窓） |
+| `g:simple_yurii_note_space_list_width` | `0` | `<Space>` 一覧の幅（`0` = 自動、34〜50） |
+| `g:simple_yurii_note_space_labels` | `'1234567890asdfwertzxcvbnmuiop'` | `<Space>` の行ジャンプに使うラベルキー列 |
+| `g:simple_yurii_note_space_preview_lines` | `400` | `<Space>` プレビューで読み込む行数 |
+| `g:simple_yurii_note_recent_max` | `500` | 最近訪問を覚えるノート数 |
+| `g:simple_yurii_search_legacy` | `0` | `gs` を旧ポップアップに戻す |
+| `g:simple_yurii_note_link_hints` | `1` | `1`〜`9`/文字+数字リンクジャンプのラベル仮想テキスト表示（`0` で非表示。移動機能自体は残る） |
+| `g:simple_yurii_note_timeoutlen` | `500` | `&timeoutlen`（ms）をこの値に短縮。`zk`/`ca`等の2文字マッピングと素の`z`/`c`等の単発コマンドが1文字目を共有するため、既定の1000msだと素のキーの反応が遅く感じる。短すぎると`zt`等が2文字目の入力前にタイムアウトして無反応になるので、体感と両立する値として500に調整。`0`で変更しない |
+| `g:simple_yurii_note_python` | `{plugin}/python/simple_yurii_note_sync.py` | 同期スクリプト |
+| `g:simple_yurii_note_expand_s_python` | `{plugin}/python/expand_s.py` | S展開スクリプト |
 
 ---
 
@@ -342,4 +342,4 @@ README に以下のような文字列が見える場合は、Git のマージ競
 
 ## 参考
 
-- 詳細な操作リファレンス: `plugin/yurii_PKM/README.txt`
+- 詳細な操作リファレンス: `plugin/simple_yurii_note/README.txt`

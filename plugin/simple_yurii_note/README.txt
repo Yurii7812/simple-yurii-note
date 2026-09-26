@@ -1,4 +1,4 @@
-# yurii_PKM 操作リファレンス
+# simple_yurii_note 操作リファレンス
 
 ## キーマッピング一覧
 
@@ -70,7 +70,7 @@
 | `mx` | `:ToggleCheckbox` | カーソル行のチェックボックス `[ ]` / `[x]` をトグル |
 | Visual `mx` | `:'<,'>ToggleCheckbox` | 選択範囲の各行にあるチェックボックス `[ ]` / `[x]` をトグル |
 | `p` | | 行単位ヤンクでも改行なしでカーソル直下に貼り付け（Vim標準の `p` を上書き） |
-| `\gi` | `:Gallery` / `:YuriiGallery` / `:GalleryFolder` | 画像リンクを含むMarkdownでは現在Markdown内の画像リンクを開き、画像リンクが無い場所ではIndexフォルダ以下の全画像を開く |
+| `\gi` | `:Gallery` / `:SimpleGallery` / `:GalleryFolder` | 画像リンクを含むMarkdownでは現在Markdown内の画像リンクを開き、画像リンクが無い場所ではIndexフォルダ以下の全画像を開く |
 
 ### ノート変換・管理
 
@@ -92,7 +92,7 @@ filetype [N] →    → 新しい filetype を1文字入力（a-z、大文字に
 
 | キー | コマンド | 動作 |
 |------|----------|------|
-| | `:YuriiIndex` | `index.md` を開く |
+| | `:SimpleIndex` | `index.md` を開く |
 | | `:JumpLastLinkBeforeParent` | `Parent:` 見出しより前にある最後尾のリンクへカーソル移動（無い場合は `Parent:` 内の最初のリンクへ移動） |
 | | `:JumpParent` | Parent リンクが1つだけならリンク先へ直接移動、複数ある場合は `Parent:` 見出しへカーソル移動 |
 | | `:JumpChildTop` | `Child:` セクションの先頭行へカーソル移動 |
@@ -109,12 +109,12 @@ filetype [N] →    → 新しい filetype を1文字入力（a-z、大文字に
 
 | コマンド | 動作 |
 |----------|------|
-| `:UpdateMD [path]` | PKMルート（省略時は `g:yurii_pkm_root`）の全ノートのリンクタイトルを一括更新 |
+| `:UpdateMD [path]` | PKMルート（省略時は `g:simple_yurii_note_root`）の全ノートのリンクタイトルを一括更新 |
 | `:UpdateAll [path]` | `:UpdateMD` と同じ |
 | `:Gallery [path]` | 指定または現在のMarkdownファイルから画像リンクを抽出してブラウザギャラリーを開く |
-| `:YuriiGallery [path]` | `:Gallery` と同じ |
+| `:SimpleGallery [path]` | `:Gallery` と同じ |
 | `:GalleryFolder [path-or-dir]` | 指定フォルダ、または引数なしではIndexフォルダ以下にあるすべての画像ファイルをサブフォルダ込みでブラウザギャラリーで開く |
-| `:YuriiGalleryFolder [path-or-dir]` | `:GalleryFolder` と同じ |
+| `:SimpleGalleryFolder [path-or-dir]` | `:GalleryFolder` と同じ |
 
 
 ---
@@ -143,7 +143,7 @@ https://www.instagram.com/p/DIOTlVhvVVu/?img_index=2
 
 VimでこのMarkdownファイル内のどこかに画像リンクがある状態で `\gi`、または `:Gallery` を実行すると、ローカルサーバーが自動起動し、ブラウザにサムネイルグリッドが表示される。
 Windows版Vimでも既定ブラウザをWindowsのファイル関連付け経由で開き、ローカルサーバーはVimのジョブ終了後も表示に必要な間は独立して動作する。`C:\Users\...\image.jpg` のようなドライブレター付き画像パスにも対応する。
-現在のMarkdownに画像リンクが無い状態で `\gi` を実行した場合は、最初に開くIndexがあるフォルダ（`g:yurii_pkm_root`。未設定時は現在ファイルから上位に探した `index.md` のフォルダ）以下にあるすべての画像ファイルをサブフォルダ込みで表示する。ブラウザ上部の「Indexフォルダ以下のすべての画像」ボタン、または引数なしの `:GalleryFolder` でも同じIndex配下の画像ギャラリーを開ける。`:GalleryFolder [path-or-dir]` のように明示した場合は、そのフォルダ/ファイルの親フォルダ以下をサブフォルダ込みで表示する。
+現在のMarkdownに画像リンクが無い状態で `\gi` を実行した場合は、最初に開くIndexがあるフォルダ（`g:simple_yurii_note_root`。未設定時は現在ファイルから上位に探した `index.md` のフォルダ）以下にあるすべての画像ファイルをサブフォルダ込みで表示する。ブラウザ上部の「Indexフォルダ以下のすべての画像」ボタン、または引数なしの `:GalleryFolder` でも同じIndex配下の画像ギャラリーを開ける。`:GalleryFolder [path-or-dir]` のように明示した場合は、そのフォルダ/ファイルの親フォルダ以下をサブフォルダ込みで表示する。
 サムネイルをクリックすると拡大表示になり、左右矢印キー（`←` / `→`）で前後の画像へ移動できる。`Esc` で一覧へ戻る。
 
 ギャラリー上部では、ファイル名または作成時刻で昇順/降順に並び替えできる。「ファイル名・説明文・URLを検索」欄へ入力すると、ファイル名・フルパス・説明文・URL・リンクラベルを対象に、その場で画像を絞り込める。サムネイル左上のチェックボックスで複数画像を選択し、「選択ファイル名をコピー」を押すと、パスなしのファイル名だけが改行区切りでクリップボードに入る。
@@ -169,7 +169,7 @@ Windows版Vimでも既定ブラウザをWindowsのファイル関連付け経由
 - リンク表示名の自動更新は `[xxx](xxx.md)` のように表示名がターゲットstemと一致するもののみ（手動表示名は維持）
 
 - `job_start` が使えれば非同期、なければ同期フォールバック
-- 無効化する場合: `let g:yurii_pkm_autosync = 0`
+- 無効化する場合: `let g:simple_yurii_note_autosync = 0`
 
 ---
 
@@ -177,23 +177,23 @@ Windows版Vimでも既定ブラウザをWindowsのファイル関連付け経由
 
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
-| `g:yurii_pkm_root` | `''` | PKM ルートディレクトリ（未設定なら保存済み値→選択） |
-| `g:yurii_pkm_autosync` | `1` | 保存時に自動同期するか |
-| `g:yurii_pkm_realtime_link_sync` | `0` | 入力中に Parent/Child の相互リンクを同期するか（重い場合があるため既定OFF） |
-| `g:yurii_pkm_auto_save_on_command` | `0` | `:` コマンド実行時に自動保存するか（コマンドごとの遅延を避けるため既定OFF） |
-| `g:yurii_pkm_sync_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に同期まで実行するか（移動を軽くするため既定OFF） |
-| `g:yurii_pkm_save_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に保存するか（Enter移動を軽くするため既定OFF。未保存バッファは hidden で保持） |
-| `g:yurii_pkm_global_bare_link_navigation` | `0` | ファイル名だけのリンクをEnter移動時にPKMルート全体から一意検索するか（再帰検索を避けるため既定OFF） |
-| `g:yurii_pkm_markdown_conceal_links` | `1` | Markdownリンクを本文だけ表示する conceal を有効にするか（大きい/長い行のファイルでは自動抑制） |
-| `g:yurii_pkm_history_max` | `200` | 履歴の最大件数 |
-| `g:yurii_pkm_persistent_undo` | `1` | Persistent undo を有効にするか |
-| `g:yurii_pkm_link_color_gui` | `#66CCFF` | リンクテキストの色（GUI） |
-| `g:yurii_pkm_link_color_cterm` | `81` | リンクテキストの色（端末） |
-| `g:yurii_pkm_python` | `{plugin}/python/yurii_pkm_sync.py` | sync スクリプトのパス |
-| `g:yurii_pkm_expand_s_python` | `{plugin}/python/expand_s.py` | S→A 展開スクリプトのパス |
-| `g:yurii_pkm_gallery_python` | `{plugin}/python/gallery.py` | 画像ギャラリー用ローカルサーバースクリプトのパス |
-| `g:yurii_pkm_gallery_port` | `8765` | 画像ギャラリー用ローカルサーバーのポート |
-| `g:yurii_pkm_open_index_on_startup` | `1` | Vim起動時に `YuriiIndex` を自動で開くか |
+| `g:simple_yurii_note_root` | `''` | PKM ルートディレクトリ（未設定なら保存済み値→選択） |
+| `g:simple_yurii_note_autosync` | `1` | 保存時に自動同期するか |
+| `g:simple_yurii_note_realtime_link_sync` | `0` | 入力中に Parent/Child の相互リンクを同期するか（重い場合があるため既定OFF） |
+| `g:simple_yurii_note_auto_save_on_command` | `0` | `:` コマンド実行時に自動保存するか（コマンドごとの遅延を避けるため既定OFF） |
+| `g:simple_yurii_note_sync_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に同期まで実行するか（移動を軽くするため既定OFF） |
+| `g:simple_yurii_note_save_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に保存するか（Enter移動を軽くするため既定OFF。未保存バッファは hidden で保持） |
+| `g:simple_yurii_note_global_bare_link_navigation` | `0` | ファイル名だけのリンクをEnter移動時にPKMルート全体から一意検索するか（再帰検索を避けるため既定OFF） |
+| `g:simple_yurii_note_markdown_conceal_links` | `1` | Markdownリンクを本文だけ表示する conceal を有効にするか（大きい/長い行のファイルでは自動抑制） |
+| `g:simple_yurii_note_history_max` | `200` | 履歴の最大件数 |
+| `g:simple_yurii_note_persistent_undo` | `1` | Persistent undo を有効にするか |
+| `g:simple_yurii_note_link_color_gui` | `#66CCFF` | リンクテキストの色（GUI） |
+| `g:simple_yurii_note_link_color_cterm` | `81` | リンクテキストの色（端末） |
+| `g:simple_yurii_note_python` | `{plugin}/python/simple_yurii_note_sync.py` | sync スクリプトのパス |
+| `g:simple_yurii_note_expand_s_python` | `{plugin}/python/expand_s.py` | S→A 展開スクリプトのパス |
+| `g:simple_yurii_note_gallery_python` | `{plugin}/python/gallery.py` | 画像ギャラリー用ローカルサーバースクリプトのパス |
+| `g:simple_yurii_note_gallery_port` | `8765` | 画像ギャラリー用ローカルサーバーのポート |
+| `g:simple_yurii_note_open_index_on_startup` | `1` | Vim起動時に `SimpleIndex` を自動で開くか |
 | `g:yurii_redraw_after_silent_shell` | `1` | silent 化した `:!` コマンド後、端末復帰を待って `redrawstatus` と強制 `redraw!` を実行し、`:!rm %` などの後に画面が黒く残るのを防ぐか |
 | `g:yurii_force_redraw_after_shell` | `0` | `g:yurii_redraw_after_silent_shell` が `0` の場合に、従来互換の `:!` コマンド後 `redraw` を行うか |
 
@@ -236,4 +236,4 @@ AutoSync / UpdateAll により、リンク先タイトルが変更された場�
 
 | 変数 | 既定値 | 説明 |
 |------|--------|------|
-| `g:yurii_pkm_vimrc` | 未設定 | `<leader>ev` / `<leader>sv` で開く vimrc。固定パスを使いたい場合だけ指定 |
+| `g:simple_yurii_note_vimrc` | 未設定 | `<leader>ev` / `<leader>sv` で開く vimrc。固定パスを使いたい場合だけ指定 |
