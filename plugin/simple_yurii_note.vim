@@ -7,6 +7,7 @@ endif
 let g:loaded_simple_yurii_note = 1
 
 command! SSync call simple_yurii_note#sync()
+command! SimpleRoot call simple_yurii_note#choose_root()
 
 nnoremap <silent> zn :<C-u>call simple_yurii_note#new_child()<CR>
 nnoremap <silent> zk :<C-u>call simple_yurii_note#new_group()<CR>

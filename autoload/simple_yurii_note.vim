@@ -35,6 +35,21 @@ function! simple_yurii_note#root() abort
   return ''
 endfunction
 
+" ルート（index.md を持つ想定のディレクトリ）を選び直す。
+function! simple_yurii_note#choose_root() abort
+  let l:default = simple_yurii_note#root()
+  if empty(l:default)
+    let l:default = getcwd()
+  endif
+  let l:root = trim(input('Index directory: ', l:default, 'dir'))
+  if empty(l:root)
+    echo 'キャンセル'
+    return
+  endif
+  let g:simple_yurii_note_root = fnamemodify(expand(l:root), ':p')
+  echo 'simple_yurii_note root: ' . g:simple_yurii_note_root
+endfunction
+
 function! s:rel(from_dir, target) abort
   let l:out = systemlist(s:py_cmd() . ' -c "import os,sys; print(os.path.relpath(sys.argv[2], sys.argv[1]))" '
         \ . shellescape(a:from_dir) . ' ' . shellescape(a:target))
