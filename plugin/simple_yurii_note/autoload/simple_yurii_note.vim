@@ -4784,7 +4784,7 @@ function! s:v2_new_interactive(attr) abort
   let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
 
-  echo 'h=カーソル直下 / Enter=本文の最後 / o=リンク無し(孤立)  (Esc/q キャンセル)'
+  echo 'h=カーソル直下 / Enter=本文の最後 / p=Parent末尾 / o=リンク無し(孤立)  (Esc/q キャンセル)'
   let l:ch = nr2char(getchar())
   redraw
   if l:ch ==? 'q' || char2nr(l:ch) == 27 || char2nr(l:ch) == 3
@@ -4798,10 +4798,18 @@ function! s:v2_new_interactive(attr) abort
   let l:added = 0
   let l:save_ai = &autoindent | let l:save_si = &smartindent
   setlocal noautoindent nosmartindent
+  let l:to_parent = 0
   if l:ch ==? 'h'
     call append(line('.'), l:link)      " カーソル直下（本文）
     let l:added = 1
-  elseif l:ch ==? 'p' || l:ch ==# "\<CR>" || l:ch ==# "\<NL>"
+  elseif l:ch ==? 'p'
+    " 今のノートの ### Parent 末尾に置く。相手側（今開いていたノート）は
+    " Parent ではなく**本文**にリンクを残す（本文にも見えるように）。
+    if s:append_link_to_buffer_section('up', l:link)
+      let l:added = 1
+      let l:to_parent = 1
+    endif
+  elseif l:ch ==# "\<CR>" || l:ch ==# "\<NL>"
     call s:simple_body_append(l:link)  " 本文の最後（### Parent の手前に空行1つ）
     let l:added = 1
   endif
@@ -4809,8 +4817,15 @@ function! s:v2_new_interactive(attr) abort
   let &autoindent = l:save_ai | let &smartindent = l:save_si
   silent noautocmd write
   if l:added
-    " 新ノートの ### Parent に今のノートを書く（本文リンクは BackLink になるため）
-    call s:simple_add_parent(l:file, l:cur, l:cur_title)
+    if l:to_parent
+      " p を選んだとき: 今のノートを新ノートの**本文**に置く（Parent には出さない）
+      execute 'edit ' . fnameescape(l:file)
+      call s:simple_body_append(s:make_link_from_dir(l:file, l:cur_title, l:dir))
+      silent noautocmd write
+    else
+      " 新ノートの ### Parent に今のノートを書く（本文リンクは BackLink になるため）
+      call s:simple_add_parent(l:file, l:cur, l:cur_title)
+    endif
     call s:run_update_one_for(l:cur)
   endif
   call simple_yurii_note#push_history()
