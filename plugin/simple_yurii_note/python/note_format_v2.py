@@ -1132,9 +1132,114 @@ def sync_vault(root) -> int:
     return changed
 
 
+# ---------------------------------------------------------------------------
+# simple sync: Parent = 本文リンクの張り元(incoming) / BackLink = 自分が張ったリンク(outgoing)
+# ---------------------------------------------------------------------------
+
+_SIMPLE_INLINE_LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+
+
+def _links_from(lines: list[str]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for ln in lines:
+        for m in _SIMPLE_INLINE_LINK.finditer(ln):
+            tg = m.group(2).split("#", 1)[0].strip()
+            if tg.lower().endswith(".md"):
+                out.append((m.group(1), tg))
+    return out
+
+
+def _simple_parse(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    fm, rest = _split_front_matter(text.split("\n"))
+    title = _fm_title(fm) or path.stem
+    body: list[str] = []
+    parent: list[str] = []
+    back: list[str] = []
+    cur = "body"
+    for ln in rest:
+        s = ln.strip()
+        if s == UP_MARK:
+            cur = "parent"
+            continue
+        if s == DOWN_MARK:
+            cur = "back"
+            continue
+        (body if cur == "body" else parent if cur == "parent" else back).append(ln)
+    return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
+
+
+def _simple_render(name: str, n: dict, path: Path, parent: list[Path], back: list[Path], titles: dict) -> str:
+    lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
+    lines += list(n["body"])
+    if name != "index.md":
+        # Parent の上に余分な空行を入れない（本文の余白はそのまま）
+        lines.append(UP_MARK)
+        for t in parent:
+            lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
+        lines.append(DOWN_MARK)
+        for t in back:
+            lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
+    while lines and lines[-1].strip() == "":
+        lines.pop()
+    return "\n".join(lines) + "\n"
+
+
+def simple_sync(root) -> int:
+    root = Path(root).resolve()
+    notes: dict[Path, dict] = {p.resolve(): _simple_parse(p) for p in _iter_md(root)}
+    titles = {p: n["title"] for p, n in notes.items()}
+
+    def res(tg: str, base: Path) -> Path | None:
+        tp = Path(tg).resolve() if tg.startswith("/") else (base / tg).resolve()
+        return tp if tp in notes else None
+
+    body_t: dict[Path, list[Path]] = {}
+    for p, n in notes.items():
+        ts: list[Path] = []
+        for _d, tg in _links_from(n["body"]):
+            rp = res(tg, p.parent)
+            if rp is not None and rp != p:
+                ts.append(rp)
+        body_t[p] = ts
+
+    incoming: dict[Path, list[Path]] = {p: [] for p in notes}
+    for src, ts in body_t.items():
+        for t in dict.fromkeys(ts):
+            incoming[t].append(src)
+
+    changed = 0
+    for p, n in notes.items():
+        # Parent = incoming（本文でこのノートにリンクしている相手）＋ 既存の明示 Parent
+        parent: list[Path] = []
+        seen: set[Path] = set()
+        for s in incoming.get(p, []):
+            if s not in seen:
+                seen.add(s)
+                parent.append(s)
+        for _d, tg in _links_from(n["parent"]):
+            rp = res(tg, p.parent)
+            if rp is not None and rp != p and rp not in seen:
+                seen.add(rp)
+                parent.append(rp)
+        # BackLink = 自分が本文で張ったリンク(outgoing) − Parent − 自分
+        back: list[Path] = []
+        bseen: set[Path] = set()
+        for t in body_t.get(p, []):
+            if t != p and t not in seen and t not in bseen:
+                bseen.add(t)
+                back.append(t)
+        new_text = _simple_render(p.name, n, p, parent, back, titles)
+        old = p.read_text(encoding="utf-8")
+        if new_text != old:
+            p.write_text(new_text, encoding="utf-8")
+            changed += 1
+    return changed
+
+
 def update_one(file_path, root) -> str:
-    changed = sync_vault(root)
-    return f"simple_yurii_note: v2 synced {changed} file(s)" if changed else "simple_yurii_note: no changes"
+    changed = simple_sync(root)
+    return f"simple_yurii_note: synced {changed} file(s)" if changed else "simple_yurii_note: no changes"
 
 
 # ---------------------------------------------------------------------------
@@ -1163,8 +1268,8 @@ def main(argv: list[str]) -> int:
         return 2
     mode = argv[1]
     if mode == "update":
-        changed = sync_vault(argv[2])
-        print(f"simple_yurii_note: v2 updated {changed} file(s) under {argv[2]}")
+        changed = simple_sync(argv[2])
+        print(f"simple_yurii_note: updated {changed} file(s) under {argv[2]}")
         return 0
     if mode == "update_one":
         if len(argv) < 4:
