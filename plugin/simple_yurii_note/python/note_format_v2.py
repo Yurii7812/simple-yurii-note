@@ -1231,26 +1231,20 @@ def simple_sync(root) -> int:
 
     changed = 0
     for p, n in notes.items():
-        # Parent = incoming（本文でこのノートにリンクしている相手）＋ 既存の明示 Parent
-        parent: list[Path] = []
-        seen: set[Path] = set()
-        for s in incoming.get(p, []):
-            if s not in seen:
-                seen.add(s)
-                parent.append(s)
+        # Parent は書いてあるそのまま（ユーザー管理。追加・削除しない）
+        parent_lines = list(n["parent"])
+        parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
             rp = res(tg, p.parent)
-            if rp is not None and rp != p and rp not in seen:
-                seen.add(rp)
-                parent.append(rp)
-        # BackLink = 自分が本文で張ったリンク(outgoing) − Parent − 自分
+            if rp is not None:
+                parent_set.add(rp)
+        # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分
         back: list[Path] = []
         bseen: set[Path] = set()
-        for t in body_t.get(p, []):
-            if t != p and t not in seen and t not in bseen:
-                bseen.add(t)
-                back.append(t)
-        parent_lines = _preserve_parent(n["parent"], parent, p, res, titles)
+        for s in incoming.get(p, []):
+            if s != p and s not in parent_set and s not in bseen:
+                bseen.add(s)
+                back.append(s)
         new_text = _simple_render(p.name, n, p, parent_lines, back, titles)
         old = p.read_text(encoding="utf-8")
         if new_text != old:
