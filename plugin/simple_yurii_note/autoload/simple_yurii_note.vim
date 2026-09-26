@@ -4819,11 +4819,8 @@ function! s:v2_new_interactive(attr) abort
   if l:added
     " 新ノート側は「もと開いていたノート」を `### Parent` にだけ入れる。
     " 本文（中央）には入れない（h / Enter / p どれを選んでも同じ）。
+    " 本文はテンプレートのまま（余白 2 行）を残す。潰さない。
     call s:simple_add_parent(l:file, l:cur, l:cur_title)
-    " テンプレートの余白（空行 2 行）が残るので 1 行に潰す
-    execute 'edit ' . fnameescape(l:file)
-    call s:squeeze_body_blanks()
-    silent noautocmd write
     call s:run_update_one_for(l:cur)
   endif
   call simple_yurii_note#push_history()
