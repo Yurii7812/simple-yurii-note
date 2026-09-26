@@ -4628,8 +4628,9 @@ function! s:simple_body_append(link) abort
     call deletebufline(bufnr('%'), l:del, l:up - 1)
     let l:up = l:del
   endif
-  " ### Parent の 1 個上（直前）にリンクを挿入。間に空行は入れない。
-  call append(l:up - 1, a:link)
+  " ### Parent の直前に「空行1つ + リンク」を挿入。
+  " 本文とリンクの間は空行1つ、リンクと ### Parent の間は空行なし。
+  call append(l:up - 1, ['', a:link])
 endfunction
 
 " simple: file の ### Parent に parent_path へのリンクを 1 本足す
