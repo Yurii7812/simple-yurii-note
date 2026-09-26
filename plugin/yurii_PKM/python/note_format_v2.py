@@ -86,8 +86,8 @@ ATTR_LABELS: frozenset[str] = frozenset({CATEGORY_ATTR})  # attribute として�
 SYMMETRIC: frozenset[str] = frozenset({"関連"})
 BACKLINK = "バックリンク"
 
-UP_MARK = "## Parent"
-DOWN_MARK = "## Child"
+UP_MARK = "### Parent"
+DOWN_MARK = "### BackLink"
 # 旧見張り（新しい順）。parse だけが読む。render は新表記（## Parent / ## Child）に統一する。
 LEGACY_UP_MARK3 = "Parent"  # `##` なしの旧 v2 見張り
 LEGACY_DOWN_MARK3 = "Child"
@@ -471,7 +471,12 @@ def _render_group(d: dict[str, list], is_down: bool = False) -> list[str]:
             for t in d if t not in _RESERVED and d.get(t)
         ]
         if d.get(BACKLINK):
-            blocks.append(_render_section(BACKLINK, d[BACKLINK]))
+            # `### BackLink` 見出し自体がラベルなので、内側に `バックリンク:` は付けない
+            back_entries = []
+            for ti, tg, ann in d[BACKLINK]:
+                s = f"[{ti}]({tg})"
+                back_entries.append(s + f" — {ann}" if ann else s)
+            blocks.append(back_entries)
         out = _join_blocks(blocks)
         extra = list(d.get(_EXTRA, []))
         if extra:
@@ -535,8 +540,8 @@ def _render_down_preserving(note: Note, key_fn) -> list[str] | None:
             desired.setdefault(key(tg), (disp, tg, ann, label))
 
     def header_line(label: str) -> str | None:
-        if label in ("ノート", CATEGORY_ATTR):
-            return None  # 見出しを書かない（位置で表す裸リンク）
+        if label in ("ノート", CATEGORY_ATTR, BACKLINK):
+            return None  # 見出しを書かない（位置で表す裸リンク / BackLink は親見出し）
         if label.endswith("::"):
             return label[:-2] + ":"   # `語::` は `語:` で出す（両側）
         if label.endswith(":;") or label.endswith(";") or label.endswith(":"):
