@@ -49,6 +49,7 @@ title: ノートA
 | `zn` | 子ノートを新規作成。本文にリンクを 1 本置き、新ノートの Parent に今のノートを書く |
 | `zk` | グループノートを新規作成（front matter に `group: true`）。リンクと Parent は `zn` と同じ |
 | `\l` | 既存ノートへのリンクを本文に張る。「今のノートを親にする？」と聞く |
+| `:SimpleRoot` | ルート（index.md を持つディレクトリ）を選び直す |
 | `:SSync` | ルート全体を同期（Parent の死にリンク削除 + BackLink 再生成） |
 | 保存時 | 自動で `update_one` 相当を実行 |
 
