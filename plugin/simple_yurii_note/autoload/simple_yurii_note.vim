@@ -6142,26 +6142,20 @@ function! simple_yurii_note#add_from_clipboard(...) abort
   echo 'Added ' . len(l:links) . ' link(s)'
 endfunction
 
-" リンクを「どこに置くか」を 1 文字で選ばせる。zn と同じ約束。
+" リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter のみ。zn と同じ約束）。
 "   h     … カーソル行の直下（本文）
 "   Enter … 本文の最後（### Parent の直前）
-"   p     … ### Parent の末尾
-"   o     … 置かない（リンクのみ作る。現状は Cancel と同じ扱いにしない）
-" Esc/q は「何も置かない」で終わる。
+" Esc / q / o は「何も置かない」で終わる。
 function! s:insert_links_at_position(links) abort
   let l:links = a:links
   if empty(l:links)
     return 0
   endif
-  echo 'h=カーソル直下 / Enter=本文の最後 / p=Parent末尾 / o=置かない  (Esc 取消)'
+  echo 'h=カーソル直下 / Enter=本文の最後  (Esc 取消)'
   let l:ch = nr2char(getchar())
   redraw
   let l:num = char2nr(l:ch)
-  if l:ch ==? 'q' || l:num == 27 || l:num == 3
-    echo 'simple_yurii_note: キャンセル（何も追加しない）'
-    return 0
-  endif
-  if l:ch ==? 'o'
+  if l:ch ==? 'q' || l:ch ==? 'o' || l:num == 27 || l:num == 3
     echo 'simple_yurii_note: 何も追加しない'
     return 0
   endif
@@ -6176,32 +6170,7 @@ function! s:insert_links_at_position(links) abort
     endfor
     return 1
   endif
-  if l:ch ==? 'p'
-    let l:added = 0
-    for l:lk in l:links
-      if s:append_link_to_buffer_section('up', l:lk)
-        let l:added += 1
-      endif
-    endfor
-    if l:added
-      return 1
-    endif
-  endif
-
-  " 既定（Enter / それ以外）: グループノートなら `### Parent` へ、
-  " それ以外は本文の最後（= ### Parent の直前）へ
-  if s:buf_is_group()
-    let l:added = 0
-    for l:lk in l:links
-      if s:append_link_to_buffer_section('up', l:lk)
-        let l:added += 1
-      endif
-    endfor
-    if l:added
-      return 1
-    endif
-    return 0
-  endif
+  " 既定（Enter）: 本文の最後 = ### Parent の直前
   let l:added = 0
   for l:lk in l:links
     if s:insert_link_before_up_note(l:lk)
@@ -6209,14 +6178,6 @@ function! s:insert_links_at_position(links) abort
     endif
   endfor
   return l:added > 0
-endfunction
-
-" 現ノートがグループ（attribute: group / index.md）かどうか
-function! s:buf_is_group() abort
-  if s:is_current_index_buffer()
-    return 1
-  endif
-  return s:v2_buf_attr() ==# 'group'
 endfunction
 
 function! simple_yurii_note#paste_clipboard_link_here() abort
@@ -6364,6 +6325,14 @@ function! simple_yurii_note#add_clipboard_before_up_note() abort
   silent write
 endfunction
 
+" 現ノートがグループ（attribute: group / index.md）かどうか
+function! s:buf_is_group() abort
+  if s:is_current_index_buffer()
+    return 1
+  endif
+  return s:v2_buf_attr() ==# 'group'
+endfunction
+
 " クリップボードから有効なリンク行を抜く
 function! s:clipboard_links() abort
   let l:out = []
@@ -6392,6 +6361,42 @@ function! simple_yurii_note#add_clipboard_before_up_reverse() abort
     return
   endif
   call simple_yurii_note#add_clipboard_before_up()
+endfunction
+
+" zp: 今のノートにクリップボードのリンクを追加（h/Enter で位置を選ぶ）し、
+"     さらに「今のノート」側のリンクを相手ノートの ### Parent にも書く。
+"     今のノートがグループの場合は本文リンクだけで十分（sync が親側を作る）。
+function! simple_yurii_note#add_clipboard_as_child_with_parent() abort
+  let l:cur = expand('%:p')
+  if empty(l:cur)
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
+    return
+  endif
+  let l:links = s:clipboard_links()
+  if empty(l:links)
+    echo 'Error: clipboard has no valid link'
+    return
+  endif
+  call s:insert_links_at_position(l:links)
+  if s:buf_is_group()
+    call s:realtime_sync_apply()
+    silent write
+    echo 'グループ: 本文リンクを追加（親は sync が書く）'
+    return
+  endif
+  let l:cur_title = simple_yurii_note#current_title()
+  let l:added = 0
+  for l:lk in l:links
+    let l:tgt = simple_yurii_note#resolve_link(s:extract_target(l:lk))
+    if empty(l:tgt) || !filereadable(l:tgt)
+      continue
+    endif
+    call s:simple_add_parent(l:tgt, l:cur, l:cur_title)
+    let l:added += 1
+  endfor
+  call s:realtime_sync_apply()
+  silent write
+  echo 'Child added, Parent added ' . l:added
 endfunction
 
 function! simple_yurii_note#add_clipboard_before_up() abort

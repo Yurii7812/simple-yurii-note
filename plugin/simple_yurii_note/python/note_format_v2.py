@@ -1301,14 +1301,35 @@ def simple_sync(root) -> int:
             if drop:
                 parent_lines = keep
                 parent_set -= drop
-        # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分。
+        # Parent に入るもの（グループ → 子供）の判定:
+        #   - 本文でリンクしている相手がグループ（index.md を含む）なら、そのリンクは
+        #     「グループ → 子供」という containership なので Parent に入る。
+        #   - それ以外は BackLink（incoming − Parent − 自分）。
         # 既存の並びを保ち、新しく増えた分は末尾に追加する。
+        group_set = {q for q, nn in notes.items()
+                     if q.name == "index.md"
+                     or (nn["fm"] and re.search(r"^\s*(?:attribute|属性)\s*:\s*"
+                                                r"(?:group|グループ|小グループ|カテゴリー|キーワード)\s*$",
+                                                "\n".join(nn["fm"]), re.M))}
+        auto_parent: list[Path] = []
         desired: list[Path] = []
         dseen: set[Path] = set()
         for s in incoming.get(p, []):
-            if s != p and s not in parent_set and s not in dseen:
-                dseen.add(s)
-                desired.append(s)
+            if s == p or s in dseen:
+                continue
+            dseen.add(s)
+            if s in group_set:
+                auto_parent.append(s)
+                continue
+            if s in parent_set:
+                continue
+            desired.append(s)
+        # グループからのリンクは Parent に入れる（sync が管理する）
+        for s in auto_parent:
+            if s in parent_set:
+                continue
+            parent_set.add(s)
+            parent_lines.append(f"[{titles[s]}]({_rel(p.parent, s)})")
         existing_back: list[Path] = []
         for _d, tg in _links_from(n["back"]):
             rp = res(tg, p.parent)
