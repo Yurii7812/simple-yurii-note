@@ -2,6 +2,17 @@
 " autoload/simple_yurii_note.vim
 " simple_yurii_note - Vimwiki非依存 Markdown PKM プラグイン (autoload)
 " =============================================================================
+"
+" 目次（編集時は目的の見出しを検索して、その区間だけ読む。全体を読まない）:
+"   Internal helpers / Title cache / Current file helpers / Section helpers
+"   Realtime reciprocal link sync / Link navigation / <Space> ナビゲータ / キー
+"   リンクへのラベルジャンプ / History (Back key) / Note template
+"   v2: 関係付きリンク追加 / Update link titles / UpdateMD・UpdateAll
+"   Auto-sync (BufWritePost) / rename_link_text / rename_title / create_note
+"   :NC / :NF・:NA / ビジュアル選択の新ノート / :NQ / :CA / :BC / :YN / gp helper
+"   :AT2 / \at / SortYomi / :RP / Markdown table helpers / テーブル行・列の追加・削除
+"   CopyStack Mode / Image gallery
+" -----------------------------------------------------------------------------
 
 " ---------------------------------------------------------------------------
 " Internal helpers
@@ -806,63 +817,6 @@ function! simple_yurii_note#choose_index_root() abort
   return l:new_root
 endfunction
 
-function! s:current_dir_for_prefix_check() abort
-  let l:file = expand('%:p')
-  if !empty(l:file)
-    return fnamemodify(l:file, ':p:h')
-  endif
-  return getcwd()
-endfunction
-
-function! s:is_in_pkm_root(path) abort
-  let l:root = s:get_pkm_root()
-  if empty(l:root)
-    return 0
-  endif
-  let l:path = fnamemodify(a:path, ':p')
-  return l:path =~# '^' . escape(l:root, '\')
-endfunction
-
-function! s:missing_prefix_files_in_dir(dir) abort
-  let l:files = []
-  for l:path in sort(glob(a:dir . '/*', 0, 1))
-    if !filereadable(l:path)
-      continue
-    endif
-    let l:name = fnamemodify(l:path, ':t')
-    if l:name ==# 'index.md' || l:name =~# '^\.'
-      continue
-    endif
-    if l:name =~# '^[A-Z]_'
-      continue
-    endif
-    call add(l:files, l:path)
-  endfor
-  return l:files
-endfunction
-
-function! s:rename_missing_prefix_files(dir, files) abort
-  let l:cur = expand('%:p')
-  let l:renamed = []
-  for l:old in a:files
-    let l:new = fnamemodify(l:old, ':h') . '/M_' . fnamemodify(l:old, ':t')
-    if filereadable(l:new) || isdirectory(l:new)
-      echom 'skip (already exists): ' . fnamemodify(l:new, ':t')
-      continue
-    endif
-    if rename(l:old, l:new) != 0
-      echom 'rename failed: ' . fnamemodify(l:old, ':t')
-      continue
-    endif
-    if !empty(l:cur) && fnamemodify(l:cur, ':p') ==# fnamemodify(l:old, ':p')
-      execute 'silent keepalt file ' . fnameescape(l:new)
-      let l:cur = l:new
-    endif
-    call add(l:renamed, fnamemodify(l:new, ':t'))
-  endfor
-  return l:renamed
-endfunction
-
 function! simple_yurii_note#check_missing_prefix_in_current_dir() abort
   return 1
 endfunction
@@ -952,26 +906,6 @@ function! s:find_section_line(name) abort
 endfunction
 
 " Ensure the buffer has a Child: section, placed after Parent: and before BackLink:.
-function! s:ensure_down_section() abort
-  if s:find_section_line('down') > 0
-    return
-  endif
-
-  let l:back = s:find_section_line('back')
-  if l:back > 0
-    call append(l:back - 1, s:canonical_section_title('down'))
-    return
-  endif
-
-  let l:up_end = s:up_end_line()
-  if l:up_end > 0
-    call append(l:up_end, s:canonical_section_title('down'))
-    return
-  endif
-
-  call append(line('$'), s:canonical_section_title('down'))
-endfunction
-
 " Return insertion end line for outgoing links in Child:.
 function! s:down_end_line() abort
   let l:down = s:find_section_line('down')
@@ -1030,14 +964,6 @@ function! s:structural_link_prepend_line() abort
 endfunction
 
 " Return insertion end line for Parent: section (just before next section header / EOF).
-function! s:before_up_line() abort
-  let l:up = s:find_section_line('up')
-  if l:up > 0
-    return l:up - 1
-  endif
-  return s:down_end_line()
-endfunction
-
 function! s:up_end_line() abort
   let l:up = s:find_section_line('up')
   if l:up <= 0
@@ -1049,31 +975,6 @@ function! s:up_end_line() abort
     endif
   endfor
   return line('$')
-endfunction
-
-function! s:replace_section(name, new_lines) abort
-  let l:sec = s:find_section_line(a:name)
-  if l:sec <= 0
-    return 0
-  endif
-
-  let l:end = l:sec
-  for l:i in range(l:sec + 1, line('$'))
-    if s:is_known_section_header_text(getline(l:i))
-      let l:end = l:i - 1
-      break
-    endif
-    let l:end = l:i
-  endfor
-
-  if l:end >= l:sec + 1
-    execute (l:sec + 1) . ',' . l:end . 'delete _'
-  endif
-
-  if !empty(a:new_lines)
-    call append(l:sec, a:new_lines)
-  endif
-  return 1
 endfunction
 
 function! s:section_end_line(name) abort
@@ -1504,25 +1405,8 @@ function! simple_yurii_note#realtime_sync_on_text_changed() abort
 endfunction
 
 " Backward compatible name
-function! s:branch_end_line() abort
-  return s:down_end_line()
-endfunction
-
 
 " Return last line of 'back' section (before ___ or EOF), or 0
-function! s:back_end_line() abort
-  let l:back = s:find_section_line('back')
-  if l:back <= 0
-    return 0
-  endif
-  for l:i in range(l:back + 1, line('$'))
-    if getline(l:i) =~# '^_\{3,}\s*$'
-      return l:i - 1
-    endif
-  endfor
-  return line('$')
-endfunction
-
 function! s:in_back_section(lnum) abort
   let l:back = s:find_section_line('back')
   if l:back <= 0
@@ -1919,17 +1803,6 @@ function! s:space_collect(lines, base_dir) abort
 endfunction
 
 " グループを区切り行付きの平坦な一覧にする（区切りは {sep:1, title:...}）
-function! s:space_flatten(groups) abort
-  let l:items = []
-  for [l:key, l:title] in [['body', '文中'], ['up', 'こっちにとって'], ['down', 'そっちにとって']]
-    let l:g = get(a:groups, l:key, [])
-    if empty(l:g) | continue | endif
-    call add(l:items, {'sep': 1, 'title': l:title})
-    call extend(l:items, l:g)
-  endfor
-  return l:items
-endfunction
-
 " ---------------------------------------------------------------------------
 " <Space> ナビゲータ
 "   スコープ  local（今のノートのリンク） / global（全ノート検索）
@@ -3467,14 +3340,6 @@ function! simple_yurii_note#rename_down_links_to_yaml_title(line1, line2, range)
   echo 'YAML title link text updated ' . l:changed . ' line(s)'
 endfunction
 
-function! s:insert_link_below_cursor(link) abort
-  if empty(a:link)
-    return 0
-  endif
-  call append(line('.'), a:link)
-  return 1
-endfunction
-
 function! s:link_already_present_in_branch(link) abort
   let l:down = s:find_section_line('down')
   if l:down <= 0
@@ -4404,102 +4269,6 @@ endfunction
 " a:below … 0 = 現ノートの こっちにとって 側 / 1 = そっちにとって 側
 " a:attr  … 空でなければ新ノートを `attribute: {a:attr}` で作る（グループ / 小グループ 等）
 " a:1(可変) … 関係名（省略時は数字ピッカー）
-function! s:v2_new_related(below, attr, ...) abort
-  if s:pkm_format() !=# 'v2'
-    echo 'simple_yurii_note: v2 専用（g:simple_yurii_note_format = ''v2''）' | return
-  endif
-  let l:cur = expand('%:p')
-  if empty(l:cur)
-    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE
-    return
-  endif
-  " 現ノートが属性ノート（グループ / 小グループ）なら、関係ピッカーは
-  " 「ノート」の代わりに「索引」を出す変種を使う（§2）。
-  let l:cur_attr = s:v2_buf_attr()
-  if a:0 > 0 && a:1 !=# ''
-    let l:rel = a:1
-    " a:2 で write を明示できる（zw が事前にピッカーで選んだ結果を渡す用）。
-    " 省略時は 1（nn 等、固定関係を渡すだけの呼び出しに合わせる）。
-    let l:write = a:0 > 1 ? a:2 : 1
-  else
-    let l:pick = s:v2_pick_relation2(!empty(l:cur_attr))
-    if empty(l:pick) | echo 'simple_yurii_note: キャンセル' | return | endif
-    let l:rel   = l:pick.rel
-    let l:write = l:pick.write
-  endif
-  " 関係ごとの向きの制約（関連=対称）。属性ノート（グループ / 小グループ）は
-  " zw が c/p の選択どおりの a:below を渡してくるので、ここでは上書きしない
-  " （上書きすると c/p の意味が反転する）。
-  let l:side = !empty(a:attr) ? -1 : s:v2_relation_side(l:rel)
-  let l:below = l:side >= 0 ? l:side : a:below
-
-  " 現ノート（＝新ノートの相手）の情報
-  let l:cur_name  = expand('%:t')
-  let l:cur_title = simple_yurii_note#current_title()
-  if l:cur_title ==# '' | let l:cur_title = fnamemodify(l:cur, ':t:r') | endif
-  " 現ノートが属性ノートなら、新ノート側のラベルを上書きする。
-  " below=1（nc: backlink は新ノートの こっちにとって）: 相手（現ノート）が
-  " グループ / 小グループ どちらの属性でも、値に関わらず常に グループ。
-  " below=0（np: backlink は新ノートの そっちにとって）: 現ノート自身が
-  " グループ の場合だけ上書き（サブ容器）。小グループは上書きしない。
-  " 属性による強制が無く、かつ自由入力の言葉を選んだ場合、相手側にも書くかは
-  " ピッカーの 5/6（入力枠が「書く」/「書かない」の 2 つに分かれている）で
-  " 決まる（l:write。確認ダイアログは出さない）。ピッカーの選択肢（補足/資料
-  " 等）は常に括弧付きで書く。書かない場合は新ノートへは何も書かず（sync が
-  " 既定の『ノート』を生成する）、代わりに現ノート側を `;` 終端で書く
-  " （sync の自動ミラー対象外にするため。ca/at と同じ規約。§4）。
-  let l:forced_group = a:below ? !empty(l:cur_attr) : (l:cur_attr ==# 'group')
-  let l:own_write_rel = l:rel
-  if l:forced_group
-    let l:back_rel = 'group'
-  elseif s:v2_is_custom_relation(l:rel) && !s:v2_is_menu_relation(l:rel)
-    if l:write
-      let l:back_rel = '(' . l:rel . ')'
-    else
-      let l:back_rel = ''
-      let l:own_write_rel = l:rel . ';'
-    endif
-  elseif s:v2_is_custom_relation(l:rel)
-    let l:back_rel = '(' . l:rel . ')'
-  else
-    let l:back_rel = l:rel
-  endif
-
-  let l:dir = expand('%:p:h')
-  let l:ts  = simple_yurii_note#timestamp_filename()
-  let l:file = s:join_path(l:dir, l:ts . '.md')
-
-  let l:save_ai = &autoindent | let l:save_si = &smartindent
-  setlocal noautoindent nosmartindent
-  let l:ok = s:v2_insert_link(l:own_write_rel, '[' . l:ts . '](' . l:ts . '.md)', l:below)
-  let &autoindent = l:save_ai | let &smartindent = l:save_si
-  if !l:ok
-    return  " 現ノートが v2 形式でない（見張りなし）
-  endif
-
-  " 新ノートを組み立てる。相手へのリンクを先に入れておく（sync が確認するだけ）。
-  " zc: 相手は新ノートの こっちにとって 側 / zp: そっちにとって 側。
-  " 常にブロック形（『ラベル:』の次行にリンク）。back_rel が空（書かない
-  " を選んだ）なら新ノートには何も書かず、sync が既定の『ノート』を生成する。
-  let l:backlink = empty(l:back_rel) ? [] :
-        \ [l:back_rel . ':', '[' . l:cur_title . '](' . l:cur_name . ')']
-  let l:fm = ['---', 'time: ' . simple_yurii_note#timestamp_yaml(), 'title: ' . l:ts]
-  if !empty(a:attr) | call add(l:fm, 'attribute: ' . a:attr) | endif
-  call add(l:fm, '---')
-  let l:up   = a:below ? l:backlink : []
-  let l:down = a:below ? [] : l:backlink
-  let l:lines = l:fm + ['', '# ' . l:ts, '', '', '', s:v2_up_mark]
-        \ + l:up + [s:v2_down_mark] + l:down
-  call writefile(l:lines, l:file)
-  silent noautocmd write
-  call s:run_update_one_for(l:cur)
-  execute 'edit ' . fnameescape(l:file)
-  " 本文入力位置（H1 の 2 行下）へ
-  let l:h1 = search('^#\s', 'nw')
-  if l:h1 > 0 | call cursor(l:h1 + 2, 1) | endif
-  startinsert
-endfunction
-
 " 現在バッファの attribute 値（グループ / 小グループ 等）。無ければ空文字
 " （旧名 カテゴリー / キーワード は グループ / 小グループ へ読み替えて返す）
 function! s:v2_buf_attr() abort
@@ -4848,14 +4617,6 @@ function! simple_yurii_note#v2_migrate(...) abort
   endif
   echo system(join(map(copy(l:args), 'shellescape(v:val)'), ' '))
   silent! edit
-endfunction
-
-function! s:v2_link_dispatch() abort
-  if s:pkm_format() ==# 'v2'
-    call simple_yurii_note#v2_add_link()
-    return 1
-  endif
-  return 0
 endfunction
 
 
@@ -5820,40 +5581,6 @@ function! s:visual_select_mode(prefix) abort
 endfunction
 
 " nf用: prefix入力 → o/b/h選択（Enter=ChildLast）
-
-function! s:new_k_note_with_title() abort
-  let l:title = input('title: ')
-  if empty(l:title)
-    echo 'Cancelled'
-    return
-  endif
-
-  let l:fname = simple_yurii_note#timestamp_filename() . '.md'
-  let l:dir   = expand('%:p:h')
-  let l:file  = l:dir . s:sep() . l:fname
-  let l:link  = simple_yurii_note#make_link(l:fname, l:title)
-
-  let l:ins = s:structural_link_append_line()
-  if l:ins <= 0
-    echoerr 'simple_yurii_note: Child: section not found'
-    return
-  endif
-  let l:save_ai = &autoindent
-  let l:save_si = &smartindent
-  setlocal noautoindent nosmartindent
-  call append(l:ins, l:link)
-  let &autoindent = l:save_ai
-  let &smartindent = l:save_si
-
-  let l:content = s:k_note_template(l:title)
-  call writefile(l:content, l:file)
-
-  silent noautocmd write
-  call s:run_update_one_for(expand('%:p'))
-
-  call cursor(l:ins + 1, 1)
-  redraw | echon 'Created: ' . l:fname
-endfunction
 
 function! simple_yurii_note#new_quick_no_title() abort
   echo 'prefix (a-z): '

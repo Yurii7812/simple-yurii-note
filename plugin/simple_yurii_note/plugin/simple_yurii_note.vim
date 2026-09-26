@@ -101,7 +101,7 @@ if !exists('g:simple_yurii_note_format')
 endif
 if !exists('g:simple_yurii_note_python')
   if g:simple_yurii_note_format ==# 'v1'
-    let g:simple_yurii_note_python = s:plugin_root . '/python/simple_yurii_note_sync.py'
+    let g:simple_yurii_note_python = s:plugin_root . '/legacy/simple_yurii_note_sync.py'
   else
     let g:simple_yurii_note_python = s:plugin_root . '/python/note_format_v2.py'
   endif

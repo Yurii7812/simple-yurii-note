@@ -1,5 +1,7 @@
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "legacy"))
 from simple_yurii_note_sync import update_one
 
 

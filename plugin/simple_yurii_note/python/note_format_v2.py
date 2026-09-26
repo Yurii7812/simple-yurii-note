@@ -769,6 +769,12 @@ def _tracked_disp(target_id: str, written: str | None, now_title: str,
     return written
 
 
+# =============================================================================
+# 【旧エンジン】 sync_vault 〜（通常は読まない）
+#   これは旧 v2 エンジン。`update` / `update_one` / `new` / `retitle_links` は
+#   下の simple_sync() を呼ぶ。sync_vault() を呼ぶのは migrate だけ。
+#   テストの sync 呼び出しも sync_vault（旧）を叩いている点に注意。
+# =============================================================================
 def sync_vault(root) -> int:
     """vault 全体を 1 パスで整合させる。見張りコメントを持つノートだけを書き換える。"""
     root = Path(root).resolve()
@@ -1233,6 +1239,11 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
     return "\n".join(lines) + "\n"
 
 
+# =============================================================================
+# 【現役エンジン】 simple_sync 〜
+#   CLI の update / update_one / new / retitle_links が呼ぶのはこちら。
+#   ノートを実際に書き換えるのはこの経路。
+# =============================================================================
 def simple_sync(root) -> int:
     root = Path(root).resolve()
     notes: dict[Path, dict] = {p.resolve(): _simple_parse(p) for p in _iter_md(root)}
