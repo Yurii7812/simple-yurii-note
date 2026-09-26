@@ -1141,6 +1141,12 @@ _SIMPLE_INLINE_LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _SIMPLE_LINK_LINE_RE = re.compile(r"^\s*(\[[^\]]*\]\([^)]+\))\s*(?:—\s*\S+)?\s*$")
 
 
+def _link_target(link_line: str) -> str:
+    """リンク行からターゲットを取り出す。"""
+    m = _SIMPLE_INLINE_LINK.search(link_line)
+    return m.group(2).split("#", 1)[0].strip() if m else ""
+
+
 def _links_from(lines: list[str]) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for ln in lines:
@@ -1273,13 +1279,28 @@ def simple_sync(root) -> int:
             rp = res(tg, p.parent)
             if rp is not None:
                 parent_set.add(rp)
-        # index.md 側のリンク = 親。Parent に既に Index が書かれていれば
-        # 尊重して触らない。
+        # index.md 側のリンク = 親。
+        #   - Index の本文にこのノートがある  → Parent 先頭に [Index] を置く
+        #   - 無いのに [Index] が Parent に残っている → 外す（放置させない）
+        # Index との対応は sync が管理する（残骸を掃除する）。
         idx = index_of.get(p)
         if idx is not None and idx not in parent_set:
             parent_set.add(idx)
             rel = _rel(p.parent, idx)
             parent_lines.insert(0, f"[{titles[idx]}]({rel})")
+        elif idx is None:
+            drop: set[Path] = set()
+            keep: list[str] = []
+            for ln in parent_lines:
+                tgt = _link_target(ln)
+                rp = res(tgt, p.parent) if tgt else None
+                if rp is not None and rp.name == "index.md":
+                    drop.add(rp)
+                else:
+                    keep.append(ln)
+            if drop:
+                parent_lines = keep
+                parent_set -= drop
         # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分。
         # 既存の並びを保ち、新しく増えた分は末尾に追加する。
         desired: list[Path] = []

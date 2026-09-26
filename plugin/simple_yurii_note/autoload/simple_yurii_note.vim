@@ -3239,12 +3239,48 @@ function! s:resolve_link_for_navigation(target, ...) abort
   return l:direct
 endfunction
 
+" クリップボードを読む。Wayland 環境では Vim の +clipboard が効かず @+ が空に
+" なることが多いので、外部コマンド（wl-paste / klipper / xclip / xsel）も試す。
 function! s:clipboard_text() abort
-  let l:cb = @+
-  if empty(l:cb)
-    let l:cb = @"
+  for l:reg in ['+', '*']
+    let l:cb = getreg(l:reg)
+    if !empty(trim(l:cb))
+      return trim(l:cb)
+    endif
+  endfor
+  let l:cb = s:clipboard_text_external()
+  if !empty(l:cb)
+    return l:cb
   endif
-  return trim(l:cb)
+  " 無名レジスタは空だと E353 になるので getreg で読む
+  return trim(getreg('"'))
+endfunction
+
+" 外部コマンド経由でクリップボードを読む（Wayland → X11 の順）
+function! s:clipboard_text_external() abort
+  let l:cmds = [
+        \ ['wl-paste', '--no-newline'],
+        \ ['wl-paste', '--primary', '--no-newline'],
+        \ ['qdbus6', 'org.kde.klipper', '/klipper', 'getClipboard'],
+        \ ['qclip', '-o'],
+        \ ['xclip', '-selection', 'clipboard', '-o'],
+        \ ['xsel', '-b'],
+        \ ]
+  for l:cmd in l:cmds
+    if !executable(l:cmd[0])
+      continue
+    endif
+    let l:out = ''
+    try
+      let l:out = trim(system('timeout 2 ' . join(map(copy(l:cmd), 'shellescape(v:val)'), ' ')))
+    catch
+      let l:out = ''
+    endtry
+    if !empty(l:out)
+      return l:out
+    endif
+  endfor
+  return ''
 endfunction
 
 function! s:extract_markdown_link(raw) abort
@@ -6106,6 +6142,83 @@ function! simple_yurii_note#add_from_clipboard(...) abort
   echo 'Added ' . len(l:links) . ' link(s)'
 endfunction
 
+" リンクを「どこに置くか」を 1 文字で選ばせる。zn と同じ約束。
+"   h     … カーソル行の直下（本文）
+"   Enter … 本文の最後（### Parent の直前）
+"   p     … ### Parent の末尾
+"   o     … 置かない（リンクのみ作る。現状は Cancel と同じ扱いにしない）
+" Esc/q は「何も置かない」で終わる。
+function! s:insert_links_at_position(links) abort
+  let l:links = a:links
+  if empty(l:links)
+    return 0
+  endif
+  echo 'h=カーソル直下 / Enter=本文の最後 / p=Parent末尾 / o=置かない  (Esc 取消)'
+  let l:ch = nr2char(getchar())
+  redraw
+  let l:num = char2nr(l:ch)
+  if l:ch ==? 'q' || l:num == 27 || l:num == 3
+    echo 'simple_yurii_note: キャンセル（何も追加しない）'
+    return 0
+  endif
+  if l:ch ==? 'o'
+    echo 'simple_yurii_note: 何も追加しない'
+    return 0
+  endif
+  if l:ch ==? 'h'
+    let l:ins = line('.')
+    for l:lk in reverse(copy(l:links))
+      if s:buffer_has_link(l:lk)
+        continue
+      endif
+      call append(l:ins, l:lk)
+      let l:ins += 1
+    endfor
+    return 1
+  endif
+  if l:ch ==? 'p'
+    let l:added = 0
+    for l:lk in l:links
+      if s:append_link_to_buffer_section('up', l:lk)
+        let l:added += 1
+      endif
+    endfor
+    if l:added
+      return 1
+    endif
+  endif
+
+  " 既定（Enter / それ以外）: グループノートなら `### Parent` へ、
+  " それ以外は本文の最後（= ### Parent の直前）へ
+  if s:buf_is_group()
+    let l:added = 0
+    for l:lk in l:links
+      if s:append_link_to_buffer_section('up', l:lk)
+        let l:added += 1
+      endif
+    endfor
+    if l:added
+      return 1
+    endif
+    return 0
+  endif
+  let l:added = 0
+  for l:lk in l:links
+    if s:insert_link_before_up_note(l:lk)
+      let l:added += 1
+    endif
+  endfor
+  return l:added > 0
+endfunction
+
+" 現ノートがグループ（attribute: group / index.md）かどうか
+function! s:buf_is_group() abort
+  if s:is_current_index_buffer()
+    return 1
+  endif
+  return s:v2_buf_attr() ==# 'group'
+endfunction
+
 function! simple_yurii_note#paste_clipboard_link_here() abort
   let l:clipboard = s:clipboard_text()
   if empty(l:clipboard)
@@ -6239,22 +6352,16 @@ endfunction
 " za: ca と同じ そっちにとって 側だが、関係は常に既定の「ノート」固定
 " （ピッカーも「相手にも書くか」の質問も出さない）。
 function! simple_yurii_note#add_clipboard_before_up_note() abort
-  " 現ノートの `### Parent` の直前（本文末尾）へ入れる。
+  " 今のノートにクリップボードのリンクを追加する（置き場所は位置キーで選ぶ）。
   " BackLink 側は同期が自動で管理するので触らない。
   let l:links = s:clipboard_links()
   if empty(l:links)
     echo 'Error: clipboard has no valid link'
     return
   endif
-  let l:added = 0
-  for l:link in l:links
-    if s:insert_link_before_up_note(l:link)
-      let l:added += 1
-    endif
-  endfor
+  call s:insert_links_at_position(l:links)
   call s:realtime_sync_apply()
   silent write
-  echo 'Parent 直前 added ' . l:added . ' link(s)'
 endfunction
 
 " クリップボードから有効なリンク行を抜く
