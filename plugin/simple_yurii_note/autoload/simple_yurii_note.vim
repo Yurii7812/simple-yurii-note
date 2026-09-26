@@ -6151,11 +6151,11 @@ function! s:insert_links_at_position(links) abort
   if empty(l:links)
     return 0
   endif
-  echo 'h=カーソル直下 / Enter=本文の最後  (Esc 取消)'
+  echo 'h=カーソル直下 / Enter=本文の最後  (Esc で取り止め)'
   let l:ch = nr2char(getchar())
   redraw
   let l:num = char2nr(l:ch)
-  if l:ch ==? 'q' || l:ch ==? 'o' || l:num == 27 || l:num == 3
+  if l:ch ==? 'q' || l:num == 27 || l:num == 3
     echo 'simple_yurii_note: 何も追加しない'
     return 0
   endif
@@ -6313,14 +6313,14 @@ endfunction
 " za: ca と同じ そっちにとって 側だが、関係は常に既定の「ノート」固定
 " （ピッカーも「相手にも書くか」の質問も出さない）。
 function! simple_yurii_note#add_clipboard_before_up_note() abort
-  " 今のノートにクリップボードのリンクを追加する（置き場所は位置キーで選ぶ）。
-  " BackLink 側は同期が自動で管理するので触らない。
-  let l:links = s:clipboard_links()
-  if empty(l:links)
-    echo 'Error: clipboard has no valid link'
+  " za: 今のノートに（カーソル下のリンク or クリップボードの）リンクを 1 本足す。
+  "     置き場所は h（カーソル直下）/ Enter（本文の最後）。相手側の Parent は書かない。
+  let l:link = s:pick_one_link()
+  if empty(l:link)
+    echo 'Error: リンクが見つかりません（カーソル下 or クリップボード）'
     return
   endif
-  call s:insert_links_at_position(l:links)
+  call s:insert_links_at_position([l:link])
   call s:realtime_sync_apply()
   silent write
 endfunction
@@ -6333,24 +6333,20 @@ function! s:buf_is_group() abort
   return s:v2_buf_attr() ==# 'group'
 endfunction
 
-" クリップボードから有効なリンク行を抜く
-function! s:clipboard_links() abort
-  let l:out = []
+" 追加するリンクを 1 行で取り出す。優先は「カーソル下のリンク」、
+" 無ければクリップボード。za / zp 共通。
+function! s:pick_one_link() abort
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if !empty(l:lk) && !empty(l:lk.target) && l:lk.target =~? '\.md\(#.*\)\?$'
+    return s:link_from_clipboard_raw(l:lk.target)
+  endif
   for l:raw in split(s:clipboard_text(), "\n")
     let l:target = s:extract_target(l:raw)
-    if empty(l:target)
-      continue
-    endif
-    if !filereadable(simple_yurii_note#resolve_link(l:target))
-      echo 'Warning: not found: ' . l:target
-      continue
-    endif
-    let l:link = s:link_from_clipboard_raw(l:raw)
-    if !empty(l:link)
-      call add(l:out, l:link)
+    if !empty(l:target) && filereadable(simple_yurii_note#resolve_link(l:target))
+      return s:link_from_clipboard_raw(l:raw)
     endif
   endfor
-  return l:out
+  return ''
 endfunction
 
 " \ca: ca と同じ そっちにとって 側だが、括弧が付く側が逆。今開いているノート
@@ -6367,36 +6363,36 @@ endfunction
 "     さらに「今のノート」側のリンクを相手ノートの ### Parent にも書く。
 "     今のノートがグループの場合は本文リンクだけで十分（sync が親側を作る）。
 function! simple_yurii_note#add_clipboard_as_child_with_parent() abort
+  " zp: za と同じことをしたうえで、今開いてるノートを「相手の ### Parent」에도書く。
+  "     今のノートがグループなら本文リンクだけで足りるので親は sync に任せる。
   let l:cur = expand('%:p')
   if empty(l:cur)
     echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
     return
   endif
-  let l:links = s:clipboard_links()
-  if empty(l:links)
-    echo 'Error: clipboard has no valid link'
+  let l:link = s:pick_one_link()
+  if empty(l:link)
+    echo 'Error: リンクが見つかりません（カーソル下 or クリップボード）'
     return
   endif
-  call s:insert_links_at_position(l:links)
+  call s:insert_links_at_position([l:link])
+  let l:target = simple_yurii_note#resolve_link(s:extract_target(l:link))
+  if empty(l:target) || !filereadable(l:target)
+    call s:realtime_sync_apply()
+    silent write
+    echo 'リンクのみ追加（相手ノートが見つからず Parent には書けません）'
+    return
+  endif
   if s:buf_is_group()
     call s:realtime_sync_apply()
     silent write
     echo 'グループ: 本文リンクを追加（親は sync が書く）'
     return
   endif
-  let l:cur_title = simple_yurii_note#current_title()
-  let l:added = 0
-  for l:lk in l:links
-    let l:tgt = simple_yurii_note#resolve_link(s:extract_target(l:lk))
-    if empty(l:tgt) || !filereadable(l:tgt)
-      continue
-    endif
-    call s:simple_add_parent(l:tgt, l:cur, l:cur_title)
-    let l:added += 1
-  endfor
+  call s:simple_add_parent(l:target, l:cur, simple_yurii_note#current_title())
   call s:realtime_sync_apply()
   silent write
-  echo 'Child added, Parent added ' . l:added
+  echo 'リンク追加 + 親に登録 → ' . fnamemodify(l:target, ':t')
 endfunction
 
 function! simple_yurii_note#add_clipboard_before_up() abort
