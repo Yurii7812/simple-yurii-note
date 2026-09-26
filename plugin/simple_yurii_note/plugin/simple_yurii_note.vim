@@ -300,8 +300,10 @@ nnoremap <nowait> <silent> ca  <Cmd>call simple_yurii_note#add_clipboard_before_
 " \ca: ca と同じ向きだが括弧が逆。今開いているノート側が (ラベル)、相手側に生のラベルを書く
 nnoremap <nowait> <silent> \ca  <Cmd>call simple_yurii_note#add_clipboard_before_up_reverse()<CR>
 nnoremap <nowait> <silent> tt  <Cmd>call simple_yurii_note#add_clipboard_to_top()<CR>
-" zt: 今のノートを相手の ### Parent に追加（カーソル下のリンク or クリップボード）
-nnoremap <nowait> <silent> zt  <Cmd>call simple_yurii_note#add_to_parent()<CR>
+" zt: タイトル変更（空欄から開始）
+nnoremap <nowait> <silent> zt  <Cmd>call simple_yurii_note#rename_title_with_default('')<CR>
+" zp: クリップボードの .md を本文に追加（今のノートが相手の親になる）
+nnoremap <nowait> <silent> zp  <Cmd>call simple_yurii_note#add_clipboard()<CR>
 " zT: 現在タイトルを残して編集
 nnoremap <nowait> <silent> zT  <Cmd>call simple_yurii_note#rename_title('')<CR>
 " zl: リンク表示名変更（空欄から開始）

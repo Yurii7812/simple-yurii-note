@@ -4662,10 +4662,47 @@ endfunction
 
 " simple: yes/no を聞く（既定 yes）
 function! s:ask_yes_no(msg) abort
-  return confirm(a:msg, "&はい\n&いいえ", 1) == 1
+  " ポップアップは出さず、コマンドラインで y/n を 1 打だけ聞く
+  echo a:msg . ' (y/n)'
+  let l:c = nr2char(getchar())
+  redraw
+  return l:c ==? 'y'
 endfunction
 
-" zt: 今のノートを、相手（カーソル下のリンク or クリップボード）の ### Parent に追加
+" zp: クリップボードの .md を今のノートの本文に追加（＝今のノートが相手の親になる）
+function! simple_yurii_note#add_clipboard() abort
+  let l:cur = expand('%:p')
+  if empty(l:cur)
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
+    return
+  endif
+  let l:target = ''
+  for l:t in s:extract_targets_from_clipboard(s:clipboard_text())
+    if l:t =~? '\.md$'
+      let l:target = l:t
+      break
+    endif
+  endfor
+  if empty(l:target)
+    let l:target = trim(input('追加するノート (.md): ', '', 'file'))
+  endif
+  if empty(l:target)
+    echo 'キャンセル'
+    return
+  endif
+  let l:tf = simple_yurii_note#resolve_link(l:target)
+  if !filereadable(l:tf)
+    echohl WarningMsg | echo '見つかりません: ' . l:tf | echohl None
+    return
+  endif
+  let l:link = s:make_link_from_dir(l:tf, s:v2_title_for(l:target), expand('%:p:h'))
+  call s:simple_body_append(l:link)
+  silent! write
+  call s:write_current_and_sync_now()
+  echo 'simple_yurii_note: 追加 → ' . fnamemodify(l:tf, ':t')
+endfunction
+
+" 旧: 今のノートを、相手（カーソル下のリンク or クリップボード）の ### Parent に追加
 function! simple_yurii_note#add_to_parent() abort
   let l:cur = expand('%:p')
   if empty(l:cur)
@@ -6411,6 +6448,14 @@ function! simple_yurii_note#linkify_selection_new_note() abort range
 
   let l:link = '[' . l:text . '](' . l:target . ')'
   call s:replace_visual_selection_with_link(l:link, l:is_linewise, l:sline, l:eline, l:scol, l:ecol, l:lines)
+  " y/n を押したらそのまま新しいノートを開く
+  if filereadable(l:new_file)
+    silent! write
+    call simple_yurii_note#push_history()
+    execute 'edit ' . fnameescape(l:new_file)
+    let l:h1 = search('^#\s', 'nw')
+    if l:h1 > 0 | call cursor(l:h1 + 2, 1) | endif
+  endif
 endfunction
 
 " Backward compatibility: :LinkifySelection から呼ばれる既存関数名
