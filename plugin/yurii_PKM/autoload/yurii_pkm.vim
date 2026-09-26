@@ -4605,6 +4605,47 @@ endfunction
 "   作成時にリレーション（ノート: など）は一切書かない。置くのは素のリンク 1 行で、
 "   あとから手で グループ / きっかけ: などを書く。`:` / `;` は sync がそのまま扱う。
 "   位置キー: h=カーソル直下 / Enter=Child末尾 / o=リンク無し(孤立) / p=Parent末尾。
+" simple: 本文の最後（### Parent の直前）へ 1 行差し込む位置
+function! s:simple_body_insert_line() abort
+  let l:up = 0
+  for l:i in range(1, line('$'))
+    if trim(getline(l:i)) ==# s:v2_up_mark
+      let l:up = l:i | break
+    endif
+  endfor
+  if l:up == 0
+    return line('$')
+  endif
+  let l:pos = l:up - 1
+  while l:pos > 1 && trim(getline(l:pos)) ==# ''
+    let l:pos -= 1
+  endwhile
+  return l:pos
+endfunction
+
+" simple: file の ### Parent に parent_path へのリンクを 1 本足す
+function! s:simple_add_parent(file, parent_path, parent_title) abort
+  let l:lines = readfile(a:file)
+  let l:link = s:make_link_from_dir(a:parent_path, a:parent_title, fnamemodify(a:file, ':h'))
+  let l:hdr = -1
+  for l:i in range(0, len(l:lines) - 1)
+    if trim(l:lines[l:i]) ==# s:v2_up_mark
+      let l:hdr = l:i | break
+    endif
+  endfor
+  if l:hdr < 0
+    call add(l:lines, s:v2_up_mark)
+    call add(l:lines, l:link)
+  else
+    for l:i in range(l:hdr + 1, len(l:lines) - 1)
+      if trim(l:lines[l:i]) ==# s:v2_down_mark | break | endif
+      if l:lines[l:i] ==# l:link | return | endif
+    endfor
+    call insert(l:lines, l:link, l:hdr + 1)
+  endif
+  call writefile(l:lines, a:file)
+endfunction
+
 function! s:v2_new_interactive(attr) abort
   if s:pkm_format() !=# 'v2'
     echo 'yurii_PKM: v2 専用' | return
@@ -4613,11 +4654,12 @@ function! s:v2_new_interactive(attr) abort
   if empty(l:cur)
     echohl WarningMsg | echo 'yurii_PKM: 名前付きバッファで実行して' | echohl NONE | return
   endif
+  let l:cur_title = yurii_pkm#current_title()
   let l:dir = expand('%:p:h')
   let l:ts  = yurii_pkm#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
 
-  echo 'h=カーソル直下 / o=リンク無し(孤立) / p=Parent / Enter=Child末尾  (Esc/q キャンセル)'
+  echo 'h=カーソル直下 / Enter=本文の最後 / o=リンク無し(孤立)  (Esc/q キャンセル)'
   let l:ch = nr2char(getchar())
   redraw
   if l:ch ==? 'q' || char2nr(l:ch) == 27 || char2nr(l:ch) == 3
@@ -4634,20 +4676,16 @@ function! s:v2_new_interactive(attr) abort
   if l:ch ==? 'h'
     call append(line('.'), l:link)      " カーソル直下（本文）
     let l:added = 1
-  elseif l:ch ==? 'p'
-    let [l:up_m, l:dn_m] = s:v2_boundaries()
-    if l:up_m > 0
-      call append(l:dn_m - 1, l:link)   " Parent の末尾（## Child の直前）
-      let l:added = 1
-    endif
-  elseif l:ch ==# "\<CR>" || l:ch ==# "\<NL>"
-    call append(line('$'), l:link)      " Child の最後尾
+  elseif l:ch ==? 'p' || l:ch ==# "\<CR>" || l:ch ==# "\<NL>"
+    call append(s:simple_body_insert_line(), l:link)  " 本文の最後
     let l:added = 1
   endif
   " o … リンク無し（孤立）
   let &autoindent = l:save_ai | let &smartindent = l:save_si
   silent noautocmd write
   if l:added
+    " 新ノートの ### Parent に今のノートを書く（本文リンクは BackLink になるため）
+    call s:simple_add_parent(l:file, l:cur, l:cur_title)
     call s:run_update_one_for(l:cur)
   endif
   call yurii_pkm#push_history()
