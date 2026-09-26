@@ -4605,8 +4605,8 @@ endfunction
 "   作成時にリレーション（ノート: など）は一切書かない。置くのは素のリンク 1 行で、
 "   あとから手で グループ / きっかけ: などを書く。`:` / `;` は sync がそのまま扱う。
 "   位置キー: h=カーソル直下 / Enter=Child末尾 / o=リンク無し(孤立) / p=Parent末尾。
-" simple: 本文の最後（### Parent の直前）へ 1 行差し込む位置
-function! s:simple_body_insert_line() abort
+" simple: 本文の最後（### Parent の手前）へ link を、空行 1 つを挟んで置く
+function! s:simple_body_append(link) abort
   let l:up = 0
   for l:i in range(1, line('$'))
     if trim(getline(l:i)) ==# s:v2_up_mark
@@ -4614,13 +4614,20 @@ function! s:simple_body_insert_line() abort
     endif
   endfor
   if l:up == 0
-    return line('$')
+    call append(line('$'), a:link)
+    return
   endif
-  let l:pos = l:up - 1
-  while l:pos > 1 && trim(getline(l:pos)) ==# ''
-    let l:pos -= 1
+  " ### Parent の直前にある空行を全部消す
+  let l:del = l:up
+  while l:del > 1 && trim(getline(l:del - 1)) ==# ''
+    let l:del -= 1
   endwhile
-  return l:pos
+  if l:del < l:up
+    call deletebufline(bufnr('%'), l:del, l:up - 1)
+    let l:up = l:del
+  endif
+  " 本文末尾に [link, 空行] を挿入 → 空行 1 つをあけて ### Parent
+  call append(l:up - 1, [a:link, ''])
 endfunction
 
 " simple: file の ### Parent に parent_path へのリンクを 1 本足す
@@ -4644,6 +4651,11 @@ function! s:simple_add_parent(file, parent_path, parent_title) abort
     call insert(l:lines, l:link, l:hdr + 1)
   endif
   call writefile(l:lines, a:file)
+endfunction
+
+" simple: yes/no を聞く（既定 yes）
+function! s:ask_yes_no(msg) abort
+  return confirm(a:msg, "&はい\n&いいえ", 1) == 1
 endfunction
 
 function! s:v2_new_interactive(attr) abort
@@ -4677,7 +4689,7 @@ function! s:v2_new_interactive(attr) abort
     call append(line('.'), l:link)      " カーソル直下（本文）
     let l:added = 1
   elseif l:ch ==? 'p' || l:ch ==# "\<CR>" || l:ch ==# "\<NL>"
-    call append(s:simple_body_insert_line(), l:link)  " 本文の最後
+    call s:simple_body_append(l:link)  " 本文の最後（### Parent の手前に空行1つ）
     let l:added = 1
   endif
   " o … リンク無し（孤立）
@@ -6333,44 +6345,23 @@ function! yurii_pkm#linkify_selection_new_note() abort range
   let l:parent_link_lines = s:parent_link_lines(l:parent_file, l:parent_title, expand('%:p:h'))
 
   if !filereadable(l:new_file)
-    if s:pkm_format() ==# 'v2'
-      let l:new_content = [
-            \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
-            \ 'title: ' . l:text,
-            \ '---',
-            \ '',
-            \ '# ' . l:text,
-            \ '',
-            \ '',
-            \ '',
-            \ s:v2_up_mark,
-            \ ]
-      if !empty(l:parent_link_lines)
-        call add(l:new_content, 'ノート:')
-        call extend(l:new_content, l:parent_link_lines)
-      endif
-      call add(l:new_content, s:v2_down_mark)
-    else
-      let l:new_content = [
-            \ '---',
-            \ 'time: ' . yurii_pkm#timestamp_yaml(),
-            \ 'title: ' . l:text,
-            \ '---',
-            \ '',
-            \ '# ' . l:text,
-            \ '',
-            \ '',
-            \ '',
-            \ s:canonical_section_title('up'),
-            \ ] + l:parent_link_lines + [
-            \ s:canonical_section_title('down'),
-            \ s:canonical_section_title('backlink'),
-            \ '[Index](index.md)'
-            \ ]
-    endif
+    let l:new_content = [
+          \ '---',
+          \ 'time: ' . yurii_pkm#timestamp_yaml(),
+          \ 'title: ' . l:text,
+          \ '---',
+          \ '',
+          \ '# ' . l:text,
+          \ '',
+          \ '',
+          \ s:v2_up_mark,
+          \ s:v2_down_mark,
+          \ ]
     call writefile(l:new_content, l:new_file)
-
+    " simple: 新しいノートの親に「元のノート」を追加するか聞く
+    if !empty(l:parent_link_lines) && s:ask_yes_no('新ノートの親に「' . l:parent_title . '」を追加する？')
+      call s:simple_add_parent(l:new_file, l:parent_file, l:parent_title)
+    endif
   endif
 
   let l:link = '[' . l:text . '](' . l:target . ')'
@@ -6460,6 +6451,13 @@ function! yurii_pkm#linkify_selection_from_clipboard() abort range
   let l:display_target = s:display_target_from_current_dir(l:target)
   let l:link = '[' . l:text . '](' . l:display_target . ')'
   call s:replace_visual_selection_with_link(l:link, l:is_linewise, l:sline, l:eline, l:scol, l:ecol, l:lines)
+  " simple: 今のノートを相手の親に追加するか聞く
+  if s:ask_yes_no('今のノートを 「' . s:v2_title_for(l:target) . '」 の親に追加する？')
+    let l:tgt_path = yurii_pkm#resolve_link(l:target)
+    if filereadable(l:tgt_path)
+      call s:simple_add_parent(l:tgt_path, expand('%:p'), yurii_pkm#current_title())
+    endif
+  endif
   call s:write_current_and_sync_now()
 endfunction
 
