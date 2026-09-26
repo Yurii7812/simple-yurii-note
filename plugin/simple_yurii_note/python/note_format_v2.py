@@ -1169,6 +1169,24 @@ def _simple_parse(path: Path) -> dict:
     return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
 
 
+def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict) -> list[str]:
+    """本文リンクの表示名を、リンク先の現在のタイトルに追従させる。
+    表示名がファイル名（自動生成）のときだけ更新し、手書き名は残す。"""
+    out: list[str] = []
+    for ln in body:
+        def repl(m, _path=path):
+            disp, tg = m.group(1), m.group(2)
+            base = tg.split("#", 1)[0].strip()
+            if not base.lower().endswith(".md"):
+                return m.group(0)
+            rp = resolver(base, _path.parent)
+            if rp is not None and rp in titles and disp == Path(base).stem:
+                return f"[{titles[rp]}]({tg})"
+            return m.group(0)
+        out.append(_SIMPLE_INLINE_LINK.sub(repl, ln))
+    return out
+
+
 def _preserve_parent(existing: list[str], path: Path, resolver, titles: dict) -> list[str]:
     """Parent は書いてあるそのまま。リンク行は表示名だけ現在のタイトルに更新し、
     行の追加・削除（＝ユーザーの編集）はしない。"""
@@ -1227,6 +1245,8 @@ def simple_sync(root) -> int:
 
     changed = 0
     for p, n in notes.items():
+        # 本文リンクの表示名をリンク先タイトルに追従
+        n["body"] = _update_body_link_names(n["body"], p, res, titles)
         # Parent は書いてあるそのまま（ユーザー管理。追加・削除しない。表示名だけ更新）
         parent_lines = _preserve_parent(n["parent"], p, res, titles)
         parent_set: set[Path] = set()
