@@ -4622,18 +4622,14 @@ function! s:simple_body_append(link) abort
     call append(line('$'), a:link)
     return
   endif
-  " ### Parent の直前にある空行を全部消す
-  let l:del = l:up
-  while l:del > 1 && trim(getline(l:del - 1)) ==# ''
-    let l:del -= 1
-  endwhile
-  if l:del < l:up
-    call deletebufline(bufnr('%'), l:del, l:up - 1)
-    let l:up = l:del
+  " ### Parent の直前（本文の最後）にリンクを挿入。
+  " 直前が本文（空行でない）なら空行1つを挟む。既存の空行（余白）はそのまま。
+  let l:prev = l:up - 1
+  if l:prev >= 1 && trim(getline(l:prev)) !=# ''
+    call append(l:prev, ['', a:link])
+  else
+    call append(l:prev, a:link)
   endif
-  " ### Parent の直前に「空行1つ + リンク」を挿入。
-  " 本文とリンクの間は空行1つ、リンクと ### Parent の間は空行なし。
-  call append(l:up - 1, ['', a:link])
 endfunction
 
 " simple: file の ### Parent に parent_path へのリンクを 1 本足す
