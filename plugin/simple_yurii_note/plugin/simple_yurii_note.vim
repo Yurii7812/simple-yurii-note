@@ -146,7 +146,6 @@ command!          YN         call simple_yurii_note#yank_name()
 command!          AT         call simple_yurii_note#at_add()
 command!          Linkify    call simple_yurii_note#linkify_filename_under_cursor()
 command!          LinkifySelection call simple_yurii_note#linkify_selection_new_note()
-command!          LinkFixedToggle call simple_yurii_note#toggle_fixed_link_text_under_cursor()
 command!          PasteLink  call simple_yurii_note#paste_clipboard_link_here()
 command! -range=0 ToggleCheckbox call simple_yurii_note#toggle_checkbox(<line1>, <line2>, <range>)
 command!          SortYomi   call simple_yurii_note#sort_yomi()
@@ -342,7 +341,6 @@ nnoremap <silent> \l        <Cmd>call simple_yurii_note#linkify_filename_under_c
 xnoremap <silent> \l        :<C-u>call simple_yurii_note#linkify_selection_new_note()<CR>
 nnoremap <nowait> <silent> mx  <Cmd>ToggleCheckbox<CR>
 xnoremap <nowait> <silent> mx  :<C-u>'<,'>ToggleCheckbox<CR>
-nnoremap <silent> \L        <Cmd>call simple_yurii_note#toggle_fixed_link_text_under_cursor()<CR>
 nnoremap <silent> \p        <Cmd>call simple_yurii_note#paste_clipboard_link_here()<CR>
 xnoremap <silent> \p        :<C-u>call simple_yurii_note#linkify_selection_from_clipboard()<CR>
 nnoremap <silent> \oe       <Cmd>OutlineEdit<CR>

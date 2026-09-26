@@ -8,6 +8,8 @@ OUT=$(mktemp)
 ERR=$(mktemp)
 trap 'rm -f "$OUT" "$ERR"' EXIT
 
+python3 "$REPO/test/vim_static_check.py"
+
 timeout 60 vim -u "$REPO/vimrc_simple-yurii-note" -es \
   -c "let g:simple_yurii_note_api_out='$OUT'" \
   -c "source $REPO/test/vim_api_check.vim" \
