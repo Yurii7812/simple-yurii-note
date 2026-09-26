@@ -1314,8 +1314,11 @@ def simple_sync(root) -> int:
         auto_parent: list[Path] = []
         desired: list[Path] = []
         dseen: set[Path] = set()
+        # 自分の本文（outgoing）にもリンクがある相手は BackLink に出さない。
+        # 本文（中央）に出ているなら、BackLink は同じリンクの繰り返しになる。
+        out_set = set(body_t.get(p, []))
         for s in incoming.get(p, []):
-            if s == p or s in dseen:
+            if s == p or s in dseen or s in out_set:
                 continue
             dseen.add(s)
             if s in group_set:
