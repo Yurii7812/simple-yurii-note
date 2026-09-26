@@ -395,7 +395,8 @@ def test_body_link_becomes_backlink() -> None:
         note(root / "20250111.md", "B")
         v2.sync_vault(root)
         up, dn = regions((root / "20250111.md").read_text(encoding="utf-8"))
-        check("バックリンク:\n[A](20250104.md)" in dn, "B の下側に バックリンク: A")
+        # 下側の見出し `### BackLink` 自体がラベルなので、内側に `バックリンク:` は付けない。
+        check("[A](20250104.md)" in dn, "B の下側に A への逆リンク")
         check("関連:" not in dn and "論点:" not in dn, "型セクションには入らない")
 
 
@@ -444,8 +445,8 @@ def test_foreign_file_untouched() -> None:
         v2.sync_vault(root)
         check(diary.read_text(encoding="utf-8") == raw, "日記ファイルはバイト単位で不変")
         _up, dn = regions((root / "20250104.md").read_text(encoding="utf-8"))
-        check("バックリンク:\n[2024-05-01](diary/2024-05-01.md)" in dn,
-              "日記からの本文リンクは PKM 側に バックリンク として出る")
+        check("[2024-05-01](diary/2024-05-01.md)" in dn,
+              "日記からの本文リンクは PKM 側の下側（BackLink）に出る")
 
 
 def test_pkm_raw_optout() -> None:
@@ -797,8 +798,8 @@ def test_down_side_order_is_sticky() -> None:
         a_path = root / "20250104.md"
         a_text = a_path.read_text(encoding="utf-8")
         a_text = a_text.replace(
-            "Child",
-            "Child\n論点:\n[後に作った方](20250199.md)\n[先に作った方](20250101.md)")
+            DOWN_MARK,
+            DOWN_MARK + "\n論点:\n[後に作った方](20250199.md)\n[先に作った方](20250101.md)")
         a_path.write_text(a_text, encoding="utf-8")
         v2.sync_vault(root)
         _u, dn = regions(a_path.read_text(encoding="utf-8"))
