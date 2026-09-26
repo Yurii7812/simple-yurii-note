@@ -4819,7 +4819,7 @@ function! s:v2_new_interactive(attr) abort
   if l:added
     " 新ノート側は必ず**本文**（中央）に「もと開いていたノート」へのリンクを残す。
     " 今のノート側で Parent に置いたか（p）本文に置いたか（h / Enter）に関係なく、
-    " 新ノートは本文 Almanax で関係が見える。`### Parent` は空のまま。
+    " 新ノートは本文で関係が見える。`### Parent` は空のまま。
     execute 'edit ' . fnameescape(l:file)
     call s:simple_body_append(s:make_link_from_dir(l:cur, l:cur_title, l:dir))
     call s:ensure_blank_before_up()
