@@ -6190,14 +6190,91 @@ function! simple_yurii_note#add_clipboard_to_branch() abort
 endfunction
 
 
+" 本文中（`### Parent` の直前の行）にリンクを足す。simple 形式では
+" 「子」は本文リンクなので、BackLink 側ではなくここに入れる。
+function! s:insert_link_before_up_note(link) abort
+  let l:up = s:find_section_line('up')
+  if l:up <= 0
+    " 見張りが無いとき（index.md など）は末尾へ
+    if s:buffer_has_link(a:link)
+      return 0
+    endif
+    call append(line('$'), a:link)
+    return 1
+  endif
+
+  if s:buffer_has_link(a:link)
+    return 0
+  endif
+
+  let l:ins = l:up - 1
+  " 本文末尾が散文のときだけ、空行を 1 つ開けてからリンクを置く
+  if l:ins >= 1 && trim(getline(l:ins)) !=# '' && trim(getline(l:ins)) !~# '\]\s*(\S\+)\s*$'
+    call append(l:ins, '')
+    let l:ins += 1
+  endif
+  call append(l:ins, a:link)
+  return 1
+endfunction
+
+" バッファ内に同じリンク（表示名または解決先一致）が無いか
+function! s:buffer_has_link(link) abort
+  let l:new_target = s:extract_target(a:link)
+  let l:new_fp = empty(l:new_target) ? '' : fnamemodify(simple_yurii_note#resolve_link(l:new_target, expand('%:p:h')), ':p')
+  for l:line in getline(1, line('$'))
+    if l:line ==# a:link
+      return 1
+    endif
+    let l:old_target = s:extract_target(l:line)
+    if !empty(l:new_fp) && !empty(l:old_target)
+      let l:old_fp = fnamemodify(simple_yurii_note#resolve_link(l:old_target, expand('%:p:h')), ':p')
+      if l:old_fp ==# l:new_fp
+        return 1
+      endif
+    endif
+  endfor
+  return 0
+endfunction
+
 " za: ca と同じ そっちにとって 側だが、関係は常に既定の「ノート」固定
 " （ピッカーも「相手にも書くか」の質問も出さない）。
 function! simple_yurii_note#add_clipboard_before_up_note() abort
-  if s:pkm_format() ==# 'v2'
-    call simple_yurii_note#v2_add_link('', 'ノート', 1)
+  " 現ノートの `### Parent` の直前（本文末尾）へ入れる。
+  " BackLink 側は同期が自動で管理するので触らない。
+  let l:links = s:clipboard_links()
+  if empty(l:links)
+    echo 'Error: clipboard has no valid link'
     return
   endif
-  call simple_yurii_note#add_clipboard_before_up()
+  let l:added = 0
+  for l:link in l:links
+    if s:insert_link_before_up_note(l:link)
+      let l:added += 1
+    endif
+  endfor
+  call s:realtime_sync_apply()
+  silent write
+  echo 'Parent 直前 added ' . l:added . ' link(s)'
+endfunction
+
+" クリップボードから有効なリンク行を抜く
+function! s:clipboard_links() abort
+  let l:out = []
+  for l:raw in split(s:clipboard_text(), "\n")
+    let l:target = s:extract_target(l:raw)
+    if empty(l:target)
+      continue
+    endif
+    if !filereadable(simple_yurii_note#resolve_link(l:target))
+      echo 'Warning: not found: ' . l:target
+      continue
+    endif
+    let l:link = s:link_from_clipboard_raw(l:raw)
+    if !empty(l:link)
+      call add(l:out, l:link)
+    endif
+  endfor
+  return l:out
 endfunction
 
 " \ca: ca と同じ そっちにとって 側だが、括弧が付く側が逆。今開いているノート
