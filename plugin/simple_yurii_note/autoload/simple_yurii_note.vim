@@ -1751,7 +1751,10 @@ endfunction
 " 本文（こっちにとって の見張りより前）のリンク。v2 ノート以外は空。
 function! s:v2_body_link_positions() abort
   let [l:up_m, l:dn_m] = s:v2_boundaries()
-  if l:up_m <= 0 | return [] | endif
+  if l:up_m <= 0
+    " 見出しが無いノート（index 等）は全行を本文扱い
+    return s:link_positions_in_range(1, line('$'))
+  endif
   return s:link_positions_in_range(1, l:up_m - 1)
 endfunction
 
@@ -1884,8 +1887,9 @@ endfunction
 "   {lnum, col, side('body'), label, text, target}
 function! s:body_links_from_lines(lines, base_dir) abort
   let [l:up_m, l:dn_m] = s:v2_boundaries_in_lines(a:lines)
-  if l:up_m <= 0 | return [] | endif
-  let l:pos = s:link_positions_in_lines(a:lines, 1, l:up_m - 1)
+  " 見出しが無いノート（index 等）は全行を本文扱い
+  let l:hi = l:up_m > 0 ? l:up_m - 1 : len(a:lines)
+  let l:pos = s:link_positions_in_lines(a:lines, 1, l:hi)
   if empty(l:pos) | return [] | endif
   let l:out = []
   for l:p in l:pos
