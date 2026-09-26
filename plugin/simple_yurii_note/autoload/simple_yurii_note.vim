@@ -385,14 +385,13 @@ function! s:index_template(...) abort
         \ '---',
         \ '',
         \ '# Index',
-        \ '',
         \ ]
   if l:v2
     " インデックスには Parent/Child 等の見出しを置かない。
     " 本文の裸リンクが子になり、そのリンク先の Parent に Index が入る。
     let l:out = l:head
     if l:with_guide
-      let l:out += [s:guide_link(), '']
+      let l:out += [s:guide_link()]
     endif
     return l:out
   endif
