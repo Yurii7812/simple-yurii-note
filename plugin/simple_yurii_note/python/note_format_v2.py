@@ -1169,25 +1169,21 @@ def _simple_parse(path: Path) -> dict:
     return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
 
 
-def _preserve_parent(existing: list[str], targets: list[Path], path: Path, resolver, titles: dict) -> list[str]:
-    """Parent セクションを組む。リンク行だけ管理し、空行・文字などはそのまま残す。"""
+def _preserve_parent(existing: list[str], path: Path, resolver, titles: dict) -> list[str]:
+    """Parent は書いてあるそのまま。リンク行は表示名だけ現在のタイトルに更新し、
+    行の追加・削除（＝ユーザーの編集）はしない。"""
     out: list[str] = []
-    present: set[Path] = set()
-    tset = set(targets)
     for ln in existing:
         m = _SIMPLE_INLINE_LINK.search(ln)
         if m:
             tg = m.group(2).split("#", 1)[0].strip()
             rp = resolver(tg, path.parent)
-            if rp in tset:
-                out.append(f"[{titles[rp]}]({_rel(path.parent, rp)})")
-                present.add(rp)
-            # 対象外のリンク行は落とす
+            if rp is not None and rp in titles:
+                out.append(f"[{titles[rp]}]({m.group(2)})")  # 表示名だけ更新
+            else:
+                out.append(ln)
         else:
             out.append(ln)  # 空行・文字はそのまま保持
-    for t in targets:
-        if t not in present:
-            out.append(f"[{titles[t]}]({_rel(path.parent, t)})")
     return out
 
 
@@ -1231,8 +1227,8 @@ def simple_sync(root) -> int:
 
     changed = 0
     for p, n in notes.items():
-        # Parent は書いてあるそのまま（ユーザー管理。追加・削除しない）
-        parent_lines = list(n["parent"])
+        # Parent は書いてあるそのまま（ユーザー管理。追加・削除しない。表示名だけ更新）
+        parent_lines = _preserve_parent(n["parent"], p, res, titles)
         parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
             rp = res(tg, p.parent)
@@ -1299,13 +1295,13 @@ def main(argv: list[str]) -> int:
             return 2
         title = argv[4] if len(argv) > 4 else ""
         p = make_new(argv[2], title)
-        sync_vault(argv[3])
+        simple_sync(argv[3])
         print(str(p))
         return 0
     if mode == "retitle_links":
         if len(argv) >= 4:
-            sync_vault(argv[3])
-        print("simple_yurii_note: v2 retitle via sync")
+            simple_sync(argv[3])
+        print("simple_yurii_note: retitle via sync")
         return 0
     if mode == "migrate":
         # 明示的な変換。sync は旧形式を触らないので、これを 1 回走らせて v2 化する。
