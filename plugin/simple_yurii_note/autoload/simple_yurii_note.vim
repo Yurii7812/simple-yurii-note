@@ -388,11 +388,13 @@ function! s:index_template(...) abort
         \ '',
         \ ]
   if l:v2
+    " インデックスには Parent/Child 等の見出しを置かない。
+    " 本文の裸リンクが子になり、そのリンク先の Parent に Index が入る。
     let l:out = l:head
     if l:with_guide
       let l:out += [s:guide_link(), '']
     endif
-    return l:out + [s:v2_up_mark, s:v2_down_mark]
+    return l:out
   endif
   return l:head
 endfunction
@@ -4656,6 +4658,44 @@ endfunction
 " simple: yes/no を聞く（既定 yes）
 function! s:ask_yes_no(msg) abort
   return confirm(a:msg, "&はい\n&いいえ", 1) == 1
+endfunction
+
+" zt: 今のノートを、相手（カーソル下のリンク or クリップボード）の ### Parent に追加
+function! simple_yurii_note#add_to_parent() abort
+  let l:cur = expand('%:p')
+  if empty(l:cur)
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
+    return
+  endif
+  let l:cur_title = simple_yurii_note#current_title()
+  let l:target = ''
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if !empty(l:lk) && !empty(l:lk.target) && l:lk.target =~? '\.md\(#.*\)\?$'
+    let l:target = l:lk.target
+  endif
+  if empty(l:target)
+    for l:t in s:extract_targets_from_clipboard(s:clipboard_text())
+      if l:t =~? '\.md$'
+        let l:target = l:t
+        break
+      endif
+    endfor
+  endif
+  if empty(l:target)
+    let l:target = trim(input('Parent に追加する相手 (.md): ', '', 'file'))
+  endif
+  if empty(l:target)
+    echo 'キャンセル'
+    return
+  endif
+  let l:tgt = simple_yurii_note#resolve_link(l:target)
+  if !filereadable(l:tgt)
+    echohl WarningMsg | echo '見つかりません: ' . l:tgt | echohl None
+    return
+  endif
+  call s:simple_add_parent(l:tgt, l:cur, l:cur_title)
+  call s:write_current_and_sync_now()
+  echo 'simple_yurii_note: Parent に追加 → ' . fnamemodify(l:tgt, ':t')
 endfunction
 
 function! s:v2_new_interactive(attr) abort

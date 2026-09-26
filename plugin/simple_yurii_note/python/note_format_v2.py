@@ -779,6 +779,20 @@ def sync_vault(root) -> int:
             print(f"note_format_v2: skip {p}: {exc}", file=sys.stderr)
 
     by_path: dict[Path, Note] = {n.path.resolve(): n for n in notes}
+
+    # インデックスは見出し（### Parent/### BackLink）を持たない。本文のリンクを
+    # 子（構造）として扱い、リンク先の Parent に Index が入るようにする。
+    for _p, _n in by_path.items():
+        if _p.name == "index.md" and not _n.managed:
+            _kids = []
+            for _ln in _n.body:
+                for _m in re.finditer(r"\[([^\]]*)\]\(([^)]+)\)", _ln):
+                    _tg = _m.group(2).split("#", 1)[0].strip()
+                    if _tg.lower().endswith(".md"):
+                        _kids.append((_m.group(1), _tg, None))
+            if _kids:
+                _n.down["ノート"] = _kids
+
     ids: dict[Path, str] = {}
     id_to_path: dict[str, Path] = {}
     for k in by_path:
