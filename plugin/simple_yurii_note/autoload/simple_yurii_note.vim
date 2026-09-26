@@ -4820,7 +4820,7 @@ function! s:v2_new_interactive(attr) abort
     if l:to_parent
       " p を選んだとき: 今のノートを新ノートの**本文**に置く（Parent には出さない）
       execute 'edit ' . fnameescape(l:file)
-      call s:simple_body_append(s:make_link_from_dir(l:file, l:cur_title, l:dir))
+      call s:simple_body_append(s:make_link_from_dir(l:cur, l:cur_title, l:dir))
       silent noautocmd write
     else
       " 新ノートの ### Parent に今のノートを書く（本文リンクは BackLink になるため）
