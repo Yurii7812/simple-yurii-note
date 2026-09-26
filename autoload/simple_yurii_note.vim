@@ -37,7 +37,7 @@ endfunction
 
 function! s:rel(from_dir, target) abort
   let l:out = systemlist(s:py_cmd() . ' -c "import os,sys; print(os.path.relpath(sys.argv[2], sys.argv[1]))" '
-        \ . shellescape(from_dir) . ' ' . shellescape(a:target))
+        \ . shellescape(a:from_dir) . ' ' . shellescape(a:target))
   return empty(l:out) ? fnamemodify(a:target, ':t') : substitute(l:out[0], '\\', '/', 'g')
 endfunction
 
