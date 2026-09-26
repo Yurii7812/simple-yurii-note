@@ -605,6 +605,9 @@ def _render_down_preserving(note: Note, key_fn) -> list[str] | None:
         if label != prev_label and out and out[-1].strip() != "":
             out.append("")
         emit_link(disp, tg, ann, label)
+    # 先頭の空行は落とす（### BackLink の直後に空行を入れない）
+    while out and out[0].strip() == "":
+        out.pop(0)
     return out
 
 
