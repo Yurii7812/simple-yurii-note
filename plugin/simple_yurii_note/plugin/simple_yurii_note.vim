@@ -308,8 +308,10 @@ nnoremap <nowait> <silent> \ca  <Cmd>call simple_yurii_note#add_clipboard_before
 nnoremap <nowait> <silent> tt  <Cmd>call simple_yurii_note#add_clipboard_to_top()<CR>
 " zt: タイトル変更（空欄から開始）
 nnoremap <nowait> <silent> zt  <Cmd>call simple_yurii_note#rename_title_with_default('')<CR>
-" zp: クリップボードの .md を本文に追加（今のノートが相手の親になる）
-nnoremap <nowait> <silent> zp  <Cmd>call simple_yurii_note#add_clipboard()<CR>
+" zp: 今開いてるノート（のリンク）を、相手（カーソル下のリンク or クリップボード）の
+"     ### Parent に追加 ＝ 今のノートが相手の子になる（相手側の子リストに今のノート）
+"     対になる操作: za は「今のノートの子」= 今のノートにリンクを足す（Parent の直前）
+nnoremap <nowait> <silent> zp  <Cmd>call simple_yurii_note#add_to_parent()<CR>
 " zT: 現在タイトルを残して編集
 nnoremap <nowait> <silent> zT  <Cmd>call simple_yurii_note#rename_title('')<CR>
 " zl: リンク表示名変更（空欄から開始）
