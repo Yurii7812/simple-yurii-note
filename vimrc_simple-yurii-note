@@ -1,0 +1,131 @@
+" =========================================================
+" ~/.vimrc-simple-yurii-note
+" simple-yurii-note 専用 Vim 環境
+" 起動:
+"   vim -u ~/.vimrc-simple-yurii-note
+" 使用時はこのファイル名の先頭に.をつける。
+" vim -u ファイル名で、起動できる。
+" =========================================================
+
+set nocompatible
+
+" ---------------------------------------------------------
+" 専用Vimディレクトリ
+" ---------------------------------------------------------
+
+set runtimepath^=/home/yurii/.vim-simple-yurii-note/
+
+" =========================================================
+" vim-plug
+" =========================================================
+
+let g:plug_home = expand('/home/yurii/.vim-simple-yurii-note/')
+
+call plug#begin(g:plug_home)
+  Plug 'Yurii7812/simple-yurii-note'
+  Plug 'tpope/vim-surround'
+  Plug 'junegunn/fzf'
+  Plug 'junegunn/fzf.vim'
+  Plug 'freeo/vim-kalisi'
+call plug#end()
+
+set background=light
+silent! colorscheme kalisi
+
+" =========================================================
+" fcitx IME auto switch
+" ---------------------------------------------------------
+" Insert モードを抜けるときは常に fcitx を OFF にして、
+" Normal モードでは英語入力へ戻します。
+" 体感速度を優先し、既定では状態確認を行わず InsertLeave で OFF だけを
+" 非同期実行します（fcitx5-remote の system() 待ちを避ける）。
+" =========================================================
+
+if !exists('g:yurii_fcitx_auto_switch')
+  let g:yurii_fcitx_auto_switch = 1
+endif
+if !exists('g:yurii_fcitx_restore_previous_state')
+  let g:yurii_fcitx_restore_previous_state = 0
+endif
+
+let g:yurii_fcitx_restore_on_insert = 0
+
+function! s:YuriiFcitxRemoteCmd() abort
+  if exists('g:yurii_fcitx_remote_cmd') && !empty(g:yurii_fcitx_remote_cmd)
+    return g:yurii_fcitx_remote_cmd
+  endif
+  if executable('fcitx5-remote')
+    return 'fcitx5-remote'
+  endif
+  if executable('/usr/bin/fcitx5-remote')
+    return '/usr/bin/fcitx5-remote'
+  endif
+  if executable('fcitx-remote')
+    return 'fcitx-remote'
+  endif
+  if executable('/usr/bin/fcitx-remote')
+    return '/usr/bin/fcitx-remote'
+  endif
+  return ''
+endfunction
+
+function! s:YuriiFcitxState() abort
+  let l:cmd = s:YuriiFcitxRemoteCmd()
+  if empty(l:cmd)
+    return ''
+  endif
+  let l:state = substitute(system(l:cmd), '\n\+$', '', '')
+  if v:shell_error != 0
+    return ''
+  endif
+  return l:state
+endfunction
+
+function! s:YuriiFcitxRun(arg) abort
+  let l:cmd = s:YuriiFcitxRemoteCmd()
+  if empty(l:cmd)
+    return
+  endif
+  if has('job')
+    silent! call job_start([l:cmd, a:arg], {'out_io': 'null', 'err_io': 'null'})
+  else
+    silent call system(l:cmd . ' ' . a:arg)
+  endif
+endfunction
+
+function! s:YuriiFcitxInsertLeave() abort
+  if !get(g:, 'yurii_fcitx_auto_switch', 1)
+    return
+  endif
+  if get(g:, 'yurii_fcitx_restore_previous_state', 0)
+    let l:state = s:YuriiFcitxState()
+    let g:yurii_fcitx_restore_on_insert = (l:state ==# '2')
+  else
+    let g:yurii_fcitx_restore_on_insert = 0
+  endif
+  call s:YuriiFcitxRun('-c')
+endfunction
+
+function! s:YuriiFcitxInsertEnter() abort
+  if !get(g:, 'yurii_fcitx_auto_switch', 1)
+    return
+  endif
+  if get(g:, 'yurii_fcitx_restore_on_insert', 0)
+    call s:YuriiFcitxRun('-o')
+    let g:yurii_fcitx_restore_on_insert = 0
+  endif
+endfunction
+
+command! YuriiFcitxOff call s:YuriiFcitxRun('-c')
+command! YuriiFcitxOn call s:YuriiFcitxRun('-o')
+command! YuriiFcitxStatus echo s:YuriiFcitxState()
+
+augroup yurii_fcitx_auto_switch
+  autocmd!
+  if exists('##InsertLeavePre')
+    autocmd InsertLeavePre * call s:YuriiFcitxInsertLeave()
+  else
+    autocmd InsertLeave * call s:YuriiFcitxInsertLeave()
+  endif
+  autocmd InsertEnter * call s:YuriiFcitxInsertEnter()
+augroup END
