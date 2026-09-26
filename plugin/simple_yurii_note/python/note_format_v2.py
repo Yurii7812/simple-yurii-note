@@ -1209,10 +1209,6 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
     if name != "index.md":
-        # 本文（散文でもリンクでも）の直後は必ず空行を 1 つ開ける。既有の
-        # 余白があればそれで足りる（余分な空行は増やさない）。
-        if lines and lines[-1].strip() != "":
-            lines.append("")
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
         lines.append(UP_MARK)
         lines += parent_lines
