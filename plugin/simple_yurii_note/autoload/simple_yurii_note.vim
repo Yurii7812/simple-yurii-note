@@ -4814,6 +4814,9 @@ function! s:v2_new_interactive(attr) abort
     let l:added = 1
   endif
   " o … リンク無し（孤立）
+  if l:added
+    call s:ensure_blank_before_up()
+  endif
   let &autoindent = l:save_ai | let &smartindent = l:save_si
   silent noautocmd write
   if l:added
@@ -4821,6 +4824,7 @@ function! s:v2_new_interactive(attr) abort
       " p を選んだとき: 今のノートを新ノートの**本文**に置く（Parent には出さない）
       execute 'edit ' . fnameescape(l:file)
       call s:simple_body_append(s:make_link_from_dir(l:cur, l:cur_title, l:dir))
+      call s:ensure_blank_before_up()
       silent noautocmd write
     else
       " 新ノートの ### Parent に今のノートを書く（本文リンクは BackLink になるため）
@@ -6157,6 +6161,20 @@ function! simple_yurii_note#add_from_clipboard(...) abort
   echo 'Added ' . len(l:links) . ' link(s)'
 endfunction
 
+" ### Parent の直前の行が本文（空行でない）なら、空行を 1 つ足す。
+" リンクを本文に置いたときの見た目を「本文 / 空行 / ### Parent」に揃える。
+function! s:ensure_blank_before_up() abort
+  let l:up = s:find_section_line('up')
+  if l:up <= 1
+    return 0
+  endif
+  if trim(getline(l:up - 1)) ==# ''
+    return 0
+  endif
+  call append(l:up - 1, '')
+  return 1
+endfunction
+
 " リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter のみ。zn と同じ約束）。
 "   h     … カーソル行の直下（本文）
 "   Enter … 本文の最後（### Parent の直前）
@@ -6192,6 +6210,9 @@ function! s:insert_links_at_position(links) abort
       let l:added += 1
     endif
   endfor
+  if l:added
+    call s:ensure_blank_before_up()
+  endif
   return l:added > 0
 endfunction
 
