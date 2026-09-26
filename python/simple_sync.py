@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """simple_yurii_note の最小同期。
 
-- 本文(Body)のリンク = そのノートの子（outgoing）。`## Child` は無い。
-- `## Parent` = 明示的な親。sync は死にリンク・重複の掃除だけ行い、表示名は保つ。
-- `## BackLink` = 本文でこのノートにリンクしているが親ではないノート（自動生成）。
+- 本文(Body)のリンク = そのノートの子（outgoing）。`### Child` は無い。
+- `### Parent` = 明示的な親。sync は死にリンク・重複の掃除だけ行い、表示名は保つ。
+- `### BackLink` = 本文でこのノートにリンクしているが親ではないノート（自動生成）。
 
 使い方:
     simple_sync.py update      ROOT
@@ -17,8 +17,8 @@ import re
 import sys
 from pathlib import Path
 
-PARENT_HDR = "## Parent"
-BACK_HDR = "## BackLink"
+PARENT_HDR = "### Parent"
+BACK_HDR = "### BackLink"
 LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 
 

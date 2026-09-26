@@ -1,6 +1,6 @@
 " simple_yurii_note: Parent/BackLink だけの最小 PKM。Child は本文。
 " ノート形式:
-"   front matter(title) + 本文（ここに子リンク） + ## Parent + ## BackLink
+"   front matter(title) + 本文（ここに子リンク） + ### Parent + ### BackLink
 
 if exists('g:autoloaded_simple_yurii_note')
   finish
@@ -67,29 +67,29 @@ function! s:note_template(title, parent_path, is_group) abort
         \ '# ' . a:title,
         \ '',
         \ '',
-        \ '## Parent',
+        \ '### Parent',
         \ ]
   if !empty(a:parent_path)
     let l:rel = s:rel(fnamemodify(a:parent_path, ':p:h'), a:parent_path)
     call add(l:lines, '[' . s:title(a:parent_path) . '](' . l:rel . ')')
   endif
-  call add(l:lines, '## BackLink')
+  call add(l:lines, '### BackLink')
   call add(l:lines, '')
   return l:lines
 endfunction
 
-" 現在バッファの本文（## Parent の直前）へリンク 1 行を差し込む
+" 現在バッファの本文（### Parent の直前）へリンク 1 行を差し込む
 function! s:insert_body_link(link) abort
   let l:parent_line = 0
   for l:i in range(1, line('$'))
-    if trim(getline(l:i)) ==# '## Parent'
+    if trim(getline(l:i)) ==# '### Parent'
       let l:parent_line = l:i
       break
     endif
   endfor
   if l:parent_line == 0
     call append(line('$'), a:link)
-    call append(line('$'), '## Parent')
+    call append(line('$'), '### Parent')
     return
   endif
   " 直前の空行の位置に置く
@@ -181,18 +181,18 @@ function! s:target_from_clipboard() abort
   return ''
 endfunction
 
-" 相手ノートの ## Parent に 1 行足す
+" 相手ノートの ### Parent に 1 行足す
 function! s:add_parent(target, parent_path) abort
   let l:lines = readfile(a:target)
   let l:plink = '[' . s:title(a:parent_path) . '](' . s:rel(fnamemodify(a:target, ':p:h'), a:parent_path) . ')'
   let l:phdr = -1
   let l:bhdr = -1
   for l:i in range(0, len(l:lines) - 1)
-    if trim(l:lines[l:i]) ==# '## Parent' | let l:phdr = l:i | endif
-    if trim(l:lines[l:i]) ==# '## BackLink' | let l:bhdr = l:i | endif
+    if trim(l:lines[l:i]) ==# '### Parent' | let l:phdr = l:i | endif
+    if trim(l:lines[l:i]) ==# '### BackLink' | let l:bhdr = l:i | endif
   endfor
   if l:phdr < 0
-    call add(l:lines, '## Parent')
+    call add(l:lines, '### Parent')
     call add(l:lines, l:plink)
   else
     " Parent セクション内に既にあるなら何もしない
