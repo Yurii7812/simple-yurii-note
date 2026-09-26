@@ -4802,7 +4802,7 @@ function! s:v2_new_interactive(attr) abort
     call append(line('.'), l:link)      " カーソル直下（本文）
     let l:added = 1
   elseif l:ch ==? 'p'
-    " 今のノートの ### Parent 末尾に置く（新ノート側はどの枝でも本文に置く）。
+    " 今のノートの ### Parent 末尾に置く（新ノート側はどの枝でも ### Parent に置く）。
     if s:append_link_to_buffer_section('up', l:link)
       let l:added = 1
     endif
@@ -4817,14 +4817,9 @@ function! s:v2_new_interactive(attr) abort
   let &autoindent = l:save_ai | let &smartindent = l:save_si
   silent noautocmd write
   if l:added
-    " 新ノート側は必ず**本文**（中央）に「もと開いていたノート」へのリンクを残す。
-    " 今のノート側で Parent に置いたか（p）本文に置いたか（h / Enter）に関係なく、
-    " 新ノートは本文で関係が見える。`### Parent` は空のまま。
-    execute 'edit ' . fnameescape(l:file)
-    call s:squeeze_body_blanks()
-    call s:simple_body_append(s:make_link_from_dir(l:cur, l:cur_title, l:dir))
-    call s:ensure_blank_before_up()
-    silent noautocmd write
+    " 新ノート側は「もと開いていたノート」を `### Parent` にだけ入れる。
+    " 本文（中央）には入れない（h / Enter / p 哪一种でも同じ）。
+    call s:simple_add_parent(l:file, l:cur, l:cur_title)
     call s:run_update_one_for(l:cur)
   endif
   call simple_yurii_note#push_history()
