@@ -13,13 +13,13 @@ set nocompatible
 " 専用Vimディレクトリ
 " ---------------------------------------------------------
 
-set runtimepath^=/home/yurii/.vim-simple-yurii-note/
+set runtimepath^=~/.vim-simple-yurii-note/
 
 " =========================================================
 " vim-plug
 " =========================================================
 
-let g:plug_home = expand('/home/yurii/.vim-simple-yurii-note/')
+let g:plug_home = expand('~/.vim-simple-yurii-note/')
 
 call plug#begin(g:plug_home)
   Plug 'Yurii7812/simple-yurii-note'

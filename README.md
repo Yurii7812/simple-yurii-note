@@ -13,7 +13,7 @@ Vim 上で Markdown ノートを運用するための PKM（Personal Knowledge M
 `~/.vimrc`（または `init.vim`）に以下を書いてください。
 
 ```vim
-Plug 'Yurii7812/simple_yurii_note'
+Plug 'Yurii7812/simple-yurii-note'
 ```
 
 その後、Vim/Neovim で以下を実行します。
