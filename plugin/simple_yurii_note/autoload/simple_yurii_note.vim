@@ -6179,11 +6179,18 @@ endfunction
 " ### Parent の直前の行が本文（空行でない）なら、空行を 1 つ足す。
 " リンクを本文に置いたときの見た目を「本文 / 空行 / ### Parent」に揃える。
 function! s:ensure_blank_before_up() abort
+  " `### Parent` の直前の行が**散文**のときだけ空行を 1 つ足す。
+  " リンク行で終わっているときは空行を挟まない（リンク群と `### Parent` をくっつけたまま）。
+  " 既に空行があれば足さない。
   let l:up = s:find_section_line('up')
   if l:up <= 1
     return 0
   endif
-  if trim(getline(l:up - 1)) ==# ''
+  let l:prev = trim(getline(l:up - 1))
+  if l:prev ==# ''
+    return 0
+  endif
+  if l:prev =~# '\]\s*(\S\+)\s*$'
     return 0
   endif
   call append(l:up - 1, '')
