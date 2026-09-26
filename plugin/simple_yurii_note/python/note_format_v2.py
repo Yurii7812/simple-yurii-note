@@ -1243,6 +1243,18 @@ def simple_sync(root) -> int:
         for t in dict.fromkeys(ts):
             incoming[t].append(src)
 
+    # index.md は見張り（### Parent / ### BackLink）を持たない。Index 本文の
+    # リンクは「そのノートの親に Index が載る」構造を意味するので、
+    # リンク先の Parent 先頭に `[Index](index.md)` を入れ、BackLink には
+    # 出さない。§index.md（03-同期の規則）。
+    index_of: dict[Path, Path] = {}
+    for p, n in notes.items():
+        if p.name != "index.md":
+            continue
+        for t in body_t.get(p, []):
+            if t != p:
+                index_of[t] = p
+
     changed = 0
     for p, n in notes.items():
         # 本文リンクの表示名をリンク先タイトルに追従
@@ -1254,6 +1266,13 @@ def simple_sync(root) -> int:
             rp = res(tg, p.parent)
             if rp is not None:
                 parent_set.add(rp)
+        # index.md 側のリンク = 親。Parent に既に Index が書かれていれば
+        # 尊重して触らない。
+        idx = index_of.get(p)
+        if idx is not None and idx not in parent_set:
+            parent_set.add(idx)
+            rel = _rel(p.parent, idx)
+            parent_lines.insert(0, f"[{titles[idx]}]({rel})")
         # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分。
         # 既存の並びを保ち、新しく増えた分は末尾に追加する。
         desired: list[Path] = []
