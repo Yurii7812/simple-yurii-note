@@ -1234,13 +1234,22 @@ def simple_sync(root) -> int:
             rp = res(tg, p.parent)
             if rp is not None:
                 parent_set.add(rp)
-        # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分
-        back: list[Path] = []
-        bseen: set[Path] = set()
+        # BackLink = incoming（本文でこのノートにリンクしている相手）− Parent − 自分。
+        # 既存の並びを保ち、新しく増えた分は末尾に追加する。
+        desired: list[Path] = []
+        dseen: set[Path] = set()
         for s in incoming.get(p, []):
-            if s != p and s not in parent_set and s not in bseen:
-                bseen.add(s)
-                back.append(s)
+            if s != p and s not in parent_set and s not in dseen:
+                dseen.add(s)
+                desired.append(s)
+        existing_back: list[Path] = []
+        for _d, tg in _links_from(n["back"]):
+            rp = res(tg, p.parent)
+            if rp is not None and rp not in existing_back:
+                existing_back.append(rp)
+        dset = set(desired)
+        back = [t for t in existing_back if t in dset]
+        back += [t for t in desired if t not in set(back)]
         new_text = _simple_render(p.name, n, p, parent_lines, back, titles)
         old = p.read_text(encoding="utf-8")
         if new_text != old:
