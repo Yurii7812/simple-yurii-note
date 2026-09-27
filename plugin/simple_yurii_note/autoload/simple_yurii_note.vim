@@ -6629,8 +6629,24 @@ endfunction
 " gp helper: システムクリップボード優先で、末尾改行を落として行下に追加
 " ---------------------------------------------------------------------------
 
+" \v / \V: 外部（Wayland）クリップボードを読んでから通常の貼り付けをする。
+"   Vim の + レジスタ（"+p）は XWayland を見て古い内容になることがあるため、
+"   s:clipboard_text() で本物のシステムクリップボードを取ってから貼る。
+"   a:mode = 'p'（カーソルの後ろ）/ 'P'（前）。a:1 に count を渡すと回数分貼る。
+function! simple_yurii_note#paste_clipboard(mode, ...) abort
+  let l:text = s:clipboard_text()
+  if empty(l:text)
+    echo 'simple_yurii_note: クリップボードが空'
+    return
+  endif
+  let @" = l:text
+  let @+ = l:text  " clipboard=unnamedplus でも同じ内容を貼れるように
+  let l:cnt = a:0 > 0 && a:1 =~# '^\d\+$' && a:1 > 0 ? a:1 : 1
+  execute 'normal! ' . l:cnt . a:mode
+endfunction
+
 function! simple_yurii_note#paste_charwise() abort
-  let l:text = @+
+  let l:text = s:clipboard_text()
   if empty(l:text)
     let l:text = @"
   endif

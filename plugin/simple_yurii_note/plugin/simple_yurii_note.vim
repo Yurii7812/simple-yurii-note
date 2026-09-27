@@ -331,8 +331,10 @@ nnoremap <nowait> <silent> bc  <Cmd>call simple_yurii_note#add_from_clipboard()<
 " yn: 現在のファイル名をヤンク
 nnoremap <nowait> <silent> yn  <Cmd>call simple_yurii_note#yank_name()<CR>
 
-" p: システムクリップボードを通常の Vim 動作で貼り付け
-nnoremap <silent> p  "+p
+" \v / \V: システムクリップボード（PCの直近のコピー / Vimでヤンクしたもの）を貼り付け。
+"   p / P は Vim 標準のまま（" レジスタ）。PC の内容は \v で貼る。
+nnoremap <silent> \v <Cmd>call simple_yurii_note#paste_clipboard('p', v:count)<CR>
+nnoremap <silent> \V <Cmd>call simple_yurii_note#paste_clipboard('P', v:count)<CR>
 " gp: 以前の独自貼り付け（改行末尾を落として行下に追加）
 nnoremap <silent> gp <Cmd>call simple_yurii_note#paste_charwise()<CR>
 " .: 標準の「直前の変更を繰り返す」動作を明示的に使用する
@@ -587,14 +589,16 @@ augroup END
 " ---------------------------------------------------------------------------
 " vim-gtk3 は +clipboard を XWayland 側で扱うため、PC（Wayland）でコピーした内容と
 " ずれやすい。読み込み側は autoload の clipboard 読み取りが wl-paste を先に読む。
-" ここでは書き込み側を補う: `"+y` / `"*y` と（autoselect 時の）ビジュアル yank を
-" wl-copy にも流し、Vim でヤンクした内容を PC 側のアプリでも貼れるようにする。
+" ここでは書き込み側を補う: `"+y` / `"*y` と、`clipboard=unnamedplus` のときの
+" 無名レジスタ（`yy` / `x` / `ciw` など。regname が空）、autoselect のビジュアル yank を
+" wl-copy にも流す。これで Vim でヤンクした内容を `\v` でも PC 側アプリでも貼れる。
 if !has('nvim') && !empty($WAYLAND_DISPLAY) && executable('wl-copy')
       \ && has('job') && has('channel')
   function! s:wayland_clipboard_yank() abort
     let l:reg = get(v:event, 'regname', '')
     let l:auto = get(v:event, 'visual', 0) && &clipboard =~# 'autoselect'
-    if l:reg !=# '+' && l:reg !=# '*' && !l:auto
+    let l:unnamedplus = l:reg ==# '' && &clipboard =~# 'unnamedplus'
+    if l:reg !=# '+' && l:reg !=# '*' && !l:auto && !l:unnamedplus
       return
     endif
     let l:lines = get(v:event, 'regcontents', [])
