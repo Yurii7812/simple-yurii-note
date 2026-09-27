@@ -65,6 +65,7 @@ simple_yurii_note#outline_shift_visual
 simple_yurii_note#paste_charwise
 simple_yurii_note#paste_clipboard
 simple_yurii_note#paste_clipboard_link_here
+simple_yurii_note#perf_diag
 simple_yurii_note#push_history
 simple_yurii_note#realtime_sync_on_text_changed
 simple_yurii_note#realtime_sync_snapshot

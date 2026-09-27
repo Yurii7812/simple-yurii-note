@@ -6662,6 +6662,29 @@ function! simple_yurii_note#paste_charwise() abort
   call append(line('.'), l:lines)
 endfunction
 
+" 速度診断: 実環境で :call simple_yurii_note#perf_diag() して数値を確認する。
+"   どこが遅いか（外部クリップボード / Vim レジスタ / ヒント / sync コマンド）を
+"   ミリ秒で出す。バッファも同期も書き換えない（読み取りのみ）。
+function! simple_yurii_note#perf_diag() abort
+  let l:o = []
+  call add(l:o, 'clipboard=' . &clipboard . '  root=' . s:get_pkm_root())
+  let l:t = reltime()
+  let l:wp = system('timeout 1 wl-paste --no-newline')
+  call add(l:o, printf('wl-paste      : %7.1f ms (len=%d)', reltimefloat(reltime(l:t)) * 1000, len(l:wp)))
+  let l:t = reltime()
+  let l:r = getreg('+')
+  call add(l:o, printf('getreg(+) reg : %7.1f ms (len=%d)', reltimefloat(reltime(l:t)) * 1000, len(l:r)))
+  let l:t = reltime()
+  let l:r = getreg('"')
+  call add(l:o, printf('getreg(") reg : %7.1f ms (len=%d)', reltimefloat(reltime(l:t)) * 1000, len(l:r)))
+  let l:t = reltime()
+  call simple_yurii_note#refresh_link_hints()
+  call add(l:o, printf('refresh_hints : %7.1f ms', reltimefloat(reltime(l:t)) * 1000))
+  let l:cmd = s:update_one_command(expand('%:p'), 1)
+  call add(l:o, 'sync cmd      : ' . (empty(l:cmd) ? '(none)' : 'ok'))
+  echo join(l:o, "\n")
+endfunction
+
 " ---------------------------------------------------------------------------
 " :AT2 - Add To clipboard target (逆リンク)
 " ---------------------------------------------------------------------------
