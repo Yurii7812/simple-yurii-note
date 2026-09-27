@@ -270,8 +270,24 @@ nnoremap <silent> 0 <Cmd>call simple_yurii_note#digit_key(10, "0")<CR>
 unlet s:n
 augroup simple_yurii_note_link_hints
   autocmd!
-  autocmd BufEnter,BufWinEnter,TextChanged,InsertLeave *.md call simple_yurii_note#refresh_link_hints()
+  autocmd BufEnter,BufWinEnter,InsertLeave *.md call simple_yurii_note#refresh_link_hints()
+  " TextChanged は毎回走らせず、少し待ってから 1 回だけ（貼り付け等を固まらせない）
+  autocmd TextChanged *.md call s:schedule_refresh_link_hints()
 augroup END
+
+" 連続する TextChanged をまとめて、最後の 1 回だけヒントを更新する。
+function! s:schedule_refresh_link_hints() abort
+  if exists('b:simple_yurii_note_hint_timer')
+    call timer_stop(b:simple_yurii_note_hint_timer)
+  endif
+  if has('timers')
+    let b:simple_yurii_note_hint_timer =
+          \ timer_start(get(g:, 'simple_yurii_note_link_hints_delay', 120),
+          \ {-> simple_yurii_note#refresh_link_hints()})
+  else
+    call simple_yurii_note#refresh_link_hints()
+  endif
+endfunction
 " 標準のジャンプリスト戻りでも、E37 を出さず保存してから移動する
 nnoremap <silent> <C-O>    <Cmd>call simple_yurii_note#save_before_normal_jump("\<C-O>")<CR>
 nnoremap <nowait> <silent> bu  <Cmd>call simple_yurii_note#jump_last_link_before_up()<CR>

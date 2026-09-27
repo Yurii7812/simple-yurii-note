@@ -5002,8 +5002,14 @@ function! s:write_current_and_sync_now() abort
     silent write
     return
   endif
+  let l:autosync = g:simple_yurii_note_autosync
   silent write
-  call s:run_update_one_for_sync(l:file, 1)
+  " BufWritePost の autosync が非同期で走るので、ここで同期実行しない
+  " （sync は Python で全ノートを走査するため、待つと \p などが固まる）。
+  " autosync を切っているときだけ、従来どおり強制的に同期する。
+  if !l:autosync
+    call s:run_update_one_for_sync(l:file, 1)
+  endif
 endfunction
 
 function! simple_yurii_note#save_before_normal_jump(keys) abort
