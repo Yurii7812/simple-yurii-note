@@ -119,6 +119,14 @@ if !exists('g:simple_yurii_note_gallery_port')
   let g:simple_yurii_note_gallery_port = 8765
 endif
 
+" 挿入モードの <C-G> が timeoutlen 待ちにならないようにする。
+" vim-surround は挿入モードに <C-G>s / <C-G>S / <C-S> を張るため、素の
+" <C-G>u（undo 区切り）などが「s が続くかも」で待たされる。挿入モードの
+" surround を使わないなら無効化してよい（ノーマル/ビジュアルの ys/cs/ds/S は残る）。
+if !exists('g:surround_no_insert_mappings')
+  let g:surround_no_insert_mappings = 1
+endif
+
 " ---------------------------------------------------------------------------
 " コマンド定義
 " ---------------------------------------------------------------------------
@@ -297,9 +305,11 @@ nnoremap <silent> <C-O>    <Cmd>call simple_yurii_note#save_before_normal_jump("
 " \bu（旧 bu）: 「b」は素の後退移動と1文字目が被り、素の b が timeoutlen 待ちに
 "   なるため \ 側へ移した（素のキーを即時にする）
 nnoremap <nowait> <silent> \bu <Cmd>call simple_yurii_note#jump_last_link_before_up()<CR>
-nnoremap <nowait> <silent> ,,  <Cmd>call simple_yurii_note#jump_up()<CR>
-nnoremap <nowait> <silent> ,.  <Cmd>call simple_yurii_note#jump_down_top()<CR>
-nnoremap <nowait> <silent> ,/  <Cmd>call simple_yurii_note#jump_down_bottom()<CR>
+" \k / \j / \J（旧 ,, / ,. / ,/）: 1文字目が素の「,」（f/t リピート）と被り
+" timeoutlen 待ちになるため \ 側へ移した。k=上 / j=下 の連想。
+nnoremap <nowait> <silent> \k  <Cmd>call simple_yurii_note#jump_up()<CR>
+nnoremap <nowait> <silent> \j  <Cmd>call simple_yurii_note#jump_down_top()<CR>
+nnoremap <nowait> <silent> \J  <Cmd>call simple_yurii_note#jump_down_bottom()<CR>
 
 " ノート作成（リレーションは書かず、位置だけを選ぶ）
 "   zn … ノート作成。作成後に位置キー1つで、素のリンク 1 行を現ノート側に置く:

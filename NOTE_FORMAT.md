@@ -212,7 +212,7 @@ merge（両方 14 桁タイムスタンプ）: `note_format_v2.py dupcheck A B` 
 | `:UpdateMD` / AutoSync | sync（`note_format_v2.py update` / `update_one`） |
 | `:SimpleGuide` | 操作ガイド `simple_yurii_note_guide.md` を作り直す。起動時（VimEnter）にも既存ガイドを最新テンプレートへ自動更新する。Index へのリンクはガイド新規作成の初回だけ Index の**本文**に置く。本文リンクは sync が再生成しないため、自分で消せば復活せず、ディレクトリ移動で Index を作り直しても付かない。ガイド自体は通常ノートとして sync 管理下（Parent/Child は普通に反映） |
 | テンプレート | front matter + H1 + 見張り 2 行のみ |
-| 移動系（`,,` / `,.` / `,/` / 番号ジャンプ / 覗き見） | **別途設計**（後日） |
+| 移動系（`\k` / `\j` / `\J` / 番号ジャンプ / 覗き見） | **別途設計**（後日） |
 
 `\bc`/`ca`/`cu`/`at` はクリップボード（無名レジスタ）の複数行 / 複数リンクにも対応する:
 
