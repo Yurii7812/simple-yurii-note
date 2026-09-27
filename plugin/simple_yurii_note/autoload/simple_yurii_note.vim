@@ -3112,25 +3112,34 @@ function! s:resolve_link_for_navigation(target, ...) abort
   return l:direct
 endfunction
 
-" クリップボードを読む。Wayland 環境では Vim の +clipboard が効かず @+ が空に
-" なることが多いので、外部コマンド（wl-paste / klipper / xclip / xsel）も試す。
+" クリップボードを読む。Wayland では Vim の +clipboard が XWayland 側を見てしまい、
+" PC（Wayland）でコピーした内容とずれることが多い（古い内容を返す）。そこで
+" **外部コマンドを先に**試し（wl-paste 等＝PC の本物のクリップボード）、取れなければ
+" Vim の + / * / 無名レジスタへ落とす。外部を先に見ることで、遅い + レジスタ読みも回避。
 function! s:clipboard_text() abort
+  let l:ext = s:clipboard_text_external()
+  if !empty(l:ext)
+    return l:ext
+  endif
   for l:reg in ['+', '*']
-    let l:cb = getreg(l:reg)
-    if !empty(trim(l:cb))
-      return trim(l:cb)
+    let l:cb = trim(getreg(l:reg))
+    if !empty(l:cb)
+      return l:cb
     endif
   endfor
-  let l:cb = s:clipboard_text_external()
-  if !empty(l:cb)
-    return l:cb
-  endif
   " 無名レジスタは空だと E353 になるので getreg で読む
   return trim(getreg('"'))
 endfunction
 
-" 外部コマンド経由でクリップボードを読む（Wayland → X11 の順）
+" 外部コマンド経由でクリップボードを読む（Wayland → KDE → X11 の順）。
+" 一度成功したコマンドをセッション中キャッシュし、次回はそれだけを試す（\p を速く）。
 function! s:clipboard_text_external() abort
+  if exists('s:clip_cmd')
+    let l:out = s:run_clip_cmd(s:clip_cmd)
+    if !empty(l:out)
+      return l:out
+    endif
+  endif
   let l:cmds = [
         \ ['wl-paste', '--no-newline'],
         \ ['wl-paste', '--primary', '--no-newline'],
@@ -3143,17 +3152,21 @@ function! s:clipboard_text_external() abort
     if !executable(l:cmd[0])
       continue
     endif
-    let l:out = ''
-    try
-      let l:out = trim(system('timeout 2 ' . join(map(copy(l:cmd), 'shellescape(v:val)'), ' ')))
-    catch
-      let l:out = ''
-    endtry
+    let l:out = s:run_clip_cmd(l:cmd)
     if !empty(l:out)
+      let s:clip_cmd = l:cmd
       return l:out
     endif
   endfor
   return ''
+endfunction
+
+function! s:run_clip_cmd(cmd) abort
+  try
+    return trim(system('timeout 1 ' . join(map(copy(a:cmd), 'shellescape(v:val)'), ' ')))
+  catch
+    return ''
+  endtry
 endfunction
 
 function! s:extract_markdown_link(raw) abort

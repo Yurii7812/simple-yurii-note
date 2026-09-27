@@ -583,6 +583,44 @@ augroup simple_yurii_note_startup_prefix_check
 augroup END
 
 " ---------------------------------------------------------------------------
+" Wayland クリップボード橋渡し（Vim → PC 方向）
+" ---------------------------------------------------------------------------
+" vim-gtk3 は +clipboard を XWayland 側で扱うため、PC（Wayland）でコピーした内容と
+" ずれやすい。読み込み側は autoload の clipboard 読み取りが wl-paste を先に読む。
+" ここでは書き込み側を補う: `"+y` / `"*y` と（autoselect 時の）ビジュアル yank を
+" wl-copy にも流し、Vim でヤンクした内容を PC 側のアプリでも貼れるようにする。
+if !has('nvim') && !empty($WAYLAND_DISPLAY) && executable('wl-copy')
+      \ && has('job') && has('channel')
+  function! s:wayland_clipboard_yank() abort
+    let l:reg = get(v:event, 'regname', '')
+    let l:auto = get(v:event, 'visual', 0) && &clipboard =~# 'autoselect'
+    if l:reg !=# '+' && l:reg !=# '*' && !l:auto
+      return
+    endif
+    let l:lines = get(v:event, 'regcontents', [])
+    if empty(l:lines)
+      return
+    endif
+    try
+      let l:job = job_start(['wl-copy'], {
+            \ 'in_io': 'pipe', 'out_io': 'null', 'err_io': 'null',
+            \ 'stoponexit': '',
+            \ })
+      call ch_sendraw(l:job, join(l:lines, "\n"))
+      call ch_close(l:job)
+      " 次で置き換わるまで参照を保持して、確実に回収させる
+      let s:wayland_clip_job = l:job
+    catch
+    endtry
+  endfunction
+
+  augroup simple_yurii_note_wayland_clipboard
+    autocmd!
+    autocmd TextYankPost * call s:wayland_clipboard_yank()
+  augroup END
+endif
+
+" ---------------------------------------------------------------------------
 " CopyStack コマンド
 " ---------------------------------------------------------------------------
 nnoremap <silent> \sc <Cmd>CopyStack<CR>
