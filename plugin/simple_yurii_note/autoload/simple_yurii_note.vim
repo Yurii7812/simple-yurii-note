@@ -3410,12 +3410,51 @@ function! s:recent_touch(path) abort
   call s:save_json_state('recent.json', l:m)
 endfunction
 
-" ハブ（'1'..'9' -> path）
-function! simple_yurii_note#hub_map() abort
-  if !exists('g:simple_yurii_note_hubs')
-    let g:simple_yurii_note_hubs = s:load_json_state('hubs.json', {})
+" ハブ（'1'..'9' -> path）は Index（PKM ルート）ごとに保存する。
+"   hubs.json の形: { <root>: { "1": path, ... }, ... }
+"   - Index を切り替えたら別のハブ表になる（\H / \1..\9 / \0 が Index ごと）。
+"   - 旧形式（フラットな { "1": path }）は、初回に現在のルート配下へ移行する。
+function! s:hub_root_key() abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root)
+    let l:root = expand('%:p:h')
   endif
-  return g:simple_yurii_note_hubs
+  return fnamemodify(l:root, ':p')
+endfunction
+
+function! s:hub_is_nested(d) abort
+  for [l:k, l:v] in items(a:d)
+    if type(l:v) == v:t_dict
+      return 1
+    endif
+  endfor
+  return 0
+endfunction
+
+function! s:hub_store() abort
+  if !exists('g:simple_yurii_note_hubs_store')
+    let l:data = s:load_json_state('hubs.json', {})
+    " 旧形式（値がパス文字列）は現在のルートのハブとして引き継ぐ
+    if !empty(l:data) && !s:hub_is_nested(l:data)
+      let l:old = l:data
+      let l:data = {}
+      let l:key = s:hub_root_key()
+      if !empty(l:key)
+        let l:data[l:key] = l:old
+      endif
+    endif
+    let g:simple_yurii_note_hubs_store = l:data
+  endif
+  return g:simple_yurii_note_hubs_store
+endfunction
+
+function! simple_yurii_note#hub_map() abort
+  let l:store = s:hub_store()
+  let l:key = s:hub_root_key()
+  if !has_key(l:store, l:key)
+    let l:store[l:key] = {}
+  endif
+  return l:store[l:key]
 endfunction
 
 " 引数が数値でも文字列でも '1'..'9' の文字列に揃える（string() は引用符を付ける）
@@ -3440,8 +3479,7 @@ function! simple_yurii_note#hub_set(...) abort
   endif
   let l:m = simple_yurii_note#hub_map()
   let l:m[l:n] = l:file
-  let g:simple_yurii_note_hubs = l:m
-  call s:save_json_state('hubs.json', l:m)
+  call s:save_json_state('hubs.json', s:hub_store())
   echo printf('simple_yurii_note: ハブ %s = %s', l:n, s:get_title(l:file))
 endfunction
 
