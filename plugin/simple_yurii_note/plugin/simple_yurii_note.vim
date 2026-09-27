@@ -290,7 +290,9 @@ function! s:schedule_refresh_link_hints() abort
 endfunction
 " 標準のジャンプリスト戻りでも、E37 を出さず保存してから移動する
 nnoremap <silent> <C-O>    <Cmd>call simple_yurii_note#save_before_normal_jump("\<C-O>")<CR>
-nnoremap <nowait> <silent> bu  <Cmd>call simple_yurii_note#jump_last_link_before_up()<CR>
+" \bu（旧 bu）: 「b」は素の後退移動と1文字目が被り、素の b が timeoutlen 待ちに
+"   なるため \ 側へ移した（素のキーを即時にする）
+nnoremap <nowait> <silent> \bu <Cmd>call simple_yurii_note#jump_last_link_before_up()<CR>
 nnoremap <nowait> <silent> ,,  <Cmd>call simple_yurii_note#jump_up()<CR>
 nnoremap <nowait> <silent> ,.  <Cmd>call simple_yurii_note#jump_down_top()<CR>
 nnoremap <nowait> <silent> ,/  <Cmd>call simple_yurii_note#jump_down_bottom()<CR>
@@ -311,9 +313,10 @@ nnoremap <nowait> <silent> zk  <Cmd>call simple_yurii_note#v2_new_group()<CR>
 " za: ca（クリップボードのノートを child に追加）と同じだが、関係ピッカーを
 " 出さず既定の「ノート」関係で固定する
 nnoremap <nowait> <silent> za  <Cmd>call simple_yurii_note#add_clipboard_before_up_note()<CR>
-" pe: 現ノートを起点に親/子/文中を辿って 1 つの md へ展開（v2 専用、_tmp/T_<timestamp>.md）。
-" シンプル（深さ1つ）/ 詳細（親・子・文中を別々の深さ、前回設定を再利用可）を選ぶ
-nnoremap <nowait> <silent> pe  <Cmd>call simple_yurii_note#v2_expand()<CR>
+" \e（旧 pe）: 現ノートを起点に親/子/文中を辿って 1 つの md へ展開（v2 専用、_tmp/T_<timestamp>.md）。
+" シンプル（深さ1つ）/ 詳細（親・子・文中を別々の深さ、前回設定を再利用可）を選ぶ。
+" 「p」は素の貼り付けと1文字目が被り、素の p が timeoutlen 待ちになるため \ 側へ移した。
+nnoremap <nowait> <silent> \e  <Cmd>call simple_yurii_note#v2_expand()<CR>
 " cu: クリップボードのリンクを Parent: セクションへ追加
 nnoremap <nowait> <silent> cu  <Cmd>call simple_yurii_note#add_clipboard_to_branch()<CR>
 " ca: クリップボードのリンクを Child: に追加し、リンク先の Parent: に現在ノートを追加
@@ -342,8 +345,9 @@ vnoremap <nowait> <silent> zd  :<C-u>'<,'>RenameChildLinkTitles<CR>
 nnoremap <nowait> <silent> ta  <Cmd>call simple_yurii_note#at_add()<CR>
 " \at: ta と同じ向きだが括弧が逆。今開いているノート側が (ラベル)、相手側に生のラベルを書く
 nnoremap <nowait> <silent> \at  <Cmd>call simple_yurii_note#at_add_reverse()<CR>
-" bc: クリップボードのファイル名をChildに追加
-nnoremap <nowait> <silent> bc  <Cmd>call simple_yurii_note#add_from_clipboard()<CR>
+" \bc（旧 bc）: クリップボードのファイル名をChildに追加。
+" 「b」は素の後退移動と1文字目が被り、素の b が timeoutlen 待ちになるため \ 側へ移した。
+nnoremap <nowait> <silent> \bc <Cmd>call simple_yurii_note#add_from_clipboard()<CR>
 " yn: 現在のファイル名をヤンク
 nnoremap <nowait> <silent> yn  <Cmd>call simple_yurii_note#yank_name()<CR>
 
