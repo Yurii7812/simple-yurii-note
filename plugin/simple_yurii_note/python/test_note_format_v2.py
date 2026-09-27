@@ -846,6 +846,35 @@ def test_down_section_order_is_sticky() -> None:
               "並べ替え後に再syncしても、入れ替えた順のまま強制的に戻されない")
 
 
+def test_simple_sync_prunes_dangling_links() -> None:
+    print("simple_sync: 消えたファイルへのリンクを掃除する")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "live.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Live\n---\n\n# Live\n\n"
+            "[消えた](gone.md)\n"
+            "以前 [AI](gone.md) について書いた。\n\n"
+            f"{UP_MARK}\n[消え親](gone.md)\n[Live](live.md)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\nattribute: group\n---\n\n"
+            "# Index\n\n[AI](gone.md)\n[Live](live.md)\n",
+            encoding="utf-8",
+        )
+        v2.simple_sync(root)
+        live = (root / "live.md").read_text(encoding="utf-8")
+        check("[消えた](gone.md)" not in live, "行全体がリンクの行は行ごと消える")
+        check("以前 AI について書いた。" in live,
+              "文中リンクは文章を残してリンク記法だけ外す")
+        check("(gone.md)" not in live, "Parent の消えたリンクも消える")
+        check("[Live](live.md)" in live, "生きているリンクは残る")
+        idx = (root / "index.md").read_text(encoding="utf-8")
+        check("[AI](gone.md)" not in idx, "index の消えたリンクも消える")
+        check("[Live](live.md)" in idx, "index の生きたリンクは残る")
+        check(v2.simple_sync(root) == 0, "掃除のあとは 2 回目 0 changes（冪等）")
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

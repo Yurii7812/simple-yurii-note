@@ -1219,6 +1219,33 @@ def _preserve_parent(existing: list[str], path: Path, resolver, titles: dict) ->
     return out
 
 
+def _prune_dangling(lines: list[str], path: Path, resolver) -> list[str]:
+    """存在しない .md へのリンクを掃除する（消えたファイルの残骸を消す）。
+
+    - 行全体がリンク 1 本だけの行 → 行ごと取り除く。
+    - 文中に埋もれたリンク → リンク記法だけ外して表示名の文字は残す
+      （文章を消さない）。`![alt](pic.png)` 等の .md 以外は触らない。
+    """
+    out: list[str] = []
+    for ln in lines:
+        if _SIMPLE_LINK_LINE_RE.match(ln):
+            tg = _link_target(ln)
+            if tg.lower().endswith(".md") and resolver(tg, path.parent) is None:
+                continue
+            out.append(ln)
+            continue
+
+        def repl(m, _path=path):
+            disp, tg = m.group(1), m.group(2)
+            base = tg.split("#", 1)[0].strip()
+            if base.lower().endswith(".md") and resolver(base, _path.parent) is None:
+                return disp
+            return m.group(0)
+
+        out.append(_SIMPLE_INLINE_LINK.sub(repl, ln))
+    return out
+
+
 def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back: list[Path], titles: dict) -> str:
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
@@ -1281,10 +1308,14 @@ def simple_sync(root) -> int:
 
     changed = 0
     for p, n in notes.items():
-        # 本文リンクの表示名をリンク先タイトルに追従
+        # 本文リンクの表示名をリンク先タイトルに追従させ、消えたファイルへの
+        # リンクは掃除する（文章中に埋もれたリンクは表示名の文字だけ残す）。
         n["body"] = _update_body_link_names(n["body"], p, res, titles)
-        # Parent は書いてあるそのまま（ユーザー管理。追加・削除しない。表示名だけ更新）
+        n["body"] = _prune_dangling(n["body"], p, res)
+        # Parent はユーザー管理（追加・削除はしない）。ただし消えたファイルへの
+        # リンクは残骸なので掃除する（行全体がリンクの行のみ）。表示名は追従。
         parent_lines = _preserve_parent(n["parent"], p, res, titles)
+        parent_lines = _prune_dangling(parent_lines, p, res)
         parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
             rp = res(tg, p.parent)
