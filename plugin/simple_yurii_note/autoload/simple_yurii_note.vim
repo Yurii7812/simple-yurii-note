@@ -4458,7 +4458,7 @@ function! s:simple_body_append_to_file(file, link, is_group) abort
     let l:top = l:hdr
     while l:top > 0 && trim(l:lines[l:top - 1]) ==# ''
       let l:top -= 1
-    endfor
+    endwhile
     if l:top < l:hdr
       call remove(l:lines, l:top, l:hdr - 1)
       let l:hdr = l:top
