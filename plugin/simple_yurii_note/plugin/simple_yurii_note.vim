@@ -219,8 +219,9 @@ nnoremap <nowait> <silent> mp  <Cmd>call simple_yurii_note#rename_prefix()<CR>
 " リンクナビゲーション
 nnoremap <silent> <Tab>    <Cmd>call simple_yurii_note#jump_link(1)<CR>
 nnoremap <silent> <S-Tab>  <Cmd>call simple_yurii_note#jump_link(0)<CR>
-" 端末によっては Shift-Tab が <Esc>[Z として届くことがあるので保険を入れる
-silent! execute "nnoremap <silent> \<Esc>[Z <Cmd>call simple_yurii_note#jump_link(0)<CR>"
+" 注意: 以前は Shift-Tab 保険で `\<Esc>[Z` を nnoremap していたが、これを張ると
+" 素の Esc が「[Z が続くかも」と timeoutlen（既定500ms）待つため、Esc がワンテンポ
+" 遅れていた。端末互換は s:setup_backtab() の `set <S-Tab>=\e[Z`（termcap）で足りる。
 nnoremap <silent> <CR>     <Cmd>call simple_yurii_note#open_link_under_cursor()<CR>
 nnoremap <silent> <BS>     <Cmd>call simple_yurii_note#go_back()<CR>
 " 履歴を前へ（⌫ の対）。戻りが可逆になるので、戻るのを躊躇しなくなる。
