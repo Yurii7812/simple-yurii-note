@@ -4439,6 +4439,35 @@ function! s:simple_body_append(link) abort
   endif
 endfunction
 
+" simple: file の本文末尾（### Parent の直前）へ link を 1 行置く。
+"   a:is_group が真（zk のグループノート）なら、リンクと ### Parent は隣り合う。
+"   偽（zn）なら上下に空行 1 つずつ。テンプレートが持つ本文の空行は
+"   この並びに置き換わる（空行が累積しない）。
+function! s:simple_body_append_to_file(file, link, is_group) abort
+  let l:lines = readfile(a:file)
+  let l:hdr = -1
+  for l:i in range(0, len(l:lines) - 1)
+    if trim(l:lines[l:i]) ==# s:v2_up_mark
+      let l:hdr = l:i | break
+    endif
+  endfor
+  if l:hdr < 0
+    call add(l:lines, a:link)
+  else
+    " ### Parent の直前まで続く空行の連なりを剥がす。
+    let l:top = l:hdr
+    while l:top > 0 && trim(l:lines[l:top - 1]) ==# ''
+      let l:top -= 1
+    endfor
+    if l:top < l:hdr
+      call remove(l:lines, l:top, l:hdr - 1)
+      let l:hdr = l:top
+    endif
+    call extend(l:lines, a:is_group ? ['', a:link] : ['', a:link, ''], l:hdr)
+  endif
+  call writefile(l:lines, a:file)
+endfunction
+
 " simple: file の ### Parent に parent_path へのリンクを 1 本足す
 function! s:simple_add_parent(file, parent_path, parent_title) abort
   let l:lines = readfile(a:file)
@@ -4573,7 +4602,8 @@ function! s:v2_new_interactive(attr) abort
     call append(line('.'), l:link)      " カーソル直下（本文）
     let l:added = 1
   elseif l:ch ==? 'p'
-    " 今のノートの ### Parent 末尾に置く（新ノート側はどの枝でも ### Parent に置く）。
+    " 今のノートの ### Parent 末尾に置く → 今のノートは**新ノートの子**。
+    " よって新ノート側は親を持たず、本文リンク（子）で今のノートを指す。
     if s:append_link_to_buffer_section('up', l:link)
       let l:added = 1
     endif
@@ -4587,18 +4617,32 @@ function! s:v2_new_interactive(attr) abort
   endif
   let &autoindent = l:save_ai | let &smartindent = l:save_si
   silent noautocmd write
+  let l:in_body = 0
+  let l:hl = 0
   if l:added
-    " 新ノート側は「もと開いていたノート」を `### Parent` にだけ入れる。
-    " 本文（中央）には入れない（h / Enter / p どれを選んでも同じ）。
-    " 本文はテンプレートのまま（余白 2 行）を残す。潰さない。
-    call s:simple_add_parent(l:file, l:cur, l:cur_title)
+    if l:ch ==? 'p'
+      " 新ノート側は「もと開いていたノート」を**本文リンク**（子）に置く。
+      " p は「親を作る」操作なので、ここを ### Parent にすると循環して読めない。
+      let l:back = s:make_link_from_dir(l:cur, l:cur_title, fnamemodify(l:file, ':h'))
+      call s:simple_body_append_to_file(l:file, l:back, !empty(a:attr))
+      let l:in_body = 1
+    else
+      " h / Enter は今のノートが親。新ノート側は ### Parent にだけ入れる。
+      " 本文（中央）には入れない。本文はテンプレートのまま（余白 2 行）を残す。潰さない。
+      call s:simple_add_parent(l:file, l:cur, l:cur_title)
+    endif
     call s:run_update_one_for(l:cur)
   endif
   call simple_yurii_note#push_history()
   execute 'edit ' . fnameescape(l:file)
   " 本文入力位置へ。zn は余白 2 行なので 2 行下、zk（グループ）は 1 行下。
+  " p は本文リンクを置いた行（リンクの直後に続けて書ける位置）。
   let l:h1 = search('^#\s', 'nw')
-  if l:h1 > 0 | call cursor(l:h1 + (empty(a:attr) ? 2 : 1), 1) | endif
+  if l:in_body
+    let l:hl = search('(' . escape(fnamemodify(l:cur, ':t'), '.*[]~\') . ')$', 'nw')
+  endif
+  if l:h1 > 0 && l:hl == 0 | let l:hl = l:h1 + (empty(a:attr) ? 2 : 1) | endif
+  if l:hl > 0 | call cursor(l:hl, 1) | call cursor(l:hl, col('$')) | endif
   startinsert
 endfunction
 
