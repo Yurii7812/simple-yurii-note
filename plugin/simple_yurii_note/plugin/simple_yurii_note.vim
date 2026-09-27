@@ -271,9 +271,12 @@ nnoremap <silent> 0 <Cmd>call simple_yurii_note#digit_key(10, "0")<CR>
 unlet s:n
 augroup simple_yurii_note_link_hints
   autocmd!
-  autocmd BufEnter,BufWinEnter,InsertLeave *.md call simple_yurii_note#refresh_link_hints()
-  " TextChanged は毎回走らせず、少し待ってから 1 回だけ（貼り付け等を固まらせない）
-  autocmd TextChanged *.md call s:schedule_refresh_link_hints()
+  " ノートを開いた時は即時に（1回だけ）。挿入モードを抜けた時（Esc）は
+  " 重い再計算（大きいノートで約45ms）を同期でやると Esc がもっさりするので、
+  " TextChanged と同じ debounce に回す。ラベルは少し遅れて更新されるが、
+  " 数字ジャンプ等は s:hint_positions を直接見るので機能は遅れない。
+  autocmd BufEnter,BufWinEnter *.md call simple_yurii_note#refresh_link_hints()
+  autocmd TextChanged,InsertLeave *.md call s:schedule_refresh_link_hints()
 augroup END
 
 " 連続する TextChanged をまとめて、最後の 1 回だけヒントを更新する。
