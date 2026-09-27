@@ -1183,9 +1183,18 @@ def _simple_parse(path: Path) -> dict:
     return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
 
 
-def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict) -> list[str]:
+def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict,
+                            prev_titles: dict | None = None) -> list[str]:
     """本文リンクの表示名を、リンク先の現在のタイトルに追従させる。
-    表示名がファイル名（自動生成）のときだけ更新し、手書き名は残す。"""
+
+    追従させる（＝自動生成とみなす）のは次のいずれか。手書き名は残す。
+      - 表示名がリンク先の現在のタイトルと同じ
+      - 表示名が前回 sync 時点のリンク先タイトルと同じ（＝追従してきただけ）
+      - 表示名がリンク先のファイル名（拡張子なし）と同じ（＝作成時の初期表示）
+    前回タイトルを照合しないと、タイトル変更後に「旧タイトル表示のまま」の
+    リンクを手書き名と誤判定して更新しない（simple_sync の retitle 不具合）。
+    """
+    prev_titles = prev_titles or {}
     out: list[str] = []
     for ln in body:
         def repl(m, _path=path):
@@ -1194,8 +1203,11 @@ def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict)
             if not base.lower().endswith(".md"):
                 return m.group(0)
             rp = resolver(base, _path.parent)
-            if rp is not None and rp in titles and disp == Path(base).stem:
-                return f"[{titles[rp]}]({tg})"
+            if rp is None or rp not in titles:
+                return m.group(0)
+            now = titles[rp]
+            if disp == now or disp == prev_titles.get(rp) or disp == Path(base).stem:
+                return f"[{now}]({tg})"
             return m.group(0)
         out.append(_SIMPLE_INLINE_LINK.sub(repl, ln))
     return out
@@ -1276,6 +1288,16 @@ def simple_sync(root) -> int:
     notes: dict[Path, dict] = {p.resolve(): _simple_parse(p) for p in _iter_md(root)}
     titles = {p: n["title"] for p, n in notes.items()}
 
+    # 前回 sync 時点のタイトル。本文リンクの表示名を「追従／手書きを残す」の
+    # 判定に使う（§_update_body_link_names）。無いとタイトル変更後のリンクが
+    # 旧タイトルのまま残る。
+    prev_state = _load_title_state(root)
+    prev_titles: dict[Path, str] = {}
+    for p in notes:
+        pid = _nid(p, root)
+        if pid is not None and pid in prev_state:
+            prev_titles[p] = prev_state[pid]
+
     def res(tg: str, base: Path) -> Path | None:
         tp = Path(tg).resolve() if tg.startswith("/") else (base / tg).resolve()
         return tp if tp in notes else None
@@ -1310,7 +1332,7 @@ def simple_sync(root) -> int:
     for p, n in notes.items():
         # 本文リンクの表示名をリンク先タイトルに追従させ、消えたファイルへの
         # リンクは掃除する（文章中に埋もれたリンクは表示名の文字だけ残す）。
-        n["body"] = _update_body_link_names(n["body"], p, res, titles)
+        n["body"] = _update_body_link_names(n["body"], p, res, titles, prev_titles)
         n["body"] = _prune_dangling(n["body"], p, res)
         # Parent はユーザー管理（追加・削除はしない）。ただし消えたファイルへの
         # リンクは残骸なので掃除する（行全体がリンクの行のみ）。表示名は追従。
@@ -1388,6 +1410,11 @@ def simple_sync(root) -> int:
         if new_text != old:
             p.write_text(new_text, encoding="utf-8")
             changed += 1
+    # 次回の追従判定のため、今回のタイトルを記録する（変化が無ければ書かない）。
+    cur_state = {pid: titles[p] for p in notes
+                 for pid in [_nid(p, root)] if pid is not None}
+    if cur_state != prev_state:
+        _save_title_state(root, cur_state)
     return changed
 
 

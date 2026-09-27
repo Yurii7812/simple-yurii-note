@@ -875,6 +875,67 @@ def test_simple_sync_prunes_dangling_links() -> None:
         check(v2.simple_sync(root) == 0, "掃除のあとは 2 回目 0 changes（冪等）")
 
 
+def _plain_note(path: Path, title: str, body: str) -> None:
+    path.write_text(
+        f"---\ntime: 2026-01-01 00:00:00\ntitle: {title}\n---\n\n# {title}\n\n"
+        f"{body}\n{UP_MARK}\n{DOWN_MARK}\n",
+        encoding="utf-8",
+    )
+
+
+def test_simple_sync_retitle_follows_body_link() -> None:
+    print("simple_sync: タイトル変更後、相手の本文リンク表示名が追従する"
+          "（旧タイトル表示を手書き名と誤判定しない）")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        _plain_note(root / "a.md", "OldTitle", "")
+        _plain_note(root / "b.md", "B", "[OldTitle](a.md)")
+        v2.simple_sync(root)  # 前回タイトルを記録（この時点では一致）
+        retitle(root / "a.md", "NewTitle")
+        v2.simple_sync(root)
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check("[NewTitle](a.md)" in b, "旧タイトル表示のリンクが新タイトルへ追従")
+        check("[OldTitle](a.md)" not in b, "旧タイトル表示は残らない")
+        check(v2.simple_sync(root) == 0, "追従後は 2 回目 0 changes（冪等）")
+
+
+def test_simple_sync_retitle_preserves_custom_body_link() -> None:
+    print("simple_sync: 手書きの本文リンク表示名はタイトル変更でも残す")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        _plain_note(root / "a.md", "本当のタイトル", "")
+        _plain_note(root / "b.md", "B", "[自分で付けた名前](a.md)")
+        v2.simple_sync(root)
+        retitle(root / "a.md", "変わったタイトル")
+        v2.simple_sync(root)
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check("[自分で付けた名前](a.md)" in b, "手書き名は追従しない")
+
+
+def test_simple_sync_filename_display_follows_before_first_sync() -> None:
+    print("simple_sync: 初期表示（ファイル名）は前回タイトル記録が無くても追従")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        _plain_note(root / "a.md", "a", "")
+        _plain_note(root / "b.md", "B", "[a](a.md)")
+        retitle(root / "a.md", "みかん")
+        v2.simple_sync(root)
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check("[みかん](a.md)" in b, "ファイル名表示は自動扱いで追従する")
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
