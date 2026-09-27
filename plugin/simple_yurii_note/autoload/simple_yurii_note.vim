@@ -7874,21 +7874,11 @@ function! simple_yurii_note#csv_new() abort
   execute 'edit ' . fnameescape(l:csv_path)
 endfunction
 
+" \tc / :TableToCsv … テーブルを同じページのまま CSV 行へ置き換える。
+" （以前は別の .csv ファイルを作って開いていた。CSV バッファで編集したいときは
+"  :TCSV / <leader>tc を使う。逆変換は \tt / :CsvToTable。）
 function! simple_yurii_note#table_to_csv() abort
-  let [l:start, l:end] = s:table_block_range(line('.'))
-  if l:start == 0
-    echo 'Not on a table'
-    return
-  endif
-  let l:src_name = expand('%:p')
-  let l:base_dir = empty(l:src_name) ? getcwd() : fnamemodify(l:src_name, ':p:h')
-  let l:csv_lines = s:table_lines_to_csv(getline(l:start, l:end))
-  let l:csv_path = s:next_t_csv_path(l:base_dir, l:start)
-  call writefile(l:csv_lines, l:csv_path)
-  call deletebufline('%', l:start, l:end)
-  call s:append_current_file_branch_link(s:csv_branch_link(l:csv_path))
-  silent! write
-  execute 'edit ' . fnameescape(l:csv_path)
+  return simple_yurii_note#table_to_csv_current()
 endfunction
 
 function! simple_yurii_note#csv_to_table() abort
@@ -7901,7 +7891,9 @@ function! simple_yurii_note#table_to_csv_current() abort
     echo 'Not on a table'
     return
   endif
+  let l:indent = matchstr(getline(l:start), '^\s*')
   let l:csv = s:table_lines_to_csv(getline(l:start, l:end))
+  call map(l:csv, 'l:indent . v:val')
   call setline(l:start, l:csv)
   if l:end > l:start + len(l:csv) - 1
     execute (l:start + len(l:csv)) . ',' . l:end . 'delete _'
