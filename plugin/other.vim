@@ -76,8 +76,11 @@ nnoremap j gj
 nnoremap k gk
 nnoremap <Up> gk
 nnoremap <Down> gj
-inoremap <Up> <C-o>gk
-inoremap <Down> <C-o>gj
+" <C-o> は InsertLeave/InsertLeavePre を発火するため、fcitx の自動 OFF
+" (InsertLeavePre → fcitx5-remote -c) が走り、日本語入力が終わってしまう。
+" 挿入モードのまま画面行を移動できる <C-g><Up>/<C-g><Down> を使う。
+inoremap <Up> <C-g><Up>
+inoremap <Down> <C-g><Down>
 
 " =========================================================
 " 設定編集
