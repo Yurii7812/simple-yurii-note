@@ -29113,7 +29113,7 @@
     wireToolbar();
     if (!hasFSA()) {
       $("overlay").hidden = false;
-      $("overlay-msg").innerHTML = "\u3053\u306E\u6A5F\u80FD\u306F <b>Chromium \u7CFB\u30D6\u30E9\u30A6\u30B6\uFF08Brave / Chrome\uFF09</b> \u304C\u5FC5\u8981\u3067\u3059\u3002<br>Firefox \u306F File System Access API \u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002";
+      $("overlay-msg").innerHTML = "\u3053\u306E\u30A2\u30D7\u30EA\u306F <b>Electron</b> \u3067\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002<br>Vim \u3067 <b>\\A</b>\uFF08\u307E\u305F\u306F <code>cd web &amp;&amp; npm run app</code>\uFF09\u3002<br><small>\u30D6\u30E9\u30A6\u30B6\u306F Brave \u3067 File System Access API \u304C\u4F7F\u3048\u306A\u3044\u305F\u3081\u52D5\u4F5C\u3057\u307E\u305B\u3093\u3002</small>";
       $("overlay-open").style.display = "none";
       $("overlay-pick").style.display = "none";
       return;
@@ -29125,6 +29125,7 @@
       $("overlay").hidden = false;
       $("overlay-msg").textContent = "\u524D\u56DE\u306E vault \u3078\u306E\u30A2\u30AF\u30BB\u30B9\u3092\u518D\u8A31\u53EF\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
       $("overlay-pick").textContent = "\u6A29\u9650\u3092\u8A31\u53EF\u3057\u3066\u958B\u304F";
+      $("overlay-pick").style.display = "";
       $("overlay-pick").onclick = async () => {
         if (await requestPermission(restored.handle)) {
           $("overlay").hidden = true;
@@ -29135,6 +29136,7 @@
     } else {
       $("overlay").hidden = false;
       $("overlay-msg").textContent = "vault \u30D5\u30A9\u30EB\u30C0\uFF08~/files/yurii-note\uFF09\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
+      $("overlay-open").style.display = "";
       $("overlay-open").onclick = pickAndOpen;
     }
   }
@@ -29144,7 +29146,15 @@
       $("overlay").hidden = true;
       await openVault(handle);
     } catch (e) {
-      if (e?.name !== "AbortError") toast("\u9078\u629E\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F: " + e.message);
+      if (e?.name === "AbortError") return;
+      const msg = $("overlay-msg");
+      if (e?.name === "SecurityError" || /security|not allowed|denied/i.test(e?.message || "")) {
+        msg.innerHTML = "\u30D6\u30E9\u30A6\u30B6\u304C\u30D5\u30A9\u30EB\u30C0\u9078\u629E\u3092\u8A31\u53EF\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002<br><b>Electron \u30A2\u30D7\u30EA</b>\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044\uFF08Vim \u3067 <b>\\A</b>\uFF09\u3002";
+        $("overlay").hidden = false;
+      } else {
+        msg.textContent = "\u9078\u629E\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F: " + (e?.message || e);
+        $("overlay").hidden = false;
+      }
     }
   }
   async function openVault(handle) {

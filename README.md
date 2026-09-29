@@ -8,7 +8,7 @@ Vim 上で Markdown ノートを運用するための PKM（Personal Knowledge M
 
 ## デスクトップアプリ / ブラウザ版
 
-`web/` に閲覧・編集アプリがあります。Vim からは `:SimpleWeb` または `\w`。
+`web/` に閲覧・編集アプリがあります。Vim からは `:SimpleWeb` または `\A`。
 
 - **既定は Electron デスクトップアプリ**（`web/electron/`）。vault のパスは固定で
   フォルダ選択は不要。保存時は Python の sync をそのまま呼びます。

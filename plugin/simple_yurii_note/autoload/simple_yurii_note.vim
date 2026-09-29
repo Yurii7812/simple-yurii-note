@@ -8481,7 +8481,7 @@ endfunction
 " Web app (ブラウザで閲覧・編集)
 "   ノート実体と同じフォルダをブラウザ (Brave/Chrome) から直接読み書きする。
 "   サーバーは立てない。同期ロジックは JS 移植 (web/src/sync.js)。
-"   起動: :SimpleWeb / \w
+"   起動: :SimpleWeb / \A
 " ---------------------------------------------------------------------------
 function! simple_yurii_note#open_web() abort
   " 関数内の <sfile> は信用できない（現在のバッファ名になることがある）。

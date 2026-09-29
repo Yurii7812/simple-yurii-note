@@ -5,11 +5,13 @@ vault のパスは固定でフォルダ選択は不要。ブラウザでも開�
 
 ## 起動
 
-- Vim から: `:SimpleWeb` または `\w`。
+- Vim から: `:SimpleWeb` または `\A`。
   - Electron（`web/node_modules/.bin/electron`）があればそれを起動。
     現在の PKM ルートを `PKM_ROOT` で渡す。
-  - 無ければ Brave/Chrome で `web/index.html` を開くフォールバック。
-- 直接: `cd web && npm run app`（Electron）/ `index.html` をブラウザで開く。
+  - 無ければブラウザで `web/index.html` を開くフォールバック（ただし下記のとおり
+    実質 Chrome 系のみ）。
+- 直接: `cd web && npm run app`、または `web/bin/simple-yurii-note-app.sh [VAULT_DIR]`。
+- `\w` は other.vim の `:wa`（保存）なので使わない。
 
 ## 見た目
 
@@ -64,7 +66,8 @@ npm test          # fsapi_test + browser_smoke
 
 ## 既知の制約
 
-- ブラウザ版は **Brave/Chrome 限定**（Firefox は FSA 非対応）。`file://` では
-  IndexedDB が応答しないことがあり、毎回フォルダ選択になる（`vault.js` で
-  タイムアウトしてフォールバック）。Electron ならこの問題は無い。
+- **ブラウザは実質 Chrome 系のみ**。この環境の **Brave は `file://` で
+  `showDirectoryPicker` が undefined** で、ブラウザ経路は動かない（なので Electron 既定）。
+  Firefox も FSA 非対応。`file://` では IndexedDB が応答しないことがあり、
+  毎回フォルダ選択になる（`vault.js` でタイムアウトしてフォールバック）。
 - ハブ (`\1`〜`\9`) は Vim の状態ファイルが vault 外にあり、アプリからは未対応。

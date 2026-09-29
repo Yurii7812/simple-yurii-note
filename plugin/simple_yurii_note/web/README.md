@@ -16,7 +16,7 @@ npm run app        # Electron
 # または index.html を Brave/Chrome で開く
 ```
 
-Vim からは `:SimpleWeb` / `\w`。詳細は `../docs/08-web.md`。
+Vim からは `:SimpleWeb` / `\A`。詳細は `../docs/08-web.md`。
 
 ## 開発
 

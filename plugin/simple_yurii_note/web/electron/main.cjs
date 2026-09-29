@@ -23,18 +23,33 @@ function createWindow() {
     },
   });
   Menu.setApplicationMenu(null);
+  const logs = [];
+  win.webContents.on("console-message", (...args) => {
+    const d = args[1] && typeof args[1] === "object" ? args[1] : null;
+    logs.push(d ? `${d.level}:${d.message}` : `${args[1]}:${args[2]}`);
+  });
+  win.webContents.on("preload-error", (_e, p, err) => logs.push("preload-error " + p + " " + err));
   win.loadFile(path.join(__dirname, "..", "index.html"));
   if (process.env.PKM_TEST_OUT) {
     win.webContents.on("did-finish-load", () => {
       setTimeout(async () => {
+        let diag = {};
         try {
-          const { files, rels } = await fsapi.listVault(ROOT);
-          require("fs").writeFileSync(process.env.PKM_TEST_OUT, JSON.stringify({ rels, count: files.length }));
-        } catch (e) {
-          require("fs").writeFileSync(process.env.PKM_TEST_OUT, "ERR " + e.message);
-        }
+          diag = await win.webContents.executeJavaScript(`(() => ({
+            hasPkm: !!window.pkm,
+            pkmMode: window.pkm && window.pkm.mode,
+            hasFSA: typeof window.showDirectoryPicker,
+            overlayHidden: document.getElementById('overlay') && document.getElementById('overlay').hidden,
+            overlayOpenDisplay: document.getElementById('overlay-open') && getComputedStyle(document.getElementById('overlay-open')).display,
+            noteItems: document.querySelectorAll('.note-item').length,
+            hasHook: !!window.simpleYuriiNote
+          }))()`);
+        } catch (e) { diag.err = String(e); }
+        diag.logs = logs.slice(-30);
+        try { diag.mainRels = (await fsapi.listVault(ROOT)).rels; } catch (e) { diag.mainErr = String(e); }
+        require("fs").writeFileSync(process.env.PKM_TEST_OUT, JSON.stringify(diag, null, 2));
         app.quit();
-      }, 2500);
+      }, 3000);
     });
   }
 }

@@ -68,7 +68,9 @@ async function boot() {
   wireToolbar();
   if (!vault.hasFSA()) {
     $("overlay").hidden = false;
-    $("overlay-msg").innerHTML = "この機能は <b>Chromium 系ブラウザ（Brave / Chrome）</b> が必要です。<br>Firefox は File System Access API に対応していません。";
+    $("overlay-msg").innerHTML = "このアプリは <b>Electron</b> で起動してください。<br>"
+      + "Vim で <b>\\A</b>（または <code>cd web &amp;&amp; npm run app</code>）。<br>"
+      + "<small>ブラウザは Brave で File System Access API が使えないため動作しません。</small>";
     $("overlay-open").style.display = "none";
     $("overlay-pick").style.display = "none";
     return;
@@ -80,6 +82,7 @@ async function boot() {
     $("overlay").hidden = false;
     $("overlay-msg").textContent = "前回の vault へのアクセスを再許可してください。";
     $("overlay-pick").textContent = "権限を許可して開く";
+    $("overlay-pick").style.display = "";
     $("overlay-pick").onclick = async () => {
       if (await vault.requestPermission(restored.handle)) { $("overlay").hidden = true; await openVault(restored.handle); }
       else toast("権限がありません");
@@ -88,6 +91,7 @@ async function boot() {
   } else {
     $("overlay").hidden = false;
     $("overlay-msg").textContent = "vault フォルダ（~/files/yurii-note）を選択してください。";
+    $("overlay-open").style.display = "";
     $("overlay-open").onclick = pickAndOpen;
   }
 }
@@ -98,7 +102,16 @@ async function pickAndOpen() {
     $("overlay").hidden = true;
     await openVault(handle);
   } catch (e) {
-    if (e?.name !== "AbortError") toast("選択できませんでした: " + e.message);
+    if (e?.name === "AbortError") return;
+    const msg = $("overlay-msg");
+    if (e?.name === "SecurityError" || /security|not allowed|denied/i.test(e?.message || "")) {
+      msg.innerHTML = "ブラウザがフォルダ選択を許可しませんでした。<br>"
+        + "<b>Electron アプリ</b>を使ってください（Vim で <b>\\A</b>）。";
+      $("overlay").hidden = false;
+    } else {
+      msg.textContent = "選択できませんでした: " + (e?.message || e);
+      $("overlay").hidden = false;
+    }
   }
 }
 
