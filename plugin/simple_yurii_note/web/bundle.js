@@ -330,10 +330,6 @@
   function isElectron() {
     return typeof window !== "undefined" && !!window.pkm && window.pkm.mode === "electron";
   }
-  function hasFSA() {
-    if (isElectron()) return true;
-    return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
-  }
   function rootName() {
     return isElectron() ? window.pkm.rootName : "";
   }
@@ -372,45 +368,11 @@
     } catch {
     }
   }
-  async function idbGet(key) {
-    try {
-      const db = await withTimeout(idbOpen(), 1500, "idb open");
-      return await withTimeout(new Promise((res, rej) => {
-        const tx = db.transaction(IDB_STORE, "readonly");
-        const r = tx.objectStore(IDB_STORE).get(key);
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      }), 1500, "idb get");
-    } catch {
-      return void 0;
-    }
-  }
   async function pickVault() {
     if (isElectron()) return null;
     const handle = await window.showDirectoryPicker({ id: "simple-yurii-note-vault", mode: "readwrite" });
     await idbSet("vault", handle);
     return handle;
-  }
-  async function restoreVault() {
-    if (isElectron()) return { handle: null, granted: true };
-    const handle = await idbGet("vault");
-    if (!handle) return null;
-    try {
-      const p = await handle.queryPermission({ mode: "readwrite" });
-      return { handle, granted: p === "granted" };
-    } catch {
-      return null;
-    }
-  }
-  async function requestPermission(handle) {
-    if (isElectron()) return true;
-    try {
-      let p = await handle.queryPermission({ mode: "readwrite" });
-      if (p !== "granted") p = await handle.requestPermission({ mode: "readwrite" });
-      return p === "granted";
-    } catch {
-      return false;
-    }
   }
   async function* walk(dirHandle, base2 = "") {
     for await (const [name2, handle] of dirHandle.entries()) {
@@ -29111,34 +29073,27 @@
   }
   async function boot() {
     wireToolbar();
-    if (!hasFSA()) {
-      $("overlay").hidden = false;
-      $("overlay-msg").innerHTML = "\u3053\u306E\u30A2\u30D7\u30EA\u306F <b>Electron</b> \u3067\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002<br>Vim \u3067 <b>\\A</b>\uFF08\u307E\u305F\u306F <code>cd web &amp;&amp; npm run app</code>\uFF09\u3002<br><small>\u30D6\u30E9\u30A6\u30B6\u306F Brave \u3067 File System Access API \u304C\u4F7F\u3048\u306A\u3044\u305F\u3081\u52D5\u4F5C\u3057\u307E\u305B\u3093\u3002</small>";
-      $("overlay-open").style.display = "none";
-      $("overlay-pick").style.display = "none";
+    if (isElectron()) {
+      await openVault(null);
       return;
     }
-    const restored = await restoreVault();
-    if (restored?.granted) {
-      await openVault(restored.handle);
-    } else if (restored) {
-      $("overlay").hidden = false;
-      $("overlay-msg").textContent = "\u524D\u56DE\u306E vault \u3078\u306E\u30A2\u30AF\u30BB\u30B9\u3092\u518D\u8A31\u53EF\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
-      $("overlay-pick").textContent = "\u6A29\u9650\u3092\u8A31\u53EF\u3057\u3066\u958B\u304F";
-      $("overlay-pick").style.display = "";
-      $("overlay-pick").onclick = async () => {
-        if (await requestPermission(restored.handle)) {
-          $("overlay").hidden = true;
-          await openVault(restored.handle);
-        } else toast("\u6A29\u9650\u304C\u3042\u308A\u307E\u305B\u3093");
-      };
-      $("overlay-open").style.display = "none";
-    } else {
-      $("overlay").hidden = false;
-      $("overlay-msg").textContent = "vault \u30D5\u30A9\u30EB\u30C0\uFF08~/files/yurii-note\uFF09\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
-      $("overlay-open").style.display = "";
-      $("overlay-open").onclick = pickAndOpen;
+    const electronUA = /Electron/i.test(navigator.userAgent);
+    const canFSA = typeof window.showDirectoryPicker === "function";
+    $("overlay").hidden = false;
+    $("overlay-open").style.display = "none";
+    $("overlay-pick").style.display = "none";
+    if (electronUA) {
+      $("overlay-msg").innerHTML = "\u30A2\u30D7\u30EA\u306E\u521D\u671F\u5316\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08preload \u672A\u8AAD\u8FBC\uFF09\u3002<br>\u4E00\u5EA6\u9589\u3058\u3066 <b>\\A</b> \u307E\u305F\u306F <code>npm run app</code> \u3067\u8D77\u52D5\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044\u3002";
+      return;
     }
+    if (!canFSA) {
+      $("overlay-msg").innerHTML = "\u3053\u306E\u30A2\u30D7\u30EA\u306F <b>Electron</b> \u3067\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002<br>Vim \u3067 <b>\\A</b>\u3001\u307E\u305F\u306F <code>web/bin/simple-yurii-note-app.sh</code>\u3002<br><small>\u30D6\u30E9\u30A6\u30B6\uFF08Brave / Firefox\uFF09\u3067\u306F\u30CE\u30FC\u30C8\u3092\u8AAD\u307F\u66F8\u304D\u3067\u304D\u307E\u305B\u3093\u3002</small>";
+      return;
+    }
+    $("overlay-msg").innerHTML = "\u3053\u306E\u30A2\u30D7\u30EA\u306F <b>Electron</b> \u3067\u306E\u5229\u7528\u3092\u63A8\u5968\u3057\u307E\u3059\u3002<br>Chrome \u7CFB\u30D6\u30E9\u30A6\u30B6\u3067\u7D9A\u3051\u308B\u5834\u5408\u3060\u3051\u3001\u4E0B\u306E\u30DC\u30BF\u30F3\u3067\u30D5\u30A9\u30EB\u30C0\u3092\u9078\u3079\u307E\u3059\u3002";
+    $("overlay-pick").textContent = "Chrome: \u30D5\u30A9\u30EB\u30C0\u3092\u9078\u3076";
+    $("overlay-pick").style.display = "";
+    $("overlay-pick").onclick = pickAndOpen;
   }
   async function pickAndOpen() {
     try {

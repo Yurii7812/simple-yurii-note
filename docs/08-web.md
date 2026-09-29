@@ -11,6 +11,8 @@ vault のパスは固定でフォルダ選択は不要。ブラウザでも開�
   - 無ければブラウザで `web/index.html` を開くフォールバック（ただし下記のとおり
     実質 Chrome 系のみ）。
 - 直接: `cd web && npm run app`、または `web/bin/simple-yurii-note-app.sh [VAULT_DIR]`。
+  - アプリメニュー用: `~/.local/share/applications/simple-yurii-note.desktop`
+    （`~/.local/bin/simple-yurii-note-app` 経由）。
 - `\w` は other.vim の `:wa`（保存）なので使わない。
 
 ## 見た目

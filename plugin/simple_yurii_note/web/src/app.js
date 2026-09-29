@@ -66,34 +66,33 @@ function titleOf(rel) { return state.notes.get(rel)?.title || stem(rel); }
 
 async function boot() {
   wireToolbar();
-  if (!vault.hasFSA()) {
-    $("overlay").hidden = false;
-    $("overlay-msg").innerHTML = "このアプリは <b>Electron</b> で起動してください。<br>"
-      + "Vim で <b>\\A</b>（または <code>cd web &amp;&amp; npm run app</code>）。<br>"
-      + "<small>ブラウザは Brave で File System Access API が使えないため動作しません。</small>";
-    $("overlay-open").style.display = "none";
-    $("overlay-pick").style.display = "none";
+  // Electron ならパス固定で自動オープン。フォルダ選択は無い。
+  if (vault.isElectron()) {
+    await openVault(null);
     return;
   }
-  const restored = await vault.restoreVault();
-  if (restored?.granted) {
-    await openVault(restored.handle);
-  } else if (restored) {
-    $("overlay").hidden = false;
-    $("overlay-msg").textContent = "前回の vault へのアクセスを再許可してください。";
-    $("overlay-pick").textContent = "権限を許可して開く";
-    $("overlay-pick").style.display = "";
-    $("overlay-pick").onclick = async () => {
-      if (await vault.requestPermission(restored.handle)) { $("overlay").hidden = true; await openVault(restored.handle); }
-      else toast("権限がありません");
-    };
-    $("overlay-open").style.display = "none";
-  } else {
-    $("overlay").hidden = false;
-    $("overlay-msg").textContent = "vault フォルダ（~/files/yurii-note）を選択してください。";
-    $("overlay-open").style.display = "";
-    $("overlay-open").onclick = pickAndOpen;
+  // ここから下はブラウザで開いた場合。基本は Electron を案内する。
+  const electronUA = /Electron/i.test(navigator.userAgent);
+  const canFSA = typeof window.showDirectoryPicker === "function";
+  $("overlay").hidden = false;
+  $("overlay-open").style.display = "none";
+  $("overlay-pick").style.display = "none";
+  if (electronUA) {
+    $("overlay-msg").innerHTML = "アプリの初期化に失敗しました（preload 未読込）。<br>"
+      + "一度閉じて <b>\\A</b> または <code>npm run app</code> で起動し直してください。";
+    return;
   }
+  if (!canFSA) {
+    $("overlay-msg").innerHTML = "このアプリは <b>Electron</b> で起動してください。<br>"
+      + "Vim で <b>\\A</b>、または <code>web/bin/simple-yurii-note-app.sh</code>。<br>"
+      + "<small>ブラウザ（Brave / Firefox）ではノートを読み書きできません。</small>";
+    return;
+  }
+  $("overlay-msg").innerHTML = "このアプリは <b>Electron</b> での利用を推奨します。<br>"
+    + "Chrome 系ブラウザで続ける場合だけ、下のボタンでフォルダを選べます。";
+  $("overlay-pick").textContent = "Chrome: フォルダを選ぶ";
+  $("overlay-pick").style.display = "";
+  $("overlay-pick").onclick = pickAndOpen;
 }
 
 async function pickAndOpen() {
