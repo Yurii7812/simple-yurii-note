@@ -8475,3 +8475,32 @@ function! simple_yurii_note#open_gallery_smart() abort
     call simple_yurii_note#open_folder_gallery()
   endif
 endfunction
+
+
+" ---------------------------------------------------------------------------
+" Web app (ブラウザで閲覧・編集)
+"   ノート実体と同じフォルダをブラウザ (Brave/Chrome) から直接読み書きする。
+"   サーバーは立てない。同期ロジックは JS 移植 (web/src/sync.js)。
+"   起動: :SimpleWeb / \w
+" ---------------------------------------------------------------------------
+function! simple_yurii_note#open_web() abort
+  let l:web = expand('<sfile>:p:h:h') . '/web/index.html'
+  if !filereadable(l:web)
+    echoerr 'simple_yurii_note: web app not found: ' . l:web
+    return
+  endif
+  let l:url = 'file://' . l:web
+  for l:b in ['brave-browser', 'google-chrome', 'chromium', 'chromium-browser']
+    if executable(l:b)
+      call job_start([l:b, '--app=' . l:url], {'out_io': 'null', 'err_io': 'null'})
+      echo 'simple_yurii_note web: ' . l:url
+      return
+    endif
+  endfor
+  if executable('xdg-open')
+    call job_start(['xdg-open', l:url], {'out_io': 'null', 'err_io': 'null'})
+    echo 'simple_yurii_note web: ' . l:url
+  else
+    echoerr 'simple_yurii_note: no browser found'
+  endif
+endfunction

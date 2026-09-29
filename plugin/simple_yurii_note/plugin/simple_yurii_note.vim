@@ -186,6 +186,7 @@ command! -nargs=? Gallery    call simple_yurii_note#open_gallery(<q-args>)
 command! -nargs=? SimpleGallery call simple_yurii_note#open_gallery(<q-args>)
 command! -nargs=? GalleryFolder call simple_yurii_note#open_folder_gallery(<q-args>)
 command! -nargs=? SimpleGalleryFolder call simple_yurii_note#open_folder_gallery(<q-args>)
+command!          SimpleWeb  call simple_yurii_note#open_web()
 " テーブル操作コマンド
 command! -nargs=* TN         call simple_yurii_note#table_new(<q-args>)
 command! -nargs=* NewTable   call simple_yurii_note#table_new(<q-args>)
@@ -381,6 +382,8 @@ nnoremap <silent> \p        <Cmd>call simple_yurii_note#paste_clipboard_link_her
 xnoremap <silent> \p        :<C-u>call simple_yurii_note#linkify_selection_from_clipboard()<CR>
 nnoremap <silent> \oe       <Cmd>OutlineEdit<CR>
 nnoremap <silent> \gi       <Cmd>call simple_yurii_note#open_gallery_smart()<CR>
+" ブラウザ版 (Obsidian 風) を開く。vault はブラウザ側でフォルダ選択。
+nnoremap <silent> \w        <Cmd>call simple_yurii_note#open_web()<CR>
 
 " ---------------------------------------------------------------------------
 " Shift-Tab / BackTab の端末互換

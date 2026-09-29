@@ -58,6 +58,7 @@ simple_yurii_note#open_gallery
 simple_yurii_note#open_gallery_smart
 simple_yurii_note#open_index
 simple_yurii_note#open_link_under_cursor
+simple_yurii_note#open_web
 simple_yurii_note#outline_edit
 simple_yurii_note#outline_editor_apply
 simple_yurii_note#outline_shift_current

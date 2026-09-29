@@ -1,0 +1,27 @@
+{
+  "name": "simple-yurii-note-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "simple_yurii_note をブラウザで閲覧・編集するローカルアプリ (File System Access API)",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --target=chrome100 --outfile=bundle.js --log-level=warning",
+    "watch": "esbuild src/main.js --bundle --format=iife --target=chrome100 --outfile=bundle.js --watch",
+    "test": "node test/browser_smoke.mjs",
+    "test:diff": "node test/sync_diff.mjs"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.4",
+    "@codemirror/commands": "^6.7.1",
+    "@codemirror/lang-markdown": "^6.3.1",
+    "@codemirror/language": "^6.10.8",
+    "@codemirror/search": "^6.5.8",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.35.0",
+    "@lezer/highlight": "^1.2.1",
+    "d3-force": "^3.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}
