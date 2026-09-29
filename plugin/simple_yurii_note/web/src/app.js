@@ -178,9 +178,15 @@ function renderTabs() {
 
 // ---------------------------------------------------------------- open note
 
-function openNote(rel) {
+async function openNote(rel) {
   if (!state.notes.has(rel)) { toast("見つかりません: " + rel); return; }
-  if (state.dirty && state.current && !confirm("未保存の変更があります。破棄して移動しますか？")) return;
+  if (state.current === rel) { renderSidebar(); renderTabs(); return; }
+  if (state.dirty) {
+    const ok = await saveCurrent({ autosave: true });
+    if (!ok && !confirm("保存できませんでした（Vim が使用中の可能性）。破棄して移動しますか？")) return;
+    state.dirty = false;
+    updateDirtyUI();
+  }
   if (!state.tabs.includes(rel)) state.tabs.push(rel);
   state.current = rel;
   const n = state.notes.get(rel);
@@ -192,7 +198,6 @@ function openNote(rel) {
   $("title-input").disabled = false;
   $("empty").hidden = true;
   $("note-view").hidden = false;
-  state.dirty = false;
   updateDirtyUI();
 }
 
@@ -334,12 +339,29 @@ function pickNote(cb) {
 
 // ---------------------------------------------------------------- save & sync
 
-function markDirty() { state.dirty = true; updateDirtyUI(); }
+function markDirty() { state.dirty = true; updateDirtyUI(); scheduleAutosave(); }
+
+let autosaveTimer = null;
+let autosaveBusy = false;
+const AUTOSAVE_MS = 1200;
+
+function scheduleAutosave() {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => { autosaveTimer = null; runAutosave(); }, AUTOSAVE_MS);
+}
+
+async function runAutosave() {
+  if (!state.dirty || !state.current) return;
+  if (autosaveBusy) { scheduleAutosave(); return; }
+  autosaveBusy = true;
+  try { await saveCurrent({ autosave: true }); }
+  finally { autosaveBusy = false; }
+}
 
 function updateDirtyUI() {
   $("note-view").classList.toggle("dirty", state.dirty);
   $("save-btn").disabled = !state.dirty;
-  $("save-state").textContent = state.dirty ? "未保存" : "保存済";
+  $("save-state").textContent = state.dirty ? "編集中…" : "自動保存済";
 }
 
 function setFmTitle(fm, title) {
@@ -352,12 +374,15 @@ function setFmTitle(fm, title) {
   return out;
 }
 
-async function saveCurrent() {
+async function saveCurrent(opts = {}) {
   const rel = state.current;
-  if (!rel) return;
+  if (!rel) return true;
+  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
   if (await vault.hasSwap(state.root, rel)) {
-    if (!confirm("Vim がこのノートを開いている可能性があります（.swp あり）。保存しますか？")) return;
+    if (opts.autosave) { $("save-state").textContent = "Vim が使用中"; return false; }
+    if (!confirm("Vim がこのノートを開いている可能性があります（.swp あり）。保存しますか？")) return false;
   }
+  if (!opts.autosave) $("save-state").textContent = "保存中…";
   const title = $("title-input").value.trim() || stem(rel);
   const fm = setFmTitle(state.fm, title);
   const bodyLines = editor.getDoc().split("\n");
@@ -368,16 +393,24 @@ async function saveCurrent() {
     lines.push(UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines);
   }
   while (lines.length && lines[lines.length - 1] === "") lines.pop();
-  state.files.set(rel, lines.join("\n") + "\n");
-  await syncAndWrite();
-  toast("保存しました");
+  const raw = lines.join("\n") + "\n";
+  await syncAndWrite(new Map([[rel, raw]]));
+  if (!opts.autosave) toast("保存しました");
+  return true;
 }
 
-async function syncAndWrite() {
-  const res = runSync(state.files, state.titleState);
-  for (const [rel, text] of res.changed) {
-    await vault.writeFile(state.root, rel, text);
-    state.files.set(rel, text);
+// state.files は「最後にディスクと一致していた内容」を保つ。
+// 編集は overrides として渡し、sync 後の最終テキストがディスクと違うものだけ書く。
+async function syncAndWrite(overrides) {
+  const input = new Map(state.files);
+  if (overrides) for (const [k, v] of overrides) input.set(k, v);
+  const res = runSync(input, state.titleState);
+  for (const [file, text] of input) {
+    const finalText = res.changed.has(file) ? res.changed.get(file) : text;
+    if (finalText !== state.files.get(file)) {
+      await vault.writeFile(state.root, file, finalText);
+      state.files.set(file, finalText);
+    }
   }
   if (res.titleStateChanged) {
     await vault.writeFile(state.root, ".pkm_title_state_v2.json", dumpTitleState(res.titleState));
@@ -421,6 +454,7 @@ async function newNote(isGroup) {
   const attr = isGroup ? "attribute: group\n" : "";
   let text = `---\ntime: ${isoNow()}\ntitle: ${t}\n${attr}---\n\n# ${t}\n\n`;
   const cur = state.current;
+  const overrides = new Map();
   if (cur) {
     text += "\n" + UP_MARK + "\n" + `[${titleOf(cur)}](${cur})` + "\n" + DOWN_MARK + "\n";
     // 今のノート側に子リンクを足す
@@ -430,16 +464,13 @@ async function newNote(isGroup) {
     while (bodyLines.length && bodyLines[bodyLines.length - 1].trim() === "") bodyLines.pop();
     if (bodyLines.length && !LINK_LINE_RE.test(bodyLines[bodyLines.length - 1])) bodyLines.push("");
     bodyLines.push(link);
-    const fm = state.fm;
-    const lines = [...fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
-    state.files.set(cur, lines.join("\n") + "\n");
+    const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
+    overrides.set(cur, lines.join("\n") + "\n");
   } else {
     text += "\n" + UP_MARK + "\n" + DOWN_MARK + "\n";
   }
-  state.files.set(name, text);
-  if (!state.rels.includes(name)) state.rels.push(name);
-  state.rels.sort();
-  await syncAndWrite();
+  overrides.set(name, text);
+  await syncAndWrite(overrides);
   openNote(name);
   toast(isGroup ? "グループを作成しました" : "ノートを作成しました");
 }
@@ -503,6 +534,13 @@ function wireToolbar() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveCurrent(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); $("search").focus(); $("search").select(); }
     if (e.key === "Escape") { $("modal").hidden = true; $("graph-view").hidden = true; }
+  });
+  // 自動保存: タブを隠す/閉じる前に書き残す
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state.dirty) saveCurrent({ autosave: true });
+  });
+  window.addEventListener("beforeunload", (e) => {
+    if (state.dirty) { e.preventDefault(); e.returnValue = ""; }
   });
 }
 

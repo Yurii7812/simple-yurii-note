@@ -30147,12 +30147,22 @@
       box.appendChild(t2);
     }
   }
-  function openNote(rel) {
+  async function openNote(rel) {
     if (!state.notes.has(rel)) {
       toast("\u898B\u3064\u304B\u308A\u307E\u305B\u3093: " + rel);
       return;
     }
-    if (state.dirty && state.current && !confirm("\u672A\u4FDD\u5B58\u306E\u5909\u66F4\u304C\u3042\u308A\u307E\u3059\u3002\u7834\u68C4\u3057\u3066\u79FB\u52D5\u3057\u307E\u3059\u304B\uFF1F")) return;
+    if (state.current === rel) {
+      renderSidebar();
+      renderTabs();
+      return;
+    }
+    if (state.dirty) {
+      const ok = await saveCurrent({ autosave: true });
+      if (!ok && !confirm("\u4FDD\u5B58\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\uFF08Vim \u304C\u4F7F\u7528\u4E2D\u306E\u53EF\u80FD\u6027\uFF09\u3002\u7834\u68C4\u3057\u3066\u79FB\u52D5\u3057\u307E\u3059\u304B\uFF1F")) return;
+      state.dirty = false;
+      updateDirtyUI();
+    }
     if (!state.tabs.includes(rel)) state.tabs.push(rel);
     state.current = rel;
     const n = state.notes.get(rel);
@@ -30164,7 +30174,6 @@
     $("title-input").disabled = false;
     $("empty").hidden = true;
     $("note-view").hidden = false;
-    state.dirty = false;
     updateDirtyUI();
   }
   function loadNoteToEditor(n) {
@@ -30323,11 +30332,35 @@
   function markDirty() {
     state.dirty = true;
     updateDirtyUI();
+    scheduleAutosave();
+  }
+  var autosaveTimer = null;
+  var autosaveBusy = false;
+  var AUTOSAVE_MS = 1200;
+  function scheduleAutosave() {
+    if (autosaveTimer) clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = null;
+      runAutosave();
+    }, AUTOSAVE_MS);
+  }
+  async function runAutosave() {
+    if (!state.dirty || !state.current) return;
+    if (autosaveBusy) {
+      scheduleAutosave();
+      return;
+    }
+    autosaveBusy = true;
+    try {
+      await saveCurrent({ autosave: true });
+    } finally {
+      autosaveBusy = false;
+    }
   }
   function updateDirtyUI() {
     $("note-view").classList.toggle("dirty", state.dirty);
     $("save-btn").disabled = !state.dirty;
-    $("save-state").textContent = state.dirty ? "\u672A\u4FDD\u5B58" : "\u4FDD\u5B58\u6E08";
+    $("save-state").textContent = state.dirty ? "\u7DE8\u96C6\u4E2D\u2026" : "\u81EA\u52D5\u4FDD\u5B58\u6E08";
   }
   function setFmTitle(fm, title) {
     const out = fm.slice();
@@ -30341,12 +30374,21 @@
     else out.push("title: " + title);
     return out;
   }
-  async function saveCurrent() {
+  async function saveCurrent(opts = {}) {
     const rel = state.current;
-    if (!rel) return;
-    if (await hasSwap(state.root, rel)) {
-      if (!confirm("Vim \u304C\u3053\u306E\u30CE\u30FC\u30C8\u3092\u958B\u3044\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08.swp \u3042\u308A\uFF09\u3002\u4FDD\u5B58\u3057\u307E\u3059\u304B\uFF1F")) return;
+    if (!rel) return true;
+    if (autosaveTimer) {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = null;
     }
+    if (await hasSwap(state.root, rel)) {
+      if (opts.autosave) {
+        $("save-state").textContent = "Vim \u304C\u4F7F\u7528\u4E2D";
+        return false;
+      }
+      if (!confirm("Vim \u304C\u3053\u306E\u30CE\u30FC\u30C8\u3092\u958B\u3044\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08.swp \u3042\u308A\uFF09\u3002\u4FDD\u5B58\u3057\u307E\u3059\u304B\uFF1F")) return false;
+    }
+    if (!opts.autosave) $("save-state").textContent = "\u4FDD\u5B58\u4E2D\u2026";
     const title = $("title-input").value.trim() || stem(rel);
     const fm = setFmTitle(state.fm, title);
     const bodyLines = editor.getDoc().split("\n");
@@ -30357,15 +30399,21 @@
       lines.push(UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines);
     }
     while (lines.length && lines[lines.length - 1] === "") lines.pop();
-    state.files.set(rel, lines.join("\n") + "\n");
-    await syncAndWrite();
-    toast("\u4FDD\u5B58\u3057\u307E\u3057\u305F");
+    const raw = lines.join("\n") + "\n";
+    await syncAndWrite(/* @__PURE__ */ new Map([[rel, raw]]));
+    if (!opts.autosave) toast("\u4FDD\u5B58\u3057\u307E\u3057\u305F");
+    return true;
   }
-  async function syncAndWrite() {
-    const res = runSync(state.files, state.titleState);
-    for (const [rel, text] of res.changed) {
-      await writeFile(state.root, rel, text);
-      state.files.set(rel, text);
+  async function syncAndWrite(overrides2) {
+    const input = new Map(state.files);
+    if (overrides2) for (const [k, v] of overrides2) input.set(k, v);
+    const res = runSync(input, state.titleState);
+    for (const [file, text] of input) {
+      const finalText = res.changed.has(file) ? res.changed.get(file) : text;
+      if (finalText !== state.files.get(file)) {
+        await writeFile(state.root, file, finalText);
+        state.files.set(file, finalText);
+      }
     }
     if (res.titleStateChanged) {
       await writeFile(state.root, ".pkm_title_state_v2.json", dumpTitleState(res.titleState));
@@ -30415,6 +30463,7 @@ ${attr}---
 
 `;
     const cur2 = state.current;
+    const overrides2 = /* @__PURE__ */ new Map();
     if (cur2) {
       text += "\n" + UP_MARK + `
 [${titleOf(cur2)}](${cur2})
@@ -30425,16 +30474,13 @@ ${attr}---
       while (bodyLines.length && bodyLines[bodyLines.length - 1].trim() === "") bodyLines.pop();
       if (bodyLines.length && !LINK_LINE_RE2.test(bodyLines[bodyLines.length - 1])) bodyLines.push("");
       bodyLines.push(link);
-      const fm = state.fm;
-      const lines = [...fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
-      state.files.set(cur2, lines.join("\n") + "\n");
+      const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
+      overrides2.set(cur2, lines.join("\n") + "\n");
     } else {
       text += "\n" + UP_MARK + "\n" + DOWN_MARK + "\n";
     }
-    state.files.set(name2, text);
-    if (!state.rels.includes(name2)) state.rels.push(name2);
-    state.rels.sort();
-    await syncAndWrite();
+    overrides2.set(name2, text);
+    await syncAndWrite(overrides2);
     openNote(name2);
     toast(isGroup ? "\u30B0\u30EB\u30FC\u30D7\u3092\u4F5C\u6210\u3057\u307E\u3057\u305F" : "\u30CE\u30FC\u30C8\u3092\u4F5C\u6210\u3057\u307E\u3057\u305F");
   }
@@ -30509,6 +30555,15 @@ ${attr}---
       if (e.key === "Escape") {
         $("modal").hidden = true;
         $("graph-view").hidden = true;
+      }
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && state.dirty) saveCurrent({ autosave: true });
+    });
+    window.addEventListener("beforeunload", (e) => {
+      if (state.dirty) {
+        e.preventDefault();
+        e.returnValue = "";
       }
     });
   }

@@ -131,7 +131,17 @@ async function main(){
     for(const k of new Set([...Object.keys(after),...Object.keys(EXPECT)])){
       if((after[k]||'') !== (EXPECT[k]||'')) diff[k] = {got:(after[k]||'').slice(0,200), want:(EXPECT[k]||'').slice(0,200)};
     }
-    setRes({errs:window.__errs, ui, diffKeys:Object.keys(diff), diff});
+    step('autosave');
+    // 本文を変えて待つだけ（明示保存しない）で自動保存されるか
+    const beforeAuto = (await readAll(root))['a.md'] || '';
+    app.getEditor().setDoc(app.getEditor().getDoc().trimEnd() + '\\n[日記](g.md)');
+    const dirtyAfterSet = app.state.dirty;
+    const docAfterSet = app.getEditor().getDoc();
+    await sleep(1900);
+    const afterAuto = (await readAll(root))['a.md'] || '';
+    const autosaveOk = afterAuto.includes('(g.md)') && afterAuto !== beforeAuto && app.state.dirty === false;
+    const autoDbg = {dirty: app.state.dirty, dirtyAfterSet, docTail: docAfterSet.slice(-40), has: afterAuto.includes('(g.md)'), changed: afterAuto !== beforeAuto, afterTail: afterAuto.slice(-120)};
+    setRes({errs:window.__errs, ui, diffKeys:Object.keys(diff), diff, autosaveOk, autoDbg});
   }catch(e){ setRes({errs:window.__errs, fatal:String(e&&e.stack||e)}); }
 }
 main();

@@ -8484,7 +8484,14 @@ endfunction
 "   起動: :SimpleWeb / \w
 " ---------------------------------------------------------------------------
 function! simple_yurii_note#open_web() abort
-  let l:web = expand('<sfile>:p:h:h') . '/web/index.html'
+  " 関数内の <sfile> は信用できない（現在のバッファ名になることがある）。
+  " Python スクリプトのパス (…/simple_yurii_note/python/… or legacy/…) から
+  " プラグインルートを導出する。
+  if !exists('g:simple_yurii_note_python') || empty(g:simple_yurii_note_python)
+    echoerr 'simple_yurii_note: g:simple_yurii_note_python is not set'
+    return
+  endif
+  let l:web = fnamemodify(g:simple_yurii_note_python, ':h:h') . '/web/index.html'
   if !filereadable(l:web)
     echoerr 'simple_yurii_note: web app not found: ' . l:web
     return
