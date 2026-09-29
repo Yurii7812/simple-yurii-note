@@ -11,9 +11,10 @@ process.env.PKM_ROOT_NAME = path.basename(ROOT);
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1120,
-    height: 800,
-    title: "simple_yurii_note — " + ROOT,
+    width: 1200,
+    height: 850,
+    show: false,
+    title: "simple_yurii_note",
     backgroundColor: "#ffffff",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -29,6 +30,11 @@ function createWindow() {
     logs.push(d ? `${d.level}:${d.message}` : `${args[1]}:${args[2]}`);
   });
   win.webContents.on("preload-error", (_e, p, err) => logs.push("preload-error " + p + " " + err));
+  win.once("ready-to-show", () => {
+    win.maximize();
+    win.show();
+    win.focus();
+  });
   win.loadFile(path.join(__dirname, "..", "index.html"));
   if (process.env.PKM_TEST_OUT) {
     win.webContents.on("did-finish-load", () => {

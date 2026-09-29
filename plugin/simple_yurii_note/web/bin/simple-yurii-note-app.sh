@@ -12,4 +12,8 @@ fi
 VAULT=${1:-"$HOME/files/yurii-note"}
 PKM_ROOT=$(CDPATH= cd -- "$VAULT" && pwd)
 export PKM_ROOT
-exec "$ELECTRON" "$WEB"
+# --no-sandbox: 環境によってはサンドボックスで起動できないため
+# --ozone-platform=x11: KDE Wayland では Wayland+Vulkan でウィンドウが出ないことがある
+#                       (XWayland 経由の x11 が確実)
+# --disable-gpu: 上記 Vulkan 問題の回避
+exec "$ELECTRON" "$WEB" --no-sandbox --ozone-platform=x11 --disable-gpu
