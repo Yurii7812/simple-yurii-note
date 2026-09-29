@@ -3250,6 +3250,25 @@ function! s:extract_markdown_link(raw) abort
   return {'text': '', 'target': ''}
 endfunction
 
+" file:///path や file://localhost/path のような file URI をローカルパスへ直す。
+" Dolphin などでファイルをコピーすると text/uri-list の file:// URI が
+" クリップボードに載るため、そのままだとリンク先として解決できない。
+" file:// 以外（http 等）やホスト付き URI はそのまま返す。
+function! s:percent_decode(text) abort
+  return substitute(a:text, '%\(\x\x\)', '\=nr2char(str2nr(submatch(1), 16))', 'g')
+endfunction
+
+function! s:file_uri_to_path(target) abort
+  let l:m = matchlist(a:target, '^file://\([^/]*\)\(/.*\)$')
+  if empty(l:m)
+    return a:target
+  endif
+  if !empty(l:m[1]) && l:m[1] !=# 'localhost'
+    return a:target
+  endif
+  return s:percent_decode(l:m[2])
+endfunction
+
 function! s:extract_target(raw) abort
   let l:raw = trim(a:raw)
   if empty(l:raw)
@@ -3257,9 +3276,9 @@ function! s:extract_target(raw) abort
   endif
   let l:link = s:extract_markdown_link(l:raw)
   if !empty(l:link.target)
-    return l:link.target
+    return s:file_uri_to_path(l:link.target)
   endif
-  return l:raw
+  return s:file_uri_to_path(l:raw)
 endfunction
 
 function! s:extract_targets_from_clipboard(text) abort
@@ -3305,7 +3324,7 @@ function! s:is_filename_target(target) abort
   if empty(l:t)
     return 0
   endif
-  if l:t =~# '\v^\w\+://'
+  if l:t =~# '\v^\w+://'
     return 0
   endif
   return l:t =~# '\v(^|[\\/])[^\\/]+\.[A-Za-z0-9_-]+$'
@@ -3320,7 +3339,7 @@ function! s:existing_title_for_target(target) abort
 endfunction
 
 function! s:link_from_target(target) abort
-  let l:target = trim(a:target)
+  let l:target = s:file_uri_to_path(trim(a:target))
   if empty(l:target)
     return ''
   endif
@@ -3339,7 +3358,7 @@ endfunction
 function! s:link_from_clipboard_raw(raw) abort
   let l:link = s:extract_markdown_link(a:raw)
   if !empty(l:link.target)
-    let l:display_target = s:display_target_from_current_dir(l:link.target)
+    let l:display_target = s:display_target_from_current_dir(s:file_uri_to_path(l:link.target))
     return '[' . l:link.text . '](' . l:display_target . ')'
   endif
   return s:link_from_target(a:raw)
