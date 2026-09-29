@@ -1,7 +1,6 @@
 import * as vault from "./vault.js";
 import { runSync, parseNote, dumpTitleState, relPath, dirname, basename, stem, normalizePath, UP_MARK, DOWN_MARK } from "./sync.js";
 import { createEditor } from "./editor.js";
-import { createGraph } from "./graph.js";
 
 const LINK_LINE_RE = /^\s*(\[[^\]]*\]\([^)]+\))\s*(?:—\s*\S+)?\s*$/;
 const INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/;
@@ -23,7 +22,6 @@ const state = {
 
 const els = {};
 let editor = null;
-let graph = null;
 
 function $(id) { return document.getElementById(id); }
 
@@ -112,7 +110,7 @@ async function openVault(handle) {
   state.titleState = titleState;
   parseAll();
   $("toolbar").classList.add("ready");
-  $("vault-name").textContent = handle.name;
+  $("vault-name").textContent = vault.isElectron() ? (vault.rootName() || "vault") : handle.name;
   renderSidebar();
   const start = state.notes.has("index.md") ? "index.md" : state.rels[0];
   if (start) openNote(start);
@@ -402,6 +400,24 @@ async function saveCurrent(opts = {}) {
 // state.files は「最後にディスクと一致していた内容」を保つ。
 // 編集は overrides として渡し、sync 後の最終テキストがディスクと違うものだけ書く。
 async function syncAndWrite(overrides) {
+  if (vault.isElectron()) {
+    // Electron: 生テキストを書いて Python sync に任せる（同期の正は Python）
+    const writes = [];
+    if (overrides) for (const [rel, text] of overrides) writes.push({ rel, text });
+    await vault.apply(state.root, { writes });
+    const rv = await vault.readVault(null);
+    state.files = rv.files;
+    state.rels = rv.rels;
+    state.titleState = rv.titleState;
+    parseAll();
+    renderSidebar();
+    syncSelfFromNotes();
+    renderRelations();
+    renderTabs();
+    state.dirty = false;
+    updateDirtyUI();
+    return;
+  }
   const input = new Map(state.files);
   if (overrides) for (const [k, v] of overrides) input.set(k, v);
   const res = runSync(input, state.titleState);
@@ -419,18 +435,21 @@ async function syncAndWrite(overrides) {
   state.rels = [...state.files.keys()].sort();
   parseAll();
   renderSidebar();
-  const n = state.notes.get(state.current);
-  if (n) {
-    state.fm = n.fm.slice();
-    state.parentLines = n.parent.slice();
-    state.backLines = n.back.slice();
-    const body = n.body.join("\n");
-    if (editor.getDoc() !== body) { state.loading = true; editor.setDoc(body); state.loading = false; }
-  }
+  syncSelfFromNotes();
   renderRelations();
   renderTabs();
   state.dirty = false;
   updateDirtyUI();
+}
+
+function syncSelfFromNotes() {
+  const n = state.notes.get(state.current);
+  if (!n) return;
+  state.fm = n.fm.slice();
+  state.parentLines = n.parent.slice();
+  state.backLines = n.back.slice();
+  const body = n.body.join("\n");
+  if (editor.getDoc() !== body) { state.loading = true; editor.setDoc(body); state.loading = false; }
 }
 
 // ---------------------------------------------------------------- new / delete
@@ -491,32 +510,6 @@ async function deleteCurrent() {
   toast("削除しました");
 }
 
-// ---------------------------------------------------------------- graph
-
-function openGraph() {
-  const gv = $("graph-view");
-  gv.hidden = false;
-  if (!graph) graph = createGraph(gv, { onOpen: (rel) => { gv.hidden = true; openNote(rel); } });
-  const ids = state.rels;
-  const nodes = ids.map((rel) => ({ id: rel, title: titleOf(rel), attr: state.notes.get(rel)?.attr }));
-  const seen = new Set();
-  const links = [];
-  for (const rel of ids) {
-    const n = state.notes.get(rel);
-    for (const ln of [...n.body, ...n.parent, ...n.back]) {
-      const m = INLINE_LINK_RE.exec(ln);
-      if (!m) continue;
-      const rp = resolver(m[2], dirname(rel));
-      if (!rp || rp === rel) continue;
-      const key = rel < rp ? rel + "\t" + rp : rp + "\t" + rel;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      links.push({ source: rel, target: rp });
-    }
-  }
-  graph.setData(nodes, links);
-}
-
 // ---------------------------------------------------------------- toolbar wiring
 
 function wireToolbar() {
@@ -525,15 +518,13 @@ function wireToolbar() {
   $("new-btn").onclick = () => newNote(false);
   $("new-group-btn").onclick = () => newNote(true);
   $("delete-btn").onclick = deleteCurrent;
-  $("graph-btn").onclick = openGraph;
-  $("graph-close").onclick = () => { $("graph-view").hidden = true; };
+  $("theme-btn").onclick = toggleTheme;
   $("search").oninput = renderSidebar;
   $("title-input").oninput = markDirty;
-  $("title-input").onchange = () => { /* title is applied on save */ };
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); saveCurrent(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); $("search").focus(); $("search").select(); }
-    if (e.key === "Escape") { $("modal").hidden = true; $("graph-view").hidden = true; }
+    if (e.key === "Escape") { $("modal").hidden = true; }
   });
   // 自動保存: タブを隠す/閉じる前に書き残す
   document.addEventListener("visibilitychange", () => {
@@ -544,18 +535,38 @@ function wireToolbar() {
   });
 }
 
+// ---------------------------------------------------------------- theme
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem("pkm-theme", theme); } catch { /* ignore */ }
+  const b = $("theme-btn");
+  if (b) b.textContent = theme === "dark" ? "☀" : "🌙";
+}
+
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+}
+
+function initTheme() {
+  let t = "light";
+  try { t = localStorage.getItem("pkm-theme") || "light"; } catch { /* ignore */ }
+  applyTheme(t);
+}
+
 // ---------------------------------------------------------------- boot
 
 function init() {
   for (const id of ["overlay", "overlay-msg", "overlay-open", "overlay-pick", "toolbar", "vault-name",
     "search", "note-list", "tabs", "title-input", "editor", "empty", "note-view", "save-btn",
-    "new-btn", "new-group-btn", "delete-btn", "graph-btn", "graph-view", "graph-close", "modal",
+    "new-btn", "new-group-btn", "delete-btn", "theme-btn", "modal",
     "toast", "save-state", "open-btn", "rel-parent", "rel-children", "rel-back"]) {
     els[id] = $(id);
   }
   $("rel-parent").dataset.label = "親 (Parent)";
   $("rel-children").dataset.label = "子 (本文リンク)";
   $("rel-back").dataset.label = "被リンク (BackLink)";
+  initTheme();
 
   editor = createEditor({
     parent: $("editor"),

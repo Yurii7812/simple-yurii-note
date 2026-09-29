@@ -6,11 +6,16 @@ Vim/Neovim 上で Markdown ベースのノートを管理するための PKM（P
 ---
 Vim 上で Markdown ノートを運用するための PKM（Personal Knowledge Management）プラグインです。
 
-## ブラウザ版 (Obsidian 風)
+## デスクトップアプリ / ブラウザ版
 
-`web/index.html` を **Brave / Chrome** で開くと、vault をブラウザから直接閲覧・編集できます
-（サーバーなし・File System Access API）。Vim からは `:SimpleWeb` または `\w` で起動。
-保存時は JS に移植した sync が走り、`### Parent` / `### BackLink` を Python と同じ規則で更新します。
+`web/` に閲覧・編集アプリがあります。Vim からは `:SimpleWeb` または `\w`。
+
+- **既定は Electron デスクトップアプリ**（`web/electron/`）。vault のパスは固定で
+  フォルダ選択は不要。保存時は Python の sync をそのまま呼びます。
+- Electron が無ければ **Brave / Chrome** で `web/index.html` を開くフォールバック
+  （File System Access API）。
+- ライトが既定、🌙/☀ でダーク切替。編集は CodeMirror 6 のライブプレビュー、自動保存。
+
 詳細は [`docs/08-web.md`](docs/08-web.md)。
 
 ## インストール

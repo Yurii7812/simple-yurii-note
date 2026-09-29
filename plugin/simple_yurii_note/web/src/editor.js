@@ -172,11 +172,10 @@ const mdHighlight = HighlightStyle.define([
   { tag: tags.heading, fontWeight: "700" },
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
-  { tag: tags.link, color: "#6aa6ff" },
-  { tag: tags.url, color: "#6aa6ff" },
-  { tag: tags.monospace, color: "#e5a05a" },
-  { tag: tags.comment, color: "#8a8f98" },
-  { tag: tags.quote, color: "#9aa0a6" },
+  { tag: tags.link, color: "var(--accent)" },
+  { tag: tags.url, color: "var(--accent)" },
+  { tag: tags.comment, color: "var(--fg-dim)" },
+  { tag: tags.quote, color: "var(--fg-dim)" },
 ]);
 
 const readOnlyCompartment = new Compartment();

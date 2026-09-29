@@ -1,5 +1,7 @@
-// File System Access API を使った vault への読み書き。
-// サーバーは使わない。ブラウザ (Chromium/Brave) から直接フォルダを触る。
+// vault への読み書き。実行環境で実装を切り替える。
+//   - Electron: main プロセスの window.pkm (Node fs + Python sync) を使う
+//   - ブラウザ : File System Access API を直接使う
+// 同期の正は Python (note_format_v2.py)。Electron では保存時に main が Python を呼ぶ。
 
 import { TITLE_STATE_FILE } from "./sync.js";
 
@@ -9,15 +11,20 @@ const SKIP_DIRS = new Set(["_tmp"]);
 
 const blobURLCache = new Map();
 
+export function isElectron() {
+  return typeof window !== "undefined" && !!window.pkm && window.pkm.mode === "electron";
+}
+
 export function hasFSA() {
+  if (isElectron()) return true;
   return typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
 }
 
-export async function isSecureEnough() {
-  return typeof window !== "undefined" && window.isSecureContext;
+export function rootName() {
+  return isElectron() ? window.pkm.rootName : "";
 }
 
-// ---- IndexedDB (ハンドル保存) ----------------------------------------------
+// ---- IndexedDB (ブラウザのハンドル保存) ------------------------------------
 
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -32,7 +39,6 @@ function idbOpen() {
   });
 }
 
-// file:// などで IndexedDB が応答しない場合に備えてタイムアウトさせる。
 function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
@@ -69,25 +75,26 @@ async function idbGet(key) {
 // ---- vault 選択・権限 -------------------------------------------------------
 
 export async function pickVault() {
+  if (isElectron()) return null; // パス固定。選択不要
   const handle = await window.showDirectoryPicker({ id: "simple-yurii-note-vault", mode: "readwrite" });
   await idbSet("vault", handle);
   return handle;
 }
 
-// 保存済みハンドルを返す。権限は付与済みなら granted、未付与なら needsPermission。
 export async function restoreVault() {
+  if (isElectron()) return { handle: null, granted: true };
   const handle = await idbGet("vault");
   if (!handle) return null;
   try {
     const p = await handle.queryPermission({ mode: "readwrite" });
-    if (p === "granted") return { handle, granted: true };
-    return { handle, granted: false };
+    return { handle, granted: p === "granted" };
   } catch {
     return null;
   }
 }
 
 export async function requestPermission(handle) {
+  if (isElectron()) return true;
   try {
     let p = await handle.queryPermission({ mode: "readwrite" });
     if (p !== "granted") p = await handle.requestPermission({ mode: "readwrite" });
@@ -103,16 +110,16 @@ async function* walk(dirHandle, base = "") {
   for await (const [name, handle] of dirHandle.entries()) {
     if (name.startsWith(".") || SKIP_DIRS.has(name)) continue;
     const rel = base ? `${base}/${name}` : name;
-    if (handle.kind === "directory") {
-      yield* walk(handle, rel);
-    } else {
-      yield { rel, name, handle };
-    }
+    if (handle.kind === "directory") yield* walk(handle, rel);
+    else yield { rel, name, handle };
   }
 }
 
-// 全 .md を読む -> Map<rel, text>。 titleState も返す。
 export async function readVault(rootHandle) {
+  if (isElectron()) {
+    const { files, rels, titleState } = await window.pkm.listVault();
+    return { files: new Map(files), rels, titleState: titleState || {} };
+  }
   const files = new Map();
   const rels = [];
   for await (const ent of walk(rootHandle)) {
@@ -121,15 +128,14 @@ export async function readVault(rootHandle) {
       const f = await ent.handle.getFile();
       files.set(ent.rel, await f.text());
       rels.push(ent.rel);
-    } catch { /* 読めないファイルは飛ばす */ }
+    } catch { /* skip */ }
   }
   rels.sort();
   let titleState = {};
   try {
     const fh = await rootHandle.getFileHandle(TITLE_STATE_FILE);
-    const f = await fh.getFile();
-    titleState = JSON.parse(await f.text());
-  } catch { /* 無ければ空 */ }
+    titleState = JSON.parse(await (await fh.getFile()).text());
+  } catch { /* none */ }
   return { files, rels, titleState };
 }
 
@@ -141,13 +147,14 @@ async function getDirHandle(rootHandle, dirPath, create = false) {
 }
 
 export async function readFile(rootHandle, rel) {
+  if (isElectron()) return window.pkm.read(rel);
   const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
   const fh = await dir.getFileHandle(rel.slice(rel.lastIndexOf("/") + 1));
-  const f = await fh.getFile();
-  return f.text();
+  return (await fh.getFile()).text();
 }
 
 export async function writeFile(rootHandle, rel, text) {
+  if (isElectron()) return window.pkm.write(rel, text);
   const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "", true);
   const fh = await dir.getFileHandle(rel.slice(rel.lastIndexOf("/") + 1), { create: true });
   const w = await fh.createWritable();
@@ -155,27 +162,31 @@ export async function writeFile(rootHandle, rel, text) {
   await w.close();
 }
 
-export async function writeRawFile(rootHandle, rel, data) {
-  const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "", true);
-  const fh = await dir.getFileHandle(rel.slice(rel.lastIndexOf("/") + 1), { create: true });
-  const w = await fh.createWritable();
-  await w.write(data);
-  await w.close();
-}
-
 export async function deleteFile(rootHandle, rel) {
+  if (isElectron()) return window.pkm.remove(rel);
   const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
   await dir.removeEntry(rel.slice(rel.lastIndexOf("/") + 1));
 }
 
-// 画像などを blob URL で返す (表示用)。rel は vault 相対パス。
+// Electron 専用: 複数書き込み + 削除 + Python sync をまとめて実行
+export async function apply(rootHandle, { writes = [], deletes = [] } = {}) {
+  if (!isElectron()) throw new Error("apply() is Electron-only");
+  return window.pkm.apply({ writes, deletes });
+}
+
 export async function objectURL(rootHandle, rel) {
   if (blobURLCache.has(rel)) return blobURLCache.get(rel);
+  if (isElectron()) {
+    const bytes = await window.pkm.readBinary(rel);
+    if (!bytes) return null;
+    const url = URL.createObjectURL(new Blob([bytes]));
+    blobURLCache.set(rel, url);
+    return url;
+  }
   try {
     const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
     const fh = await dir.getFileHandle(rel.slice(rel.lastIndexOf("/") + 1));
-    const f = await fh.getFile();
-    const url = URL.createObjectURL(f);
+    const url = URL.createObjectURL(await fh.getFile());
     blobURLCache.set(rel, url);
     return url;
   } catch {
@@ -188,8 +199,8 @@ export function invalidateObjectURL(rel) {
   if (u) { URL.revokeObjectURL(u); blobURLCache.delete(rel); }
 }
 
-// Vim が同じノートを開いているか (.name.swp の存在チェック)。
 export async function hasSwap(rootHandle, rel) {
+  if (isElectron()) return window.pkm.hasSwap(rel);
   try {
     const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
     const name = rel.slice(rel.lastIndexOf("/") + 1);

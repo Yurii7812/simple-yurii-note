@@ -8491,12 +8491,26 @@ function! simple_yurii_note#open_web() abort
     echoerr 'simple_yurii_note: g:simple_yurii_note_python is not set'
     return
   endif
-  let l:web = fnamemodify(g:simple_yurii_note_python, ':h:h') . '/web/index.html'
-  if !filereadable(l:web)
-    echoerr 'simple_yurii_note: web app not found: ' . l:web
+  let l:webdir = fnamemodify(g:simple_yurii_note_python, ':h:h') . '/web'
+  let l:root = s:get_pkm_root()
+  " デスクトップアプリ (Electron) があればそれを使う。パス固定でフォルダ選択不要。
+  let l:electron = l:webdir . '/node_modules/.bin/electron'
+  if executable(l:electron) && filereadable(l:webdir . '/electron/main.cjs')
+    let l:opts = {'out_io': 'null', 'err_io': 'null'}
+    if !empty(l:root)
+      let l:opts.env = {'PKM_ROOT': fnamemodify(l:root, ':p')}
+    endif
+    call job_start([l:electron, l:webdir], l:opts)
+    echo 'simple_yurii_note app: ' . (empty(l:root) ? '(既定)' : fnamemodify(l:root, ':p'))
     return
   endif
-  let l:url = 'file://' . l:web
+  " フォールバック: ブラウザで HTML を開く
+  let l:html = l:webdir . '/index.html'
+  if !filereadable(l:html)
+    echoerr 'simple_yurii_note: app not found: ' . l:html
+    return
+  endif
+  let l:url = 'file://' . l:html
   for l:b in ['brave-browser', 'google-chrome', 'chromium', 'chromium-browser']
     if executable(l:b)
       call job_start([l:b, '--app=' . l:url], {'out_io': 'null', 'err_io': 'null'})

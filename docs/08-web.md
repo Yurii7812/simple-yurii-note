@@ -1,100 +1,70 @@
-# 08 Web アプリ (ブラウザで閲覧・編集)
+# 08 アプリ (Electron / ブラウザ)
 
-Obsidian 風に、ブラウザからノートを閲覧・編集する。**サーバーは立てない。**
-`web/index.html` をブラウザで開き、vault フォルダを選ぶと、File System Access API
-で直接読み書きする。
-
-## 対応ブラウザ
-
-- **Brave / Chrome（Chromium 系）** が必要。`file://` でも `showDirectoryPicker()` が
-  使えることを確認済み（`isSecureContext === true`）。
-- **Firefox は非対応**（File System Access API が無い。OPFS のみ）。
+ノートを閲覧・編集する。**既定は Electron デスクトップアプリ**。
+vault のパスは固定でフォルダ選択は不要。ブラウザでも開ける（File System Access API）。
 
 ## 起動
 
-- Vim から: `:SimpleWeb` または `\w`（`brave-browser --app=file://…/web/index.html`）。
-- 直接: `web/index.html` をダブルクリック / ブラウザにドラッグ。
-- 初回は「開く」→ `~/files/yurii-note` を選択。次回は権限の再許可を求められることがある。
+- Vim から: `:SimpleWeb` または `\w`。
+  - Electron（`web/node_modules/.bin/electron`）があればそれを起動。
+    現在の PKM ルートを `PKM_ROOT` で渡す。
+  - 無ければ Brave/Chrome で `web/index.html` を開くフォールバック。
+- 直接: `cd web && npm run app`（Electron）/ `index.html` をブラウザで開く。
 
-## できること
+## 見た目
 
-- 一覧（検索で絞り込み）/ タブ / リンククリックで移動
-- ライブプレビュー編集（**CodeMirror 6**、Obsidian と同じ方式。生 Markdown を保持）
-- タイトル編集、親 (Parent) / 子 (本文リンク) / 被リンク (BackLink) パネル
-- 新規ノート / 新規グループ作成、削除
-- 画像インライン表示、リンク入力補完
-- グラフビュー (d3-force)
-- **自動保存**（既定。編集が止まって約 1.2 秒で保存。タブ切替/非表示/移動時にも保存）。
-  手動は `Ctrl+S`。保存時に JS 版 sync が走り、全ノートの Parent/BackLink/表示名を
-  Python と同じ規則で更新する。
-- 保存中/保存済はツールバーに表示。Vim が同じノートを開いている（`.swp` あり）ときは
-  自動保存を止めて警告する（`Ctrl+S` で強制保存は可能）。
+- **ライトが既定**。ツールバー右の 🌙/☀ でダークと切替（`localStorage` に記憶）。
+- Obsidian 風の装飾はしない。左に一覧、中央に編集、右にリンク。できる限りシンプル。
 
-## 編集モデル（ノートを壊さないための分離）
+## 編集モデル（ノートを壊さない）
 
-本文だけをライブプレビューで編集する。front matter はタイトル欄、`### Parent` は
-関係パネルのリスト、`### BackLink` は読み取り専用（自動生成）。セクション見出しを
-WYSIWYG に食わせないので、`### Parent` / `### BackLink` が壊れない。
+本文だけをライブプレビュー（CodeMirror 6、生 Markdown を保持）で編集する。
+front matter はタイトル欄、`### Parent` は右パネルのリスト、`### BackLink` は読み取り専用。
+保存時に `### Parent` / `### BackLink` の見出しを WYSIWYG に食わせないので壊れない。
 
-保存時の流れ:
-1. タイトル + 本文 + Parent リストからノートの生テキストを組み立てる。
-2. 全ノートに対して `web/src/sync.js` の `runSync()` を実行。
-3. 変更のあったノートと `.pkm_title_state_v2.json` を書き戻す。
+## 保存と同期
 
-`state.files` は「最後にディスクと一致していた内容」を保持し、編集分は overrides として
-渡す。sync 後の最終テキストがディスクと違うノートだけを書く（編集が sync で変わらなくても
-必ずディスクへ反映される）。
+- **自動保存**（既定。編集が止まって約 1.2 秒。タブ切替/非表示/移動時にも保存）。手動は `Ctrl+S`。
+- **同期の正は Python** `note_format_v2.py` の `simple_sync()`。
+  - Electron: main プロセスが保存後に `python3 note_format_v2.py update ROOT` を実行。
+  - ブラウザ: `web/src/sync.js` の JS 移植を実行（サーバーも Python も呼べないため）。
+- Vim が同じノートを開いている（`.swp` あり）ときは自動保存を止めて警告。
+  `Ctrl+S` で強制保存は可能。
 
-## 同期は二重実装（最重要）
-
-- 正: `plugin/simple_yurii_note/python/note_format_v2.py` の `simple_sync()`。
-- 移植: `web/src/sync.js` の `runSync()`。**挙動を変えたら必ず差分テストを回す。**
-
-```bash
-cd web
-# Python と JS の出力が全ファイル一致するか
-cp -r ~/files/yurii-note /tmp/A ; cp -r ~/files/yurii-note /tmp/B
-python3 ../python/note_format_v2.py update /tmp/A
-node test/sync_diff.mjs /tmp/B
-diff -r /tmp/A /tmp/B        # 空なら一致
-```
-
-差分テストで確認済みのケース: タイトル変更の追従 / グループ→Parent / BackLink /
-消えたファイルの行リンク掃除 / 文中リンクの文字残し / index の追加・削除 /
-`.pkm_title_state_v2.json` が無い状態。
-
-## ビルドと E2E テスト
-
-```bash
-cd web
-npm install          # 初回のみ
-npm run build        # src/*.js -> bundle.js (esbuild, IIFE)
-npm test             # headless Chromium で実走。JS sync == Python sync と UI を検証
-```
-
-- `bundle.js` は**コミットする**（実行時に Node 不要にするため）。`node_modules/` は除外。
-- E2E は `showDirectoryPicker` をインメモリ FS モックに差し替え、`file://` で実際に動かす。
-- `file://` では **IndexedDB が応答しない**ことがある。`vault.js` は IDB を
-  タイムアウト付きで扱い、使えなければ毎回フォルダ選択にフォールバックする。
-
-## 既知の制約
-
-- ハブ (`\1`〜`\9`) は Vim の状態ファイルが vault 外 (`~/.vim/simple_yurii_note`) に
-  あるため、ブラウザからは触れない（ブラウザ側では未実装）。
-- Vim と同時に同じノートを開くと競合しうる。保存時 `.swp` があれば警告する。
-- 非 UTF-8 の `.md` は文字化けしうる（Python 側は `UnicodeDecodeError` で落ちる）。
-
-## ファイル構成
+## 構成
 
 | パス | 役割 |
 | --- | --- |
+| `web/electron/main.cjs` | Electron main。ウィンドウ + IPC + Python sync 呼び出し |
+| `web/electron/preload.cjs` | `window.pkm` を公開（contextIsolation） |
+| `web/electron/fsapi.cjs` | vault の fs 操作 + Python sync（electron 非依存・テスト可能） |
 | `web/index.html` | 画面の骨組み。`bundle.js` を読む |
-| `web/styles.css` | ダークテーマ + ライブプレビューの見た目 |
-| `web/bundle.js` | esbuild で固めた本体（コミット対象） |
-| `web/src/sync.js` | **simple_sync の JS 移植**（正は Python） |
-| `web/src/vault.js` | File System Access API の読み書き・権限・IDB |
+| `web/styles.css` | ライト/ダークのテーマ（CSS 変数） |
+| `web/bundle.js` | esbuild で固めたレンダラ本体（コミット対象） |
+| `web/src/app.js` | 状態管理と UI |
 | `web/src/editor.js` | CodeMirror 6 + ライブプレビュー |
-| `web/src/graph.js` | d3-force のグラフ |
-| `web/src/app.js` | 全体の状態管理と UI |
-| `web/test/sync_diff.mjs` | Python との差分テスト |
-| `web/test/browser_smoke.mjs` | headless Chromium の E2E |
+| `web/src/vault.js` | 読み書きの入口。Electron は `window.pkm`、ブラウザは FSA |
+| `web/src/sync.js` | `simple_sync` の JS 移植（ブラウザ用。正は Python） |
+| `web/test/fsapi_test.mjs` | fsapi + Python sync の単体テスト |
+| `web/test/browser_smoke.mjs` | headless Chromium の E2E（JS sync == Python sync） |
+| `web/test/sync_diff.mjs` | JS sync と Python sync の差分テスト |
+
+## 開発
+
+```bash
+cd web
+npm install
+npm run build     # src/*.js -> bundle.js
+npm test          # fsapi_test + browser_smoke
+```
+
+- `bundle.js` はコミットする。`node_modules/` はコミットしない。
+- Electron の起動確認（ヘッドレス）:
+  `xvfb-run -a node_modules/.bin/electron . --no-sandbox`（`PKM_ROOT` で vault 指定）。
+
+## 既知の制約
+
+- ブラウザ版は **Brave/Chrome 限定**（Firefox は FSA 非対応）。`file://` では
+  IndexedDB が応答しないことがあり、毎回フォルダ選択になる（`vault.js` で
+  タイムアウトしてフォールバック）。Electron ならこの問題は無い。
+- ハブ (`\1`〜`\9`) は Vim の状態ファイルが vault 外にあり、アプリからは未対応。
