@@ -2896,7 +2896,13 @@ endfunction
 
 " 数字キー（生の 1-9,0）… 本文 → Parent/Child の順で通し番号にした N 番目の
 " リンクを直接開く（0は10番目）。該当が無ければ通常のカウント/行頭移動として送る。
+" 起動直後など、まだラベルを計算していないバッファでは初回だけ計算し直す。
+" （計算前は候補ゼロ＝素のカウント扱いになり、1打目が「効かない」ように
+"  見えるのを防ぐ。ラベル更新は debounce されるが数字ジャンプは常に最新を見る。）
 function! simple_yurii_note#digit_key(idx, key) abort
+  if !has_key(b:, 'yurii_hint_map')
+    call simple_yurii_note#refresh_link_hints()
+  endif
   let l:pos = s:hint_positions()
   if !empty(l:pos) && a:idx >= 1 && a:idx <= len(l:pos)
     call s:hint_go(l:pos[a:idx - 1])

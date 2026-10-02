@@ -86,10 +86,10 @@ endfunction
 
 " ===========================================================================
 " fzf バックエンド
-"   - gs        … vault を ripgrep で全文検索（fzf#vim#grep2 = :Rg と同じ見た目・挙動）
+"   - gs        … vault を ripgrep で全文検索（fzf#vim#grep2 = :Rg と同じ見た目・挙動。
+"                 右ペインは fzf.vim 標準の preview.sh（preview_highlight は使わない））
 "   - <Space>   … 今のノートに表示中のリンクだけ → Enter で開く
 "   - \L         … タイトルだけで検索（見た目は :Rg）→ Enter でリンクを挿入
-"   右ペインは preview_highlight.py でクエリ語を ANSI ハイライト。
 "   fzf / fzf.vim が無い環境ではフォールバックせず明示的にエラーにする。
 " ===========================================================================
 
@@ -240,20 +240,14 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … vault を ripgrep で全文検索する（:Rg と同じ見た目・挙動）。
-"   一覧は rg の出力（パス:行:桁: 本文、ヒット語は rg の色）、
-"   右ペインは preview_highlight.py でクエリ語をハイライト（該当行へスクロール）。
+" gs … vault を ripgrep で全文検索する（:Rg と完全に同じ見た目・挙動）。
+"   右ペインは fzf.vim 標準の preview.sh（:Rg と同じ。該当行を反転して表示）。
 "   fzf#vim#grep2 を使うので、フッタ・multi・キーは :Rg と同一。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  let l:preview = s:preview_script()
-  if exists(':Rg') && !empty(l:preview)
+  if exists(':Rg')
     let l:rg = 'rg --column --line-number --no-heading --color=always --smart-case -e'
-    let l:spec = {'dir': s:root(), 'options': [
-          \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
-          \ '--bind', 'ctrl-/:toggle-preview',
-          \ ]}
-    call fzf#vim#grep2(l:rg, '', l:spec, 0)
+    call fzf#vim#grep2(l:rg, '', fzf#vim#with_preview({'dir': s:root()}), 0)
     return
   endif
   " フォールバック（fzf.vim が無い時）: タイトル＋本文の全件リスト
