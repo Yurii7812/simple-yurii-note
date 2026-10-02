@@ -173,6 +173,7 @@ endfunction
 function! s:fzf_options(with, accept, prompt) abort
   return '--delimiter="\t" --with-nth=' . a:with . ' --accept-nth=' . a:accept
         \ . ' --layout=reverse --height=90% --prompt=' . shellescape(a:prompt)
+        \ . ' --color=hl:red:bold,hl+:red:bold'
         \ . ' --preview "sed -n ''1,200p'' -- {1}" --preview-window=right:50%'
 endfunction
 
@@ -208,10 +209,26 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … 全ノート検索（タイトル＋本文）→ 開く
+" gs … 全ノート検索（タイトル＋本文）。表示は YAML タイトル＋ヒット抜粋。
+" note_search.py がクエリごとに候補を作り直し（change:reload）、fzf が
+" タイトル／抜粋のヒット語をハイライトする。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  let l:notes = s:build_notes(s:root())
+  let l:root = s:root()
+  let l:script = get(g:, 'simple_yurii_search_notesearch', '')
+  if !empty(l:script) && filereadable(l:script) && executable('python3')
+    let l:cmd = 'python3 ' . shellescape(l:script) . ' ' . shellescape(l:root)
+    let l:opts = s:fzf_options('2,3', '1', 'Search> ')
+          \ . ' --bind "change:reload:' . l:cmd . ' {q}"'
+    call fzf#run(fzf#wrap({
+          \ 'source': l:cmd . " ''",
+          \ 'sink': function('s:open_selected'),
+          \ 'options': l:opts,
+          \ }))
+    return
+  endif
+  " フォールバック（note_search.py が無い時）: 全件リストのみ（本文検索なし）
+  let l:notes = s:build_notes(l:root)
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
   call s:fzf_run(l:entries, function('s:open_selected'),
