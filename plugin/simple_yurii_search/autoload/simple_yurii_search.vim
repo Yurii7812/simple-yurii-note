@@ -165,11 +165,12 @@ function! s:current_buffer_links() abort
 endfunction
 
 " <Space> とフォールバック用の fzf オプション。
+" 検索バーは gs（note_search.py 経路）と同じ**下**に置く（--layout=reverse を付けない）。
 " 注意: --nth は --with-nth の変換後に効くので、検索対象＝表示対象に揃える。
 "   <Space> … --with-nth=2（タイトルだけ表示＝タイトル検索）/ 出力はパス
 function! s:fzf_options(with, accept, prompt) abort
   return '--delimiter="\t" --with-nth=' . a:with . ' --accept-nth=' . a:accept
-        \ . ' --layout=reverse --height=90% --prompt=' . shellescape(a:prompt)
+        \ . ' --height=90% --prompt=' . shellescape(a:prompt)
         \ . ' --color=hl:red:bold,hl+:red:bold'
         \ . ' --preview "sed -n ''1,200p'' -- {1}" --preview-window=right:50%'
 endfunction
