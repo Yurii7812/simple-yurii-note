@@ -191,6 +191,22 @@ function! s:open_selected(line) abort
   execute 'edit ' . fnameescape(l:path)
 endfunction
 
+function! s:open_selected_at_line(line) abort
+  let l:f = split(a:line, "\t", 1)
+  let l:path = get(l:f, 0, '')
+  let l:lnum = get(l:f, 1, '1')
+  if empty(l:path) || !filereadable(l:path) | return | endif
+  if l:lnum !~# '^\d\+$'
+    let l:lnum = '1'
+  endif
+  execute 'edit +' . l:lnum . ' ' . fnameescape(l:path)
+endfunction
+
+" fzf.vim のプレビュースクリプト（該当行を反転表示する）を rtp から探す。
+function! s:preview_sh() abort
+  return get(split(globpath(&runtimepath, 'bin/preview.sh', 0), "\n"), 0, '')
+endfunction
+
 function! s:insert_selected(line) abort
   let l:f = split(a:line, "\t", 1)
   let l:path = get(l:f, 0, '')
@@ -209,20 +225,33 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … 全ノートを ripgrep で全文検索し、`:Rg` と同じ見た目で表示する。
-"   一覧は rg の出力（パス:行:桁: 本文。ヒット語は rg の色）、
-"   右ペインは fzf.vim の preview.sh（該当行を反転表示・その行へスクロール）。
-"   Enter でその行を開く。検索は rg（--disabled で fzf 側の絞り込みは切る）。
+" gs … 全ノート検索（タイトル＋本文）。一覧は YAML タイトル＋ヒット抜粋で、
+" ヒット語は fzf がハイライト。右ペインは :Rg と同じ fzf.vim の preview.sh を使い、
+" 該当行を反転表示してその行へスクロールする。Enter でその行を開く。
+" 候補は note_search.py がクエリごとに作り直す（change:reload）。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  " fzf.vim が読み込まれていれば :Rg があり、fzf#vim#grep2 を autoload できる。
-  if exists(':Rg')
-    let l:rg = 'rg --column --line-number --no-heading --color=always --smart-case -e'
-    call fzf#vim#grep2(l:rg, '', fzf#vim#with_preview({'dir': s:root()}), 0)
+  let l:root = s:root()
+  let l:script = get(g:, 'simple_yurii_search_notesearch', '')
+  let l:pv = s:preview_sh()
+  if !empty(l:script) && filereadable(l:script) && !empty(l:pv)
+    let l:cmd = 'python3 ' . shellescape(l:script) . ' ' . shellescape(l:root)
+    let l:preview = 'bash ' . shellescape(l:pv) . ' {1}:{2}'
+    let l:opts = '--ansi --delimiter="\t" --with-nth=3,4 --accept-nth=1,2'
+          \ . ' --layout=reverse --height=90% --prompt=' . shellescape('Search> ')
+          \ . ' --color=hl:red:bold,hl+:red:bold'
+          \ . ' --preview ' . shellescape(l:preview)
+          \ . ' --preview-window=+{2}/2'
+          \ . ' --bind "change:reload:' . l:cmd . ' {q}"'
+    call fzf#run(fzf#wrap({
+          \ 'source': l:cmd . " ''",
+          \ 'sink': function('s:open_selected_at_line'),
+          \ 'options': l:opts,
+          \ }))
     return
   endif
-  " フォールバック（fzf.vim が無い時）: 全件リスト
-  let l:notes = s:build_notes(s:root())
+  " フォールバック: 全件リスト（本文検索のみ fzf 任せ）
+  let l:notes = s:build_notes(l:root)
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
   call s:fzf_run(l:entries, function('s:open_selected'),
