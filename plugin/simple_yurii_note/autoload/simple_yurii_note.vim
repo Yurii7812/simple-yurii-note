@@ -4633,14 +4633,13 @@ function! simple_yurii_note#v2_new_group_visual() abort range
   call s:run_update_one_for(l:cur)
 
   call simple_yurii_note#push_history()
-  execute 'edit ' . fnameescape(l:file)
+  silent execute 'edit ' . fnameescape(l:file)
   let l:up = search('^' . escape(s:v2_up_mark, '*[]~\.'), 'nw')
   if l:up > 1
     call cursor(l:up - 1, 1)
     call cursor(l:up - 1, col('$'))
   endif
   startinsert
-  echo 'simple_yurii_note: グループ作成 → ' . l:ts . '.md'
 endfunction
 
 " zn / zk の共通本体。
