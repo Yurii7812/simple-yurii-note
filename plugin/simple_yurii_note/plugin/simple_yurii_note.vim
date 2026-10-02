@@ -380,6 +380,9 @@ nnoremap <nowait> <silent> mx  <Cmd>ToggleCheckbox<CR>
 xnoremap <nowait> <silent> mx  :<C-u>'<,'>ToggleCheckbox<CR>
 nnoremap <silent> \p        <Cmd>call simple_yurii_note#paste_clipboard_link_here()<CR>
 xnoremap <silent> \p        :<C-u>call simple_yurii_note#linkify_selection_from_clipboard()<CR>
+" \P … カーソル下の .md リンク先の Parent に、今のノートを確認なしで足す。
+" （\p とは別キー。\p の確認プロンプトは廃止したので、必要なときはこれ）
+nnoremap <nowait> <silent> \P <Cmd>call simple_yurii_note#add_current_as_parent_here()<CR>
 nnoremap <silent> \oe       <Cmd>OutlineEdit<CR>
 nnoremap <silent> \gi       <Cmd>call simple_yurii_note#open_gallery_smart()<CR>
 " アプリ (Electron / ブラウザ) を開く。vault はアプリ側 (既定 ~/files/yurii-note)。

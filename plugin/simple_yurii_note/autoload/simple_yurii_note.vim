@@ -4680,6 +4680,29 @@ function! simple_yurii_note#add_clipboard() abort
 endfunction
 
 " 旧: 今のノートを、相手（カーソル下のリンク or クリップボード）の ### Parent に追加
+" 公開: カーソル下の .md リンク先の ### Parent に、今のノートを 1 本足す。
+" 確認プロンプトは出さない（\P）。リンクが無ければ何もしない。
+function! simple_yurii_note#add_current_as_parent_here() abort
+  let l:cur = expand('%:p')
+  if empty(l:cur)
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
+    return
+  endif
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if empty(l:lk) || empty(l:lk.target) || l:lk.target !~? '\.md\(#.*\)\?$'
+    echo 'simple_yurii_note: カーソル下に .md リンクがありません'
+    return
+  endif
+  let l:tgt = simple_yurii_note#resolve_link(l:lk.target)
+  if !filereadable(l:tgt)
+    echohl WarningMsg | echo '見つかりません: ' . l:tgt | echohl None
+    return
+  endif
+  call s:simple_add_parent(l:tgt, l:cur, simple_yurii_note#current_title())
+  call s:write_current_and_sync_now()
+  echo 'simple_yurii_note: Parent に追加 → ' . fnamemodify(l:tgt, ':t')
+endfunction
+
 function! simple_yurii_note#add_to_parent() abort
   let l:cur = expand('%:p')
   if empty(l:cur)
@@ -6524,6 +6547,11 @@ function! s:replace_visual_selection_with_link(link, is_linewise, sline, eline, 
   endif
 endfunction
 
+" 公開: ビジュアル選択を 1 つのリンクで置き換える（fzf 確定後のコールバック用）。
+function! simple_yurii_note#replace_visual_selection(link, is_linewise, sline, eline, scol, ecol, lines) abort
+  call s:replace_visual_selection_with_link(a:link, a:is_linewise, a:sline, a:eline, a:scol, a:ecol, a:lines)
+endfunction
+
 function! simple_yurii_note#linkify_selection_new_note() abort range
 
   let l:vmode = visualmode()
@@ -6600,8 +6628,8 @@ function! simple_yurii_note#linkify_selection_new_note() abort range
           \ s:v2_down_mark,
           \ ]
     call writefile(l:new_content, l:new_file)
-    " simple: 新しいノートの親に「元のノート」を追加するか聞く
-    if !empty(l:parent_link_lines) && s:ask_yes_no('新ノートの親に「' . l:parent_title . '」を追加する？')
+    " 新ノートの親は元のノート（確認なしで入れる。あとから \P でも足せる）
+    if !empty(l:parent_link_lines)
       call s:simple_add_parent(l:new_file, l:parent_file, l:parent_title)
     endif
   endif
@@ -6701,13 +6729,7 @@ function! simple_yurii_note#linkify_selection_from_clipboard() abort range
   let l:display_target = s:display_target_from_current_dir(l:target)
   let l:link = '[' . l:text . '](' . l:display_target . ')'
   call s:replace_visual_selection_with_link(l:link, l:is_linewise, l:sline, l:eline, l:scol, l:ecol, l:lines)
-  " simple: 今のノートを相手の親に追加するか聞く
-  if s:ask_yes_no('今のノートを 「' . s:v2_title_for(l:target) . '」 の親に追加する？')
-    let l:tgt_path = simple_yurii_note#resolve_link(l:target)
-    if filereadable(l:tgt_path)
-      call s:simple_add_parent(l:tgt_path, expand('%:p'), simple_yurii_note#current_title())
-    endif
-  endif
+  " 親への追加はここでは聞かない（リンク上で \P を押せば足せる）
   call s:write_current_and_sync_now()
 endfunction
 

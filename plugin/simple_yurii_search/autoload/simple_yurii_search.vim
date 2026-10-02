@@ -365,6 +365,68 @@ function! simple_yurii_search#pick_insert_link() abort
         \ s:fzf_options('2', '1,2', 'Title> '))
 endfunction
 
+" \L（ビジュアル）… 選択範囲を検索で選んだノートへのリンクで置き換える。
+" リンクの表示テキストは選択していた文字列（空ならノートタイトル）。
+function! simple_yurii_search#pick_insert_link_visual() abort range
+  if !s:fzf_ok() | return | endif
+  let s:vis = {}
+  let s:vis.is_linewise = (visualmode() ==# 'V')
+  let s:vis.sline = line("'<")
+  let s:vis.eline = line("'>")
+  let s:vis.scol  = col("'<")
+  let s:vis.ecol  = col("'>")
+  if s:vis.sline <= 0 || s:vis.eline <= 0
+    echo 'No visual selection'
+    return
+  endif
+  if s:vis.sline > s:vis.eline || (s:vis.sline == s:vis.eline && s:vis.scol > s:vis.ecol)
+    let [s:vis.sline, s:vis.eline] = [s:vis.eline, s:vis.sline]
+    let [s:vis.scol, s:vis.ecol] = [s:vis.ecol, s:vis.scol]
+  endif
+  let s:vis.lines = getline(s:vis.sline, s:vis.eline)
+  if empty(s:vis.lines)
+    echo 'No visual selection'
+    return
+  endif
+  if s:vis.is_linewise
+    let l:selected = join(s:vis.lines, "\n")
+  elseif len(s:vis.lines) == 1
+    let l:start_char = charidx(s:vis.lines[0], s:vis.scol - 1)
+    let l:end_char = charidx(s:vis.lines[0], s:vis.ecol - 1) + 1
+    let l:selected = strcharpart(s:vis.lines[0], l:start_char, l:end_char - l:start_char)
+  else
+    let l:sel_lines = copy(s:vis.lines)
+    let l:first_start = charidx(l:sel_lines[0], s:vis.scol - 1)
+    let l:last_end = charidx(l:sel_lines[-1], s:vis.ecol - 1) + 1
+    let l:sel_lines[0] = strcharpart(l:sel_lines[0], l:first_start)
+    let l:sel_lines[-1] = strcharpart(l:sel_lines[-1], 0, l:last_end)
+    let l:selected = join(l:sel_lines, "\n")
+  endif
+  let s:vis.text = trim(substitute(l:selected, '\n\+', ' ', 'g'))
+  let s:insert_buf = bufnr('%')
+  let s:insert_pos = [s:vis.sline, s:vis.scol]
+  call s:note_search_run('Link> ', '2', function('s:link_sink_visual'))
+endfunction
+
+" ビジュアル \L の確定: 選択範囲をリンクで置き換える。
+function! s:link_sink_visual(lines) abort
+  if !exists('s:vis') | return | endif
+  for l:line in a:lines
+    let l:r = s:parse_note_line(l:line)
+    if empty(l:r.path) || !filereadable(l:r.path) | continue | endif
+    if exists('s:insert_buf') && bufnr('%') != s:insert_buf
+      execute 'buffer ' . s:insert_buf
+    endif
+    let l:label = !empty(s:vis.text) ? s:vis.text : l:r.title
+    let l:link = simple_yurii_note#make_link(l:r.path, l:label)
+    call simple_yurii_note#replace_visual_selection(
+          \ l:link, s:vis.is_linewise, s:vis.sline, s:vis.eline,
+          \ s:vis.scol, s:vis.ecol, s:vis.lines)
+    call cursor(s:vis.sline, s:vis.scol)
+    return
+  endfor
+endfunction
+
 function! simple_yurii_search#run_legacy(...) abort
   let l:idx = get(g:, 'simple_yurii_search_index', '')
   if empty(l:idx) || !filereadable(l:idx)

@@ -34,6 +34,8 @@ if !exists('g:simple_yurii_search_no_mappings')
   " <Space> … 今のノートに表示中のリンクだけを fzf で一覧 → 開く。
   " （simple_yurii_note 側の旧ポップアップ定義をこのプラグインのほうで上書きする）
   nnoremap <silent> <Space>   <Cmd>call simple_yurii_search#search_local()<CR>
-  " \L … タイトルだけで検索 → カーソル位置に [タイトル](相対.md) を挿入。
+  " \L … タイトル優先の全文検索 → カーソル位置に [タイトル](相対.md) を挿入。
+  " ビジュアルでは選択範囲をリンクで置き換える（表示テキストは選択文字列）。
   nnoremap <silent> \L        <Cmd>LinkPick<CR>
+  xnoremap <silent> \L        :<C-u>call simple_yurii_search#pick_insert_link_visual()<CR>
 endif
