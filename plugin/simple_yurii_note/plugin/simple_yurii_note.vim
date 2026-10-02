@@ -243,8 +243,12 @@ for s:h in range(1, 9)
   execute printf('nnoremap <silent> \%d <Cmd>call simple_yurii_note#hub_jump(%d)<CR>', s:h, s:h)
 endfor
 unlet s:h
+" \h … ハブ画面（リンク一覧の編集可能な Markdown）を開く。1-9/0 でそのまま移動できる。
+nnoremap <silent> \h       <Cmd>call simple_yurii_note#hub_open()<CR>
 nnoremap <silent> \H       <Cmd>call simple_yurii_note#hub_set()<CR>
 nnoremap <silent> \0       <Cmd>call simple_yurii_note#hub_list()<CR>
+" \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
+nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
 " <Space> / gs … ノートナビゲータ。状態は「打つ / 打たない」の1つだけ。
 "   ⏎ で打つのをやめる、i で打ちに戻る。/ はクエリを消して打つ。
 "   打たない状態のキーはローカルでもグローバルでも完全に同じ。

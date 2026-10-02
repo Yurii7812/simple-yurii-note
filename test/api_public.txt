@@ -32,6 +32,7 @@ simple_yurii_note#hint_goto
 simple_yurii_note#hub_jump
 simple_yurii_note#hub_list
 simple_yurii_note#hub_map
+simple_yurii_note#hub_open
 simple_yurii_note#hub_set
 simple_yurii_note#init_persistent_undo_if_ready
 simple_yurii_note#jump_down_bottom

@@ -3570,32 +3570,85 @@ function! s:hub_key(v) abort
   return type(a:v) == v:t_number ? printf('%d', a:v) : trim(a:v)
 endfunction
 
+" ハブは「リンクを並べた編集可能な Markdown ファイル」で持つ（root ごと）。
+"   \H       … 今のノートをリンク 1 行として末尾に足す
+"   \h / \0  … ハブ画面を開く（普通のリンクなので 1-9/0 でそのまま移動できる）
+"   \1..\9   … ファイルの N 番目のリンクへ直行
+" 旧 hubs.json があれば初回にこのファイルへ移行する（json はそのまま残す）。
+function! s:hub_dir() abort
+  return s:state_dir() . s:sep() . 'hubs'
+endfunction
+
+function! s:hub_file() abort
+  let l:dir = s:hub_dir()
+  if !isdirectory(l:dir)
+    call mkdir(l:dir, 'p')
+  endif
+  return l:dir . s:sep() . sha256(s:hub_root_key())[0:15] . '.md'
+endfunction
+
+function! s:hub_migrate() abort
+  let l:file = s:hub_file()
+  if filereadable(l:file)
+    return l:file
+  endif
+  let l:lines = []
+  let l:m = simple_yurii_note#hub_map()
+  for l:n in map(range(1, 9), 'string(v:val)')
+    let l:p = get(l:m, l:n, '')
+    if !empty(l:p) && filereadable(l:p)
+      call add(l:lines, '[' . s:get_title(l:p) . '](' . fnamemodify(l:p, ':p') . ')')
+    endif
+  endfor
+  call writefile(l:lines, l:file)
+  return l:file
+endfunction
+
+" ハブファイルのリンクを上から順に解決して返す（\1..\9 の並び）。
+function! s:hub_link_paths() abort
+  let l:file = s:hub_migrate()
+  let l:out = []
+  for l:ln in readfile(l:file)
+    let l:m = matchlist(l:ln, '\v\[([^\]]*)\]\(([^)]+)\)')
+    if !empty(l:m)
+      call add(l:out, simple_yurii_note#resolve_link(l:m[2]))
+    endif
+  endfor
+  return l:out
+endfunction
+
+" \h / \0 … ハブ画面（編集可能な Markdown）を開く。
+function! simple_yurii_note#hub_open() abort
+  let l:file = s:hub_migrate()
+  call simple_yurii_note#push_history()
+  silent! execute 'hide edit ' . fnameescape(l:file)
+  setlocal bufhidden=hide
+  setlocal noundofile
+endfunction
+
 function! simple_yurii_note#hub_set(...) abort
-  let l:n = a:0 > 0 ? s:hub_key(a:1) : ''
-  if empty(l:n)
-    echo 'ハブ番号 1-9: '
-    let l:c = getchar()
-    redraw
-    let l:n = type(l:c) == v:t_number ? nr2char(l:c) : l:c
-  endif
-  if l:n !~# '^[1-9]$'
-    echo 'simple_yurii_note: 1-9 で指定して' | return
-  endif
   let l:file = expand('%:p')
   if empty(l:file) || !s:is_markdown_file(l:file)
     echohl WarningMsg | echo 'simple_yurii_note: ノート上で実行して' | echohl NONE | return
   endif
-  let l:m = simple_yurii_note#hub_map()
-  let l:m[l:n] = l:file
-  call s:save_json_state('hubs.json', s:hub_store())
-  echo printf('simple_yurii_note: ハブ %s = %s', l:n, s:get_title(l:file))
+  let l:hub = s:hub_migrate()
+  let l:link = '[' . simple_yurii_note#current_title() . '](' . fnamemodify(l:file, ':p') . ')'
+  let l:lines = readfile(l:hub)
+  if index(l:lines, l:link) >= 0
+    echo 'simple_yurii_note: ハブ登録済み'
+    return
+  endif
+  call add(l:lines, l:link)
+  call writefile(l:lines, l:hub)
+  echo printf('simple_yurii_note: ハブに追加（%d 件）', len(l:lines))
 endfunction
 
 function! simple_yurii_note#hub_jump(n) abort
-  let l:m = simple_yurii_note#hub_map()
-  let l:p = get(l:m, s:hub_key(a:n), '')
+  let l:paths = s:hub_link_paths()
+  let l:idx = s:hub_key(a:n) - 1
+  let l:p = get(l:paths, l:idx, '')
   if empty(l:p) || !filereadable(l:p)
-    echo printf('simple_yurii_note: ハブ %s は未登録（\H%s で登録）', a:n, a:n)
+    echo printf('simple_yurii_note: ハブ %s は未登録（\H で登録）', a:n)
     return
   endif
   if fnamemodify(expand('%:p'), ':p') ==# fnamemodify(l:p, ':p') | return | endif
@@ -3603,15 +3656,9 @@ function! simple_yurii_note#hub_jump(n) abort
   silent! execute 'hide edit ' . fnameescape(l:p)
 endfunction
 
+" \0 … \h と同じ（ハブ画面を開く）。名前は互換のため残す。
 function! simple_yurii_note#hub_list() abort
-  let l:m = simple_yurii_note#hub_map()
-  let l:out = []
-  for l:n in map(range(1, 9), 'string(v:val)')
-    let l:p = get(l:m, l:n, '')
-    call add(l:out, printf('%s  %s', l:n,
-          \ empty(l:p) ? '(未登録)' : s:get_title(l:p)))
-  endfor
-  echo join(l:out, "\n")
+  call simple_yurii_note#hub_open()
 endfunction
 
 function! simple_yurii_note#push_history() abort

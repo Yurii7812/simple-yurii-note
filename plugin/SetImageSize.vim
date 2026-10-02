@@ -217,5 +217,5 @@ endfunction
 
 command! -range SetImageSize call s:SetImageSize(<line1>, <line2>, <range>)
 
-nnoremap <nowait> <silent> \i <Cmd>SetImageSize<CR>
-xnoremap <nowait> <silent> \i :<C-U>call <SID>SetImageSizeRange(line("'<"), line("'>"))<CR>
+nnoremap <nowait> <silent> \I <Cmd>SetImageSize<CR>
+xnoremap <nowait> <silent> \I :<C-U>call <SID>SetImageSizeRange(line("'<"), line("'>"))<CR>
