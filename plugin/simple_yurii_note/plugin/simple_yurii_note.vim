@@ -325,6 +325,8 @@ nnoremap <nowait> <silent> \J  <Cmd>call simple_yurii_note#jump_down_bottom()<CR
 nnoremap <nowait> <silent> zh  <Cmd>call simple_yurii_note#v2_new_here()<CR>
 nnoremap <nowait> <silent> zn  <Cmd>call simple_yurii_note#v2_new_plain()<CR>
 nnoremap <nowait> <silent> zk  <Cmd>call simple_yurii_note#v2_new_group()<CR>
+" zk（ビジュアル）… 選択範囲を中身にしたグループノートを作る（選択はグループへのリンクに置換）。
+xnoremap <nowait> <silent> zk  :<C-u>call simple_yurii_note#v2_new_group_visual()<CR>
 " za: ca（クリップボードのノートを child に追加）と同じだが、関係ピッカーを
 " 出さず既定の「ノート」関係で固定する
 nnoremap <nowait> <silent> za  <Cmd>call simple_yurii_note#add_clipboard_before_up_note()<CR>

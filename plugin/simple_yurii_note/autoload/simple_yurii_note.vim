@@ -4556,6 +4556,93 @@ function! simple_yurii_note#v2_new_group() abort
   call s:v2_new_interactive('group')
 endfunction
 
+" zk（ビジュアル）… 選択範囲を中身にしたグループノートを作る。
+"   選択範囲は新しいグループへのリンクで**置き換える**（リンクをグループへ移す）。
+"   グループの ### Parent は今のノート。作成後グループを開いて本文末にカーソル。
+function! simple_yurii_note#v2_new_group_visual() abort range
+  if s:pkm_format() !=# 'v2'
+    echo 'simple_yurii_note: v2 専用' | return
+  endif
+  let l:cur = expand('%:p')
+  if empty(l:cur)
+    echohl WarningMsg | echo 'simple_yurii_note: 名前付きバッファで実行して' | echohl NONE | return
+  endif
+
+  " 選択範囲を記録
+  let l:is_linewise = (visualmode() ==# 'V')
+  let l:sline = line("'<")
+  let l:eline = line("'>")
+  let l:scol  = col("'<")
+  let l:ecol  = col("'>")
+  if l:sline <= 0 || l:eline <= 0
+    echo 'No visual selection' | return
+  endif
+  if l:sline > l:eline || (l:sline == l:eline && l:scol > l:ecol)
+    let [l:sline, l:eline] = [l:eline, l:sline]
+    let [l:scol, l:ecol] = [l:ecol, l:scol]
+  endif
+  let l:lines = getline(l:sline, l:eline)
+  if empty(l:lines)
+    echo 'No visual selection' | return
+  endif
+  if l:is_linewise
+    let l:body = copy(l:lines)
+  elseif len(l:lines) == 1
+    let l:start_char = charidx(l:lines[0], l:scol - 1)
+    let l:end_char = charidx(l:lines[0], l:ecol - 1) + 1
+    let l:body = [strcharpart(l:lines[0], l:start_char, l:end_char - l:start_char)]
+  else
+    let l:body = copy(l:lines)
+    let l:first_start = charidx(l:body[0], l:scol - 1)
+    let l:last_end = charidx(l:body[-1], l:ecol - 1) + 1
+    let l:body[0] = strcharpart(l:body[0], l:first_start)
+    let l:body[-1] = strcharpart(l:body[-1], 0, l:last_end)
+  endif
+  while !empty(l:body) && trim(l:body[0]) ==# '' | call remove(l:body, 0) | endwhile
+  while !empty(l:body) && trim(l:body[-1]) ==# '' | call remove(l:body, -1) | endwhile
+  if empty(l:body)
+    echo 'simple_yurii_note: 選択が空です' | return
+  endif
+
+  let l:cur_title = simple_yurii_note#current_title()
+  let l:dir = expand('%:p:h')
+  let l:ts  = simple_yurii_note#timestamp_filename()
+  let l:file = s:join_path(l:dir, l:ts . '.md')
+
+  " グループ本体: 選択内容を本文に、### Parent に今のノート
+  let l:content = [
+        \ '---',
+        \ 'time: ' . simple_yurii_note#timestamp_yaml(),
+        \ 'title: ' . l:ts,
+        \ 'attribute: group',
+        \ '---',
+        \ '',
+        \ '# ' . l:ts,
+        \ '',
+        \ ] + l:body + [
+        \ s:v2_up_mark,
+        \ s:make_link_from_dir(l:cur, l:cur_title, l:dir),
+        \ s:v2_down_mark,
+        \ ]
+  call writefile(l:content, l:file)
+
+  " 元の選択をグループへのリンクで置き換える
+  let l:link = '[' . l:ts . '](' . l:ts . '.md)'
+  call s:replace_visual_selection_with_link(l:link, l:is_linewise, l:sline, l:eline, l:scol, l:ecol, l:lines)
+  silent noautocmd write
+  call s:run_update_one_for(l:cur)
+
+  call simple_yurii_note#push_history()
+  execute 'edit ' . fnameescape(l:file)
+  let l:up = search('^' . escape(s:v2_up_mark, '*[]~\.'), 'nw')
+  if l:up > 1
+    call cursor(l:up - 1, 1)
+    call cursor(l:up - 1, col('$'))
+  endif
+  startinsert
+  echo 'simple_yurii_note: グループ作成 → ' . l:ts . '.md'
+endfunction
+
 " zn / zk の共通本体。
 "   a:attr が空なら普通のノート、'グループ' なら容器ノート（attribute: グループ）。
 "   作成時にリレーション（ノート: など）は一切書かない。置くのは素のリンク 1 行で、

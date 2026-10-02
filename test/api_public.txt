@@ -125,6 +125,7 @@ simple_yurii_note#v2_migrate
 simple_yurii_note#v2_new_attr
 simple_yurii_note#v2_new_child
 simple_yurii_note#v2_new_group
+simple_yurii_note#v2_new_group_visual
 simple_yurii_note#v2_new_here
 simple_yurii_note#v2_new_parent
 simple_yurii_note#v2_new_plain
