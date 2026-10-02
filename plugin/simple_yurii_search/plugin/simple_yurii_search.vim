@@ -19,6 +19,9 @@ endif
 if !exists('g:simple_yurii_search_titles')
   let g:simple_yurii_search_titles = s:pydir . '/note_titles.py'
 endif
+if !exists('g:simple_yurii_search_notesearch')
+  let g:simple_yurii_search_notesearch = s:pydir . '/note_search.py'
+endif
 
 command! -nargs=0 FSearch call simple_yurii_search#run()
 command! -nargs=0 LinkPick call simple_yurii_search#pick_insert_link()

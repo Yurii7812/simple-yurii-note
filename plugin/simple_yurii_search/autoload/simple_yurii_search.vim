@@ -86,10 +86,10 @@ endfunction
 
 " ===========================================================================
 " fzf バックエンド
-"   - gs        … vault を ripgrep で全文検索（fzf#vim#grep2 = :Rg と同じ見た目・挙動。
-"                 右ペインは fzf.vim 標準の preview.sh（preview_highlight は使わない））
+"   - gs        … vault を全文検索（note_search.py。タイトル優先・表示はタイトル＋抜粋）
 "   - <Space>   … 今のノートに表示中のリンクだけ → Enter で開く
-"   - \L         … タイトルだけで検索（見た目は :Rg）→ Enter でリンクを挿入
+"   - \L         … 全文検索（タイトル優先・表示はタイトル）→ Enter でリンク挿入
+"   検索・並び・強調は python、fzf は --disabled で表示に徹する（change:reload）。
 "   fzf / fzf.vim が無い環境ではフォールバックせず明示的にエラーにする。
 " ===========================================================================
 
@@ -240,17 +240,98 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … vault を ripgrep で全文検索する（:Rg と完全に同じ見た目・挙動）。
-"   右ペインは fzf.vim 標準の preview.sh（:Rg と同じ。該当行を反転して表示）。
-"   fzf#vim#grep2 を使うので、フッタ・multi・キーは :Rg と同一。
+" note_search.py（タイトル優先の全文検索）の起動コマンド。無ければ空。
+function! s:note_search_cmd() abort
+  let l:script = get(g:, 'simple_yurii_search_notesearch', '')
+  if empty(l:script) || !filereadable(l:script) || !executable('python3')
+    return ''
+  endif
+  return 'python3 ' . shellescape(l:script) . ' ' . shellescape(s:root())
+endfunction
+
+function! s:strip_ansi(text) abort
+  return substitute(a:text, '\e\[[0-9;]*m', '', 'g')
+endfunction
+
+" 検索結果 1 行（path<TAB>title<TAB>line<TAB>excerpt）を分解する。
+function! s:parse_note_line(line) abort
+  let l:f = split(s:strip_ansi(a:line), "\t", 1)
+  return {'path': get(l:f, 0, ''), 'title': get(l:f, 1, ''),
+        \ 'line': str2nr(get(l:f, 2, '1')), 'excerpt': get(l:f, 3, '')}
+endfunction
+
+" gs の確定: 選んだノートを開き、最初のヒット行へ寄せる。
+" この fzf 版の sink* はキー要素なしで選択行だけを渡す（キーらしき要素は
+" パスとして解決できないので読み飛ばす）。
+function! s:search_open_sink(lines) abort
+  for l:line in a:lines
+    let l:r = s:parse_note_line(l:line)
+    if empty(l:r.path) || !filereadable(l:r.path) | continue | endif
+    execute 'edit ' . fnameescape(l:r.path)
+    if l:r.line > 1
+      execute 'normal! ' . l:r.line . 'Gzz'
+    endif
+    return
+  endfor
+endfunction
+
+" \L の確定: 選んだノートへの Markdown リンクをカーソル位置に挿入。
+function! s:link_sink_tab(lines) abort
+  let l:notes = []
+  for l:line in a:lines
+    let l:r = s:parse_note_line(l:line)
+    if empty(l:r.path) || !filereadable(l:r.path) | continue | endif
+    call add(l:notes, l:r)
+  endfor
+  if empty(l:notes) | return | endif
+  if exists('s:insert_buf') && bufnr('%') != s:insert_buf
+    execute 'buffer ' . s:insert_buf
+  endif
+  if exists('s:insert_pos')
+    call cursor(s:insert_pos[1], s:insert_pos[2])
+  endif
+  let l:links = map(copy(l:notes), {_, n -> simple_yurii_note#make_link(n.path, n.title)})
+  let l:link = join(l:links, ' ')
+  let l:cur = getline('.')
+  let l:col = col('.') - 1
+  call setline('.', strpart(l:cur, 0, l:col) . l:link . strpart(l:cur, l:col))
+  call cursor(line('.'), l:col + strlen(l:link) + 1)
+endfunction
+
+" note_search.py + fzf。表示はタイトル（with_nth で抜粋も出せる）。
+" 検索・並び（タイトル優先）・強調は python 側。fzf は --disabled で表示に徹する。
+function! s:note_search_run(prompt, with_nth, Sink) abort
+  let l:cmd = s:note_search_cmd()
+  if empty(l:cmd) | return 0 | endif
+  let l:preview = s:preview_script()
+  let l:options = [
+        \ '--ansi', '--multi', '--disabled',
+        \ '--delimiter=\t', '--with-nth=' . a:with_nth,
+        \ '--prompt=' . a:prompt,
+        \ '--bind', 'change:reload:' . l:cmd . ' {q}',
+        \ ]
+  if !empty(l:preview)
+    call extend(l:options, [
+          \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
+          \ '--preview-window', 'right:50%:+{3}/2',
+          \ ])
+  endif
+  call fzf#run(fzf#wrap({
+        \ 'source': l:cmd . " ''",
+        \ 'sink*': a:Sink,
+        \ 'options': l:options,
+        \ 'dir': s:root(),
+        \ }))
+  return 1
+endfunction
+
+" gs … vault を全文検索（タイトル優先）。左はタイトル、右はヒット箇所をハイライト。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  if exists(':Rg')
-    let l:rg = 'rg --column --line-number --no-heading --color=always --smart-case -e'
-    call fzf#vim#grep2(l:rg, '', fzf#vim#with_preview({'dir': s:root()}), 0)
+  if s:note_search_run('Search> ', '2', function('s:search_open_sink'))
     return
   endif
-  " フォールバック（fzf.vim が無い時）: タイトル＋本文の全件リスト
+  " フォールバック（note_search.py が無い時）: タイトル＋本文の全件リスト
   let l:notes = s:build_notes(s:root())
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
@@ -268,31 +349,17 @@ function! simple_yurii_search#search_local() abort
         \ s:fzf_options('2', '1', 'Link> '))
 endfunction
 
-" \L … タイトルだけで全ノートを検索（見た目は :Rg と同じ）→ カーソル位置にリンクを挿入。
+" \L … 全ノートを全文検索（タイトル優先・表示はタイトル）→ カーソル位置にリンク挿入。
 function! simple_yurii_search#pick_insert_link() abort
   if !s:fzf_ok() | return | endif
-  let l:titles = get(g:, 'simple_yurii_search_titles', '')
-  let l:preview = s:preview_script()
-  if exists(':Rg') && !empty(l:titles) && filereadable(l:titles) && !empty(l:preview)
-    let l:cmd = 'python3 ' . shellescape(l:titles) . ' ' . shellescape(s:root())
-    let s:insert_buf = bufnr('%')
-    let s:insert_pos = getpos('.')
-    let l:spec = {
-          \ 'options': [
-          \   '--with-nth=4', '--accept-nth=1,4', '--prompt', 'Title> ',
-          \   '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
-          \   '--bind', 'ctrl-/:toggle-preview',
-          \ ],
-          \ 'sink*': function('s:link_sink'),
-          \ }
-    call fzf#vim#grep2(l:cmd, '', l:spec, 0)
+  let s:insert_buf = bufnr('%')
+  let s:insert_pos = getpos('.')
+  if s:note_search_run('Title> ', '2', function('s:link_sink_tab'))
     return
   endif
   " フォールバック: 旧タイトルピッカー（タイトル検索・fzf 任せ）
   let l:notes = s:build_notes(s:root())
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
-  let s:insert_buf = bufnr('%')
-  let s:insert_pos = getpos('.')
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t})
   call s:fzf_run(l:entries, function('s:insert_selected'),
         \ s:fzf_options('2', '1,2', 'Title> '))
