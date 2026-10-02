@@ -165,8 +165,13 @@ function! s:current_buffer_links() abort
   return l:entries
 endfunction
 
-function! s:fzf_options(nth, prompt) abort
-  return '--delimiter="\t" --with-nth=2 --nth=' . a:nth
+" fzf の注意: --nth は --with-nth で変換した後のフィールドに効く。両方を別々の
+" 対象に使うと（表示=2・検索=2,3 など）検索が空になる。よって検索対象＝表示対象と
+" なるよう --with-nth だけを指定し、確定時の出力列は --accept-nth で決める。
+"   gs      … --with-nth=2,3（タイトル＋本文を表示＝そのまま検索）/ 出力はパス
+"   \L,<Space> … --with-nth=2（タイトルだけ表示＝タイトル検索）/ 出力はパス,タイトル
+function! s:fzf_options(with, accept, prompt) abort
+  return '--delimiter="\t" --with-nth=' . a:with . ' --accept-nth=' . a:accept
         \ . ' --layout=reverse --height=90% --prompt=' . shellescape(a:prompt)
         \ . ' --preview "sed -n ''1,200p'' -- {1}" --preview-window=right:50%'
 endfunction
@@ -210,7 +215,7 @@ function! simple_yurii_search#search_global() abort
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
   call s:fzf_run(l:entries, function('s:open_selected'),
-        \ s:fzf_options('2,3', 'Search> '))
+        \ s:fzf_options('2,3', '1', 'Search> '))
 endfunction
 
 " <Space> … 今のノートに表示中のリンクだけ → 開く
@@ -220,7 +225,7 @@ function! simple_yurii_search#search_local() abort
   if empty(l:links) | echo 'simple_yurii_search: このノートにリンクがありません' | return | endif
   let l:entries = map(copy(l:links), {_, n -> n.p . "\t" . n.t})
   call s:fzf_run(l:entries, function('s:open_selected'),
-        \ s:fzf_options('2', 'Link> '))
+        \ s:fzf_options('2', '1', 'Link> '))
 endfunction
 
 " \L … タイトルだけで全ノートを検索 → カーソル位置に Markdown リンクを挿入
@@ -232,7 +237,7 @@ function! simple_yurii_search#pick_insert_link() abort
   let s:insert_pos = getpos('.')
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t})
   call s:fzf_run(l:entries, function('s:insert_selected'),
-        \ s:fzf_options('2', 'Title> '))
+        \ s:fzf_options('2', '1,2', 'Title> '))
 endfunction
 
 function! simple_yurii_search#run_legacy(...) abort
