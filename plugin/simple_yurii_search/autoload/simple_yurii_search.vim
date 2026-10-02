@@ -77,15 +77,162 @@ function! s:hit_props(text, prefix_len, terms) abort
   return l:props
 endfunction
 
-" gs は simple_yurii_note の統一ナビゲータ（global スコープ）に寄せた。
-" 一覧・プレビュー・キー体系が <Space> と同じになり、ヒットから l でそのまま
-" 潜れる。旧ポップアップに戻したい時だけ g:simple_yurii_search_legacy = 1。
+" gs / :FSearch … 全ノートを fzf で一覧（タイトル表示・タイトル＋本文で検索）。
+" 旧ポップアップ（note_navigator）はもう呼ばない。fzf 前提（フォールバック無し）。
+" run_legacy / g:simple_yurii_search_legacy は互換のため残置（既定経路ではない）。
 function! simple_yurii_search#run(...) abort
-  if !get(g:, 'simple_yurii_search_legacy', 0) && exists('*simple_yurii_note#note_navigator')
-    call simple_yurii_note#note_navigator('global')
-    return
+  call simple_yurii_search#search_global()
+endfunction
+
+" ===========================================================================
+" fzf バックエンド
+"   候補行は「絶対パス<TAB>タイトル[<TAB>本文]」。表示は --with-nth=2 で
+"   タイトルだけ、検索対象は --nth で制御する（本文は非表示のまま検索に使う）。
+"   - gs        … 全ノート・タイトル＋本文で検索 → Enter で開く
+"   - <Space>   … 今のノートに表示中のリンクだけ → Enter で開く
+"   - \L         … 全ノート・タイトルだけで検索 → Enter でリンクを挿入
+"   fzf / fzf.vim が無い環境ではフォールバックせず明示的にエラーにする。
+" ===========================================================================
+
+function! s:fzf_ok() abort
+  if !exists('*fzf#run')
+    echoerr 'simple_yurii_search: fzf.vim が見つかりません（プラグインを入れてください）'
+    return 0
   endif
-  return call('simple_yurii_search#run_legacy', a:000)
+  if !executable('fzf')
+    echoerr 'simple_yurii_search: fzf コマンドが見つかりません（~/.local/bin などに導入してください）'
+    return 0
+  endif
+  return 1
+endfunction
+
+function! s:root() abort
+  let l:root = get(g:, 'simple_yurii_note_root', '')
+  if !empty(l:root) && isdirectory(expand(l:root))
+    return fnamemodify(expand(l:root), ':p')
+  endif
+  return fnamemodify(getcwd(), ':p')
+endfunction
+
+" 全ノートを [{p,t,b}] で返す。notes_index.py が無ければ glob＋ファイル名で代替。
+function! s:build_notes(root) abort
+  let l:notes = []
+  let l:idx = get(g:, 'simple_yurii_search_index', '')
+  if !empty(l:idx) && filereadable(l:idx) && executable('python3')
+    for l:ln in systemlist('python3 ' . shellescape(l:idx) . ' ' . shellescape(a:root))
+      let l:f = split(l:ln, "\t", 1)
+      if len(l:f) >= 2
+        call add(l:notes, {'p': l:f[0], 't': l:f[1], 'b': get(l:f, 2, '')})
+      endif
+    endfor
+  endif
+  if empty(l:notes)
+    for l:p in split(globpath(a:root, '**/*.md'), "\n")
+      if l:p =~# '[\\/]\.undo[\\/]' | continue | endif
+      call add(l:notes, {'p': l:p, 't': fnamemodify(l:p, ':t:r'), 'b': ''})
+    endfor
+  endif
+  return l:notes
+endfunction
+
+" 今のバッファに表示されている Markdown リンクだけを [{p,t}] で返す。
+function! s:current_buffer_links() abort
+  let l:entries = []
+  let l:seen = {}
+  let l:base = expand('%:p:h')
+  let l:pat = '\v\[([^\]]+)\]\(([^)]+)\)'
+  for l:ln in getline(1, '$')
+    let l:start = 0
+    while 1
+      let l:m = matchstrpos(l:ln, l:pat, l:start)
+      if l:m[1] < 0 | break | endif
+      let l:start = l:m[2]
+      let l:parts = matchlist(l:m[0], l:pat)
+      let l:text = get(l:parts, 1, '')
+      let l:target = get(l:parts, 2, '')
+      if empty(l:target) || l:target =~? '^\(https\?\|mailto\|file\):'
+        continue
+      endif
+      let l:path = simple_yurii_note#resolve_link(l:target, l:base)
+      if empty(l:path) || has_key(l:seen, l:path)
+        continue
+      endif
+      let l:seen[l:path] = 1
+      call add(l:entries, {'p': l:path,
+            \ 't': empty(l:text) ? fnamemodify(l:path, ':t:r') : l:text})
+    endwhile
+  endfor
+  return l:entries
+endfunction
+
+function! s:fzf_options(nth, prompt) abort
+  return '--delimiter="\t" --with-nth=2 --nth=' . a:nth
+        \ . ' --layout=reverse --height=90% --prompt=' . shellescape(a:prompt)
+        \ . ' --preview "sed -n ''1,200p'' -- {1}" --preview-window=right:50%'
+endfunction
+
+function! s:fzf_run(entries, Sink, options) abort
+  call fzf#run(fzf#wrap({
+        \ 'source': a:entries,
+        \ 'sink': a:Sink,
+        \ 'options': a:options,
+        \ }))
+endfunction
+
+function! s:open_selected(line) abort
+  let l:path = get(split(a:line, "\t", 1), 0, '')
+  if empty(l:path) || !filereadable(l:path) | return | endif
+  execute 'edit ' . fnameescape(l:path)
+endfunction
+
+function! s:insert_selected(line) abort
+  let l:f = split(a:line, "\t", 1)
+  let l:path = get(l:f, 0, '')
+  let l:title = get(l:f, 1, '')
+  if empty(l:path) | return | endif
+  if exists('s:insert_buf') && bufnr('%') != s:insert_buf
+    execute 'buffer ' . s:insert_buf
+  endif
+  if exists('s:insert_pos')
+    call cursor(s:insert_pos[1], s:insert_pos[2])
+  endif
+  let l:link = simple_yurii_note#make_link(l:path, l:title)
+  let l:cur = getline('.')
+  let l:col = col('.') - 1
+  call setline('.', strpart(l:cur, 0, l:col) . l:link . strpart(l:cur, l:col))
+  call cursor(line('.'), l:col + strlen(l:link) + 1)
+endfunction
+
+" gs … 全ノート検索（タイトル＋本文）→ 開く
+function! simple_yurii_search#search_global() abort
+  if !s:fzf_ok() | return | endif
+  let l:notes = s:build_notes(s:root())
+  if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
+  let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
+  call s:fzf_run(l:entries, function('s:open_selected'),
+        \ s:fzf_options('2,3', 'Search> '))
+endfunction
+
+" <Space> … 今のノートに表示中のリンクだけ → 開く
+function! simple_yurii_search#search_local() abort
+  if !s:fzf_ok() | return | endif
+  let l:links = s:current_buffer_links()
+  if empty(l:links) | echo 'simple_yurii_search: このノートにリンクがありません' | return | endif
+  let l:entries = map(copy(l:links), {_, n -> n.p . "\t" . n.t})
+  call s:fzf_run(l:entries, function('s:open_selected'),
+        \ s:fzf_options('2', 'Link> '))
+endfunction
+
+" \L … タイトルだけで全ノートを検索 → カーソル位置に Markdown リンクを挿入
+function! simple_yurii_search#pick_insert_link() abort
+  if !s:fzf_ok() | return | endif
+  let l:notes = s:build_notes(s:root())
+  if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
+  let s:insert_buf = bufnr('%')
+  let s:insert_pos = getpos('.')
+  let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t})
+  call s:fzf_run(l:entries, function('s:insert_selected'),
+        \ s:fzf_options('2', 'Title> '))
 endfunction
 
 function! simple_yurii_search#run_legacy(...) abort
