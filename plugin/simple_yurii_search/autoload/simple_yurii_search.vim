@@ -209,26 +209,20 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … 全ノート検索（タイトル＋本文）。表示は YAML タイトル＋ヒット抜粋。
-" note_search.py がクエリごとに候補を作り直し（change:reload）、fzf が
-" タイトル／抜粋のヒット語をハイライトする。
+" gs … 全ノートを ripgrep で全文検索し、`:Rg` と同じ見た目で表示する。
+"   一覧は rg の出力（パス:行:桁: 本文。ヒット語は rg の色）、
+"   右ペインは fzf.vim の preview.sh（該当行を反転表示・その行へスクロール）。
+"   Enter でその行を開く。検索は rg（--disabled で fzf 側の絞り込みは切る）。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  let l:root = s:root()
-  let l:script = get(g:, 'simple_yurii_search_notesearch', '')
-  if !empty(l:script) && filereadable(l:script) && executable('python3')
-    let l:cmd = 'python3 ' . shellescape(l:script) . ' ' . shellescape(l:root)
-    let l:opts = s:fzf_options('2,3', '1', 'Search> ')
-          \ . ' --bind "change:reload:' . l:cmd . ' {q}"'
-    call fzf#run(fzf#wrap({
-          \ 'source': l:cmd . " ''",
-          \ 'sink': function('s:open_selected'),
-          \ 'options': l:opts,
-          \ }))
+  " fzf.vim が読み込まれていれば :Rg があり、fzf#vim#grep2 を autoload できる。
+  if exists(':Rg')
+    let l:rg = 'rg --column --line-number --no-heading --color=always --smart-case -e'
+    call fzf#vim#grep2(l:rg, '', fzf#vim#with_preview({'dir': s:root()}), 0)
     return
   endif
-  " フォールバック（note_search.py が無い時）: 全件リストのみ（本文検索なし）
-  let l:notes = s:build_notes(l:root)
+  " フォールバック（fzf.vim が無い時）: 全件リスト
+  let l:notes = s:build_notes(s:root())
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
   call s:fzf_run(l:entries, function('s:open_selected'),
