@@ -13,8 +13,11 @@ endif
 if !exists('g:simple_yurii_search_index')
   let g:simple_yurii_search_index = s:pydir . '/notes_index.py'
 endif
-if !exists('g:simple_yurii_search_notesearch')
-  let g:simple_yurii_search_notesearch = s:pydir . '/note_search.py'
+if !exists('g:simple_yurii_search_preview')
+  let g:simple_yurii_search_preview = s:pydir . '/preview_highlight.py'
+endif
+if !exists('g:simple_yurii_search_titles')
+  let g:simple_yurii_search_titles = s:pydir . '/note_titles.py'
 endif
 
 command! -nargs=0 FSearch call simple_yurii_search#run()
@@ -22,7 +25,7 @@ command! -nargs=0 LinkPick call simple_yurii_search#pick_insert_link()
 
 if !exists('g:simple_yurii_search_no_mappings')
   " gs = go search（rg 感覚の 2 打）。g 始まりなので他キーを遅延させない。
-  " gs / <leader>fs … 全ノートを fzf で検索（タイトル＋本文）→ 開く。
+  " gs / <leader>fs … vault を ripgrep で全文検索（:Rg と同じ見た目・挙動）。
   nnoremap <silent> gs        <Cmd>FSearch<CR>
   nnoremap <silent> <leader>fs <Cmd>FSearch<CR>
   " <Space> … 今のノートに表示中のリンクだけを fzf で一覧 → 開く。

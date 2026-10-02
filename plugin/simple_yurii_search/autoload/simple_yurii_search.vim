@@ -86,11 +86,10 @@ endfunction
 
 " ===========================================================================
 " fzf バックエンド
-"   候補行は「絶対パス<TAB>タイトル[<TAB>本文]」。表示は --with-nth=2 で
-"   タイトルだけ、検索対象は --nth で制御する（本文は非表示のまま検索に使う）。
-"   - gs        … 全ノート・タイトル＋本文で検索 → Enter で開く
+"   - gs        … vault を ripgrep で全文検索（fzf#vim#grep2 = :Rg と同じ見た目・挙動）
 "   - <Space>   … 今のノートに表示中のリンクだけ → Enter で開く
-"   - \L         … 全ノート・タイトルだけで検索 → Enter でリンクを挿入
+"   - \L         … タイトルだけで検索（見た目は :Rg）→ Enter でリンクを挿入
+"   右ペインは preview_highlight.py でクエリ語を ANSI ハイライト。
 "   fzf / fzf.vim が無い環境ではフォールバックせず明示的にエラーにする。
 " ===========================================================================
 
@@ -165,11 +164,9 @@ function! s:current_buffer_links() abort
   return l:entries
 endfunction
 
-" fzf の注意: --nth は --with-nth で変換した後のフィールドに効く。両方を別々の
-" 対象に使うと（表示=2・検索=2,3 など）検索が空になる。よって検索対象＝表示対象と
-" なるよう --with-nth だけを指定し、確定時の出力列は --accept-nth で決める。
-"   gs      … --with-nth=2,3（タイトル＋本文を表示＝そのまま検索）/ 出力はパス
-"   \L,<Space> … --with-nth=2（タイトルだけ表示＝タイトル検索）/ 出力はパス,タイトル
+" <Space> とフォールバック用の fzf オプション。
+" 注意: --nth は --with-nth の変換後に効くので、検索対象＝表示対象に揃える。
+"   <Space> … --with-nth=2（タイトルだけ表示＝タイトル検索）/ 出力はパス
 function! s:fzf_options(with, accept, prompt) abort
   return '--delimiter="\t" --with-nth=' . a:with . ' --accept-nth=' . a:accept
         \ . ' --layout=reverse --height=90% --prompt=' . shellescape(a:prompt)
@@ -191,22 +188,40 @@ function! s:open_selected(line) abort
   execute 'edit ' . fnameescape(l:path)
 endfunction
 
-function! s:open_selected_at_line(line) abort
-  let l:f = split(a:line, "\t", 1)
-  let l:path = get(l:f, 0, '')
-  let l:lnum = get(l:f, 1, '1')
-  if empty(l:path) || !filereadable(l:path) | return | endif
-  if l:lnum !~# '^\d\+$'
-    let l:lnum = '1'
+" 右ペイン用のハイライトスクリプト（クエリ語を ANSI 強調）を返す。
+function! s:preview_script() abort
+  let l:p = get(g:, 'simple_yurii_search_preview', '')
+  return (!empty(l:p) && filereadable(l:p)) ? l:p : ''
+endfunction
+
+" \L の確定処理。fzf.vim の sink* 形式（先頭は押したキー）で [パス:タイトル,...] を受ける。
+function! s:link_sink(lines) abort
+  if len(a:lines) < 2 | return | endif
+  if exists('s:insert_buf') && bufnr('%') != s:insert_buf
+    execute 'buffer ' . s:insert_buf
   endif
-  execute 'edit +' . l:lnum . ' ' . fnameescape(l:path)
+  if exists('s:insert_pos')
+    call cursor(s:insert_pos[1], s:insert_pos[2])
+  endif
+  let l:links = []
+  for l:line in a:lines[1:]
+    let l:line = substitute(l:line, '\e\[[0-9;]*m', '', 'g')
+    let l:sep = stridx(l:line, ':')
+    if l:sep <= 0 | continue | endif
+    let l:path = strpart(l:line, 0, l:sep)
+    let l:title = strpart(l:line, l:sep + 1)
+    if !filereadable(l:path) | continue | endif
+    call add(l:links, simple_yurii_note#make_link(l:path, l:title))
+  endfor
+  if empty(l:links) | return | endif
+  let l:link = join(l:links, ' ')
+  let l:cur = getline('.')
+  let l:col = col('.') - 1
+  call setline('.', strpart(l:cur, 0, l:col) . l:link . strpart(l:cur, l:col))
+  call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" fzf.vim のプレビュースクリプト（該当行を反転表示する）を rtp から探す。
-function! s:preview_sh() abort
-  return get(split(globpath(&runtimepath, 'bin/preview.sh', 0), "\n"), 0, '')
-endfunction
-
+" フォールバック用（fzf の 'sink' 形式・1 行 = パス<TAB>タイトル）。
 function! s:insert_selected(line) abort
   let l:f = split(a:line, "\t", 1)
   let l:path = get(l:f, 0, '')
@@ -225,33 +240,24 @@ function! s:insert_selected(line) abort
   call cursor(line('.'), l:col + strlen(l:link) + 1)
 endfunction
 
-" gs … 全ノート検索（タイトル＋本文）。一覧は YAML タイトル＋ヒット抜粋で、
-" ヒット語は fzf がハイライト。右ペインは :Rg と同じ fzf.vim の preview.sh を使い、
-" 該当行を反転表示してその行へスクロールする。Enter でその行を開く。
-" 候補は note_search.py がクエリごとに作り直す（change:reload）。
+" gs … vault を ripgrep で全文検索する（:Rg と同じ見た目・挙動）。
+"   一覧は rg の出力（パス:行:桁: 本文、ヒット語は rg の色）、
+"   右ペインは preview_highlight.py でクエリ語をハイライト（該当行へスクロール）。
+"   fzf#vim#grep2 を使うので、フッタ・multi・キーは :Rg と同一。
 function! simple_yurii_search#search_global() abort
   if !s:fzf_ok() | return | endif
-  let l:root = s:root()
-  let l:script = get(g:, 'simple_yurii_search_notesearch', '')
-  let l:pv = s:preview_sh()
-  if !empty(l:script) && filereadable(l:script) && !empty(l:pv)
-    let l:cmd = 'python3 ' . shellescape(l:script) . ' ' . shellescape(l:root)
-    let l:preview = 'bash ' . shellescape(l:pv) . ' {1}:{2}'
-    let l:opts = '--ansi --delimiter="\t" --with-nth=3,4 --accept-nth=1,2'
-          \ . ' --layout=reverse --height=90% --prompt=' . shellescape('Search> ')
-          \ . ' --color=hl:red:bold,hl+:red:bold'
-          \ . ' --preview ' . shellescape(l:preview)
-          \ . ' --preview-window=+{2}/2'
-          \ . ' --bind "change:reload:' . l:cmd . ' {q}"'
-    call fzf#run(fzf#wrap({
-          \ 'source': l:cmd . " ''",
-          \ 'sink': function('s:open_selected_at_line'),
-          \ 'options': l:opts,
-          \ }))
+  let l:preview = s:preview_script()
+  if exists(':Rg') && !empty(l:preview)
+    let l:rg = 'rg --column --line-number --no-heading --color=always --smart-case -e'
+    let l:spec = {'dir': s:root(), 'options': [
+          \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
+          \ '--bind', 'ctrl-/:toggle-preview',
+          \ ]}
+    call fzf#vim#grep2(l:rg, '', l:spec, 0)
     return
   endif
-  " フォールバック: 全件リスト（本文検索のみ fzf 任せ）
-  let l:notes = s:build_notes(l:root)
+  " フォールバック（fzf.vim が無い時）: タイトル＋本文の全件リスト
+  let l:notes = s:build_notes(s:root())
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let l:entries = map(copy(l:notes), {_, n -> n.p . "\t" . n.t . "\t" . n.b})
   call s:fzf_run(l:entries, function('s:open_selected'),
@@ -268,9 +274,27 @@ function! simple_yurii_search#search_local() abort
         \ s:fzf_options('2', '1', 'Link> '))
 endfunction
 
-" \L … タイトルだけで全ノートを検索 → カーソル位置に Markdown リンクを挿入
+" \L … タイトルだけで全ノートを検索（見た目は :Rg と同じ）→ カーソル位置にリンクを挿入。
 function! simple_yurii_search#pick_insert_link() abort
   if !s:fzf_ok() | return | endif
+  let l:titles = get(g:, 'simple_yurii_search_titles', '')
+  let l:preview = s:preview_script()
+  if exists(':Rg') && !empty(l:titles) && filereadable(l:titles) && !empty(l:preview)
+    let l:cmd = 'python3 ' . shellescape(l:titles) . ' ' . shellescape(s:root())
+    let s:insert_buf = bufnr('%')
+    let s:insert_pos = getpos('.')
+    let l:spec = {
+          \ 'options': [
+          \   '--with-nth=4', '--accept-nth=1,4', '--prompt', 'Title> ',
+          \   '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
+          \   '--bind', 'ctrl-/:toggle-preview',
+          \ ],
+          \ 'sink*': function('s:link_sink'),
+          \ }
+    call fzf#vim#grep2(l:cmd, '', l:spec, 0)
+    return
+  endif
+  " フォールバック: 旧タイトルピッカー（タイトル検索・fzf 任せ）
   let l:notes = s:build_notes(s:root())
   if empty(l:notes) | echo 'simple_yurii_search: ノートが見つかりません' | return | endif
   let s:insert_buf = bufnr('%')
