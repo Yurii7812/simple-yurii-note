@@ -127,6 +127,8 @@ simple_yurii_note#timestamp_filename
 simple_yurii_note#timestamp_yaml
 simple_yurii_note#toggle_alternate
 simple_yurii_note#toggle_checkbox
+simple_yurii_note#trash_current
+simple_yurii_note#trash_list
 simple_yurii_note#update_all
 simple_yurii_note#update_current_buffer
 simple_yurii_note#update_md

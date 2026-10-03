@@ -10,7 +10,9 @@
   クエリ語を強調し、3列目のヒット行へスクロールする。
 - fzf 側は --disabled で検索しない（検索・並び・強調はこのスクリプトが行う）。
 
-使い方: note_search.py <root> [query...]
+使い方: note_search.py [--only <paths-file>] <root> [query...]
+  --only <paths-file> … そのファイルに列挙した絶対パスだけを検索対象にする
+                        （<Space>=今のノートのリンク先に絞る用）。
 """
 from __future__ import annotations
 
@@ -89,10 +91,21 @@ def first_hit_line(lines: list[str], tokens: list[str]) -> int:
 
 
 def main() -> int:
-    root = sys.argv[1] if len(sys.argv) > 1 else "."
-    tokens = split_tokens(" ".join(sys.argv[2:]))
+    args = sys.argv[1:]
+    only: set[str] | None = None
+    if args and args[0] == "--only":
+        if len(args) < 2:
+            print("--only requires a file", file=sys.stderr)
+            return 2
+        with open(args[1], encoding="utf-8") as f:
+            only = {os.path.realpath(ln.strip()) for ln in f if ln.strip()}
+        args = args[2:]
+    root = args[0] if args else "."
+    tokens = split_tokens(" ".join(args[1:]))
     rows: list[tuple[int, str, str, str, int]] = []
     for path, text in load_notes(root):
+        if only is not None and os.path.realpath(path) not in only:
+            continue
         title, _tline = title_of(text, path)
         if tokens and not all(t.lower() in text.lower() for t in tokens):
             continue

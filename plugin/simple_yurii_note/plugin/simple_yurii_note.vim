@@ -187,6 +187,9 @@ command! -nargs=? SimpleGallery call simple_yurii_note#open_gallery(<q-args>)
 command! -nargs=? GalleryFolder call simple_yurii_note#open_folder_gallery(<q-args>)
 command! -nargs=? SimpleGalleryFolder call simple_yurii_note#open_folder_gallery(<q-args>)
 command!          SimpleWeb  call simple_yurii_note#open_web()
+" ゴミ箱（ソフト削除）
+command!          SimpleTrash      call simple_yurii_note#trash_current()
+command!          SimpleTrashList  call simple_yurii_note#trash_list()
 " テーブル操作コマンド
 command! -nargs=* TN         call simple_yurii_note#table_new(<q-args>)
 command! -nargs=* NewTable   call simple_yurii_note#table_new(<q-args>)
@@ -247,6 +250,10 @@ unlet s:h
 nnoremap <silent> \h       <Cmd>call simple_yurii_note#hub_open()<CR>
 nnoremap <silent> \H       <Cmd>call simple_yurii_note#hub_set()<CR>
 nnoremap <silent> \0       <Cmd>call simple_yurii_note#hub_list()<CR>
+" ゴミ箱（ソフト削除）: \tr=一覧を覗く（⏎ で復元） / \tD=今のノートをゴミ箱へ
+"   （\td は \tdr/\tdc（表の行・列削除）と待ちが被るので \tD にする）
+nnoremap <silent> \tr       <Cmd>call simple_yurii_note#trash_list()<CR>
+nnoremap <silent> \tD       <Cmd>call simple_yurii_note#trash_current()<CR>
 " \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
 " \S … リンク行を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート。

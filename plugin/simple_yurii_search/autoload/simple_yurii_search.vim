@@ -87,7 +87,7 @@ endfunction
 " ===========================================================================
 " fzf バックエンド
 "   - gs        … vault を全文検索（note_search.py。タイトル優先・表示はタイトル＋抜粋）
-"   - <Space>   … 今のノートに表示中のリンクだけ → Enter で開く
+"   - <Space>   … 今のノートのリンク先を検索（タイトル優先＋本文）→ Enter で開く
 "   - \L         … 全文検索（タイトル優先・表示はタイトル）→ Enter でリンク挿入
 "   検索・並び・強調は python、fzf は --disabled で表示に徹する（change:reload）。
 "   fzf / fzf.vim が無い環境ではフォールバックせず明示的にエラーにする。
@@ -242,12 +242,14 @@ function! s:insert_selected(line) abort
 endfunction
 
 " note_search.py（タイトル優先の全文検索）の起動コマンド。無ければ空。
-function! s:note_search_cmd() abort
+" a:1 に追加引数（例: "--only '/tmp/xxx'"）を渡せる。
+function! s:note_search_cmd(...) abort
   let l:script = get(g:, 'simple_yurii_search_notesearch', '')
   if empty(l:script) || !filereadable(l:script) || !executable('python3')
     return ''
   endif
-  return 'python3 ' . shellescape(l:script) . ' ' . shellescape(s:root())
+  let l:extra = a:0 > 0 ? a:1 . ' ' : ''
+  return 'python3 ' . shellescape(l:script) . ' ' . l:extra . shellescape(s:root())
 endfunction
 
 function! s:strip_ansi(text) abort
@@ -301,8 +303,8 @@ endfunction
 
 " note_search.py + fzf。表示はタイトル（with_nth で抜粋も出せる）。
 " 検索・並び（タイトル優先）・強調は python 側。fzf は --disabled で表示に徹する。
-function! s:note_search_run(prompt, with_nth, Sink) abort
-  let l:cmd = s:note_search_cmd()
+function! s:note_search_run(prompt, with_nth, Sink, ...) abort
+  let l:cmd = s:note_search_cmd(a:0 > 0 ? a:1 : '')
   if empty(l:cmd) | return 0 | endif
   let l:preview = s:preview_script()
   let l:options = [
@@ -340,11 +342,19 @@ function! simple_yurii_search#search_global() abort
         \ s:fzf_options('2,3', '1', 'Search> '))
 endfunction
 
-" <Space> … 今のノートに表示中のリンクだけ → 開く
+" <Space> … 今のノートのリンク先を検索（タイトル優先。リンク先ノートの本文も対象）→ 開く
 function! simple_yurii_search#search_local() abort
   if !s:fzf_ok() | return | endif
   let l:links = s:current_buffer_links()
   if empty(l:links) | echo 'simple_yurii_search: このノートにリンクがありません' | return | endif
+  " リンク先ノートの本文も検索対象にする（タイトル優先）。note_search.py を --only で絞る。
+  let l:onlyfile = tempname()
+  call writefile(map(copy(l:links), {_, n -> n.p}), l:onlyfile)
+  if s:note_search_run('Link> ', '2', function('s:search_open_sink'),
+        \ '--only ' . shellescape(l:onlyfile))
+    return
+  endif
+  " フォールバック（note_search.py が無い時）: 従来どおりタイトルだけ
   let l:entries = map(copy(l:links), {_, n -> n.p . "\t" . n.t})
   call s:fzf_run(l:entries, function('s:open_selected'),
         \ s:fzf_options('2', '1', 'Link> '))

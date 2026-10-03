@@ -581,7 +581,7 @@ function! s:guide_template() abort
         \ '## 検索（fzf）',
         \ '',
         \ '- `gs` / `\fs` … vault を全文検索（タイトル優先。左はタイトル、右はヒット箇所を強調）→ `⏎` でヒット行を開く',
-        \ '- `<Space>` … 今のノートに表示中のリンクだけを fzf で一覧 → `⏎` で開く',
+        \ '- `<Space>` … 今のノートのリンク先を検索（タイトル優先。リンク先ノートの本文も検索対象）→ `⏎` で開く',
         \ '- `\L` … 同じ全文検索（タイトル優先）でノートを選び、カーソル位置にリンクを挿入（`:LinkPick`）',
         \ '- `rg` … ripgrep で全文（行）検索（`:Rg`）',
         \ '',
@@ -621,6 +621,12 @@ function! s:guide_template() abort
         \ '',
         \ '- `\1`〜`\9` … ハブへ直行 ・ `\H` … 現在ノートを登録 ・ `\0` / `\h` … 一覧',
         \ '- ハブは Index（PKM ルート）ごとに保存。別の Index では別のハブ表になる',
+        \ '',
+        \ '## ゴミ箱',
+        \ '',
+        \ '- `\tD` … 今のノートをゴミ箱（`.trash/`）へ移す（ソフト削除。`:SimpleTrash` も同じ）',
+        \ '- `\tr` … ゴミ箱を fzf で覗く（プレビュー付き）→ `⏎` で vault 直下へ復元して開く（`:SimpleTrashList`）',
+        \ '- `.trash/` はドット始まりなので検索・一覧・同期・リンクには出ない',
         \ '',
         \ '## よみ順ソート（Index）',
         \ '',
@@ -3851,6 +3857,121 @@ endfunction
 " \0 … \h と同じ（ハブ画面を開く）。名前は互換のため残す。
 function! simple_yurii_note#hub_list() abort
   call simple_yurii_note#hub_open()
+endfunction
+
+" ---------------------------------------------------------------------------
+" ゴミ箱（trash）
+"   削除は <root>/.trash/ へ「移動」するソフト削除。.trash はドット始まりなので
+"   検索（note_search.py）も同期（note_format_v2.py）も一覧に出さない。
+"   ファイル名はアプリと同じ <日時>_<名前>（衝突時は <日時>_<n>_<名前>）。
+"   \tr / :SimpleTrashList … ゴミ箱を fzf で覗く（プレビュー付き）→ ⏎ で復元して開く
+"   \tD / :SimpleTrash      … 今のノートをゴミ箱へ
+" ---------------------------------------------------------------------------
+function! s:trash_dir() abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root)
+    let l:root = expand('%:p:h')
+  endif
+  return fnamemodify(l:root, ':p') . '.trash'
+endfunction
+
+" ゴミ箱の .md を新しい順に返す。
+function! s:trash_entries() abort
+  let l:dir = s:trash_dir()
+  if !isdirectory(l:dir)
+    return []
+  endif
+  let l:files = globpath(l:dir, '*.md', 0, 1)
+  return sort(l:files, {a, b -> getftime(b) - getftime(a)})
+endfunction
+
+function! s:trash_dest(dir, base) abort
+  let l:ts = strftime('%y%m%d%H%M%S')
+  let l:dest = a:dir . s:sep() . l:ts . '_' . a:base
+  let l:i = 1
+  while filereadable(l:dest)
+    let l:dest = a:dir . s:sep() . l:ts . '_' . l:i . '_' . a:base
+    let l:i += 1
+  endwhile
+  return l:dest
+endfunction
+
+" 今のノートをゴミ箱へ移す（ソフト削除）。
+function! simple_yurii_note#trash_current() abort
+  let l:file = expand('%:p')
+  if empty(l:file) || !filereadable(l:file) || !s:is_markdown_file(l:file)
+    echohl WarningMsg | echo 'simple_yurii_note: ノートを開いて実行して' | echohl NONE | return
+  endif
+  let l:root = s:get_pkm_root()
+  if empty(l:root) || !s:is_root_note_path(l:file)
+    echohl WarningMsg | echo 'simple_yurii_note: PKM のノートではありません' | echohl NONE | return
+  endif
+  if fnamemodify(l:file, ':t') ==# 'index.md'
+    echohl WarningMsg | echo 'simple_yurii_note: Index はゴミ箱へ移せません' | echohl NONE | return
+  endif
+  let l:dir = s:trash_dir()
+  if !isdirectory(l:dir) | call mkdir(l:dir, 'p') | endif
+  let l:dest = s:trash_dest(l:dir, fnamemodify(l:file, ':t'))
+  call rename(l:file, l:dest)
+  " 消えたノートへのリンク行を掃除するため全体を同期（バッファを閉じる前に）
+  if !empty(l:root) | call s:run_sync([g:simple_yurii_note_python, 'update', l:root]) | endif
+  " 元ファイルが消えたので、このバッファは閉じる（履歴を残して戻れるように）
+  call simple_yurii_note#push_history()
+  execute 'bwipeout! ' . bufnr('%')
+  echo 'ゴミ箱へ移動: ' . fnamemodify(l:dest, ':t')
+endfunction
+
+" ゴミ箱のファイルを vault 直下へ戻す。戻した絶対パスを返す（失敗時は空）。
+function! s:trash_restore(path) abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root) | return '' | endif
+  let l:name = fnamemodify(a:path, ':t')
+  " <日時>_ / <日時>_<n>_ の接頭辞を外す
+  let l:orig = substitute(l:name, '^\d\+_\(\d\+_\)\?', '', '')
+  if empty(l:orig) | let l:orig = l:name | endif
+  let l:dest = fnamemodify(l:root, ':p') . l:orig
+  if filereadable(l:dest)
+    echohl WarningMsg | echo 'simple_yurii_note: 復元先が既に存在します: ' . l:orig | echohl NONE
+    return ''
+  endif
+  call rename(a:path, l:dest)
+  if !empty(l:root) | call s:run_sync([g:simple_yurii_note_python, 'update', l:root]) | endif
+  return l:dest
+endfunction
+
+function! s:trash_sink(line) abort
+  let l:parts = split(a:line, "\t", 1)
+  let l:path = get(l:parts, 0, '')
+  if empty(l:path) || !filereadable(l:path) | return | endif
+  let l:restored = s:trash_restore(l:path)
+  if empty(l:restored) | return | endif
+  call simple_yurii_note#push_history()
+  silent! execute 'edit ' . fnameescape(l:restored)
+  echo '復元しました: ' . fnamemodify(l:restored, ':t')
+endfunction
+
+" \tr … ゴミ箱の中身を fzf で覗く（⏎ で復元）。fzf が無ければ quickfix。
+function! simple_yurii_note#trash_list() abort
+  let l:entries = s:trash_entries()
+  if empty(l:entries)
+    echo 'simple_yurii_note: ゴミ箱は空です'
+    return
+  endif
+  if !exists('*fzf#run')
+    call setqflist(map(copy(l:entries),
+          \ {_, p -> {'filename': p, 'text': fnamemodify(p, ':t')}}))
+    copen
+    return
+  endif
+  let l:source = map(copy(l:entries), {_, p -> p . "\t" . fnamemodify(p, ':t')})
+  call fzf#run(fzf#wrap({
+        \ 'source': l:source,
+        \ 'sink': function('s:trash_sink'),
+        \ 'options': '--delimiter=\t --with-nth=2 --accept-nth=1'
+        \   . ' --prompt=' . shellescape('ゴミ箱(⏎=復元)> ')
+        \   . ' --preview "sed -n ''1,200p'' -- {1}"'
+        \   . ' --preview-window=right:50%',
+        \ }))
 endfunction
 
 function! simple_yurii_note#push_history() abort
