@@ -15,6 +15,7 @@ simple_yurii_note#autosync_on_save
 simple_yurii_note#check_missing_prefix_in_current_dir
 simple_yurii_note#check_missing_prefix_in_current_dir_once
 simple_yurii_note#choose_index_root
+simple_yurii_note#cleanup_stale_locks
 simple_yurii_note#clear_title_cache
 simple_yurii_note#create_atomic
 simple_yurii_note#create_note
@@ -37,6 +38,7 @@ simple_yurii_note#hub_open
 simple_yurii_note#hub_set
 simple_yurii_note#init_persistent_undo_if_ready
 simple_yurii_note#is_vault_note
+simple_yurii_note#is_vault_path
 simple_yurii_note#jump_down_bottom
 simple_yurii_note#jump_down_top
 simple_yurii_note#jump_last_link_before_up
@@ -48,6 +50,8 @@ simple_yurii_note#linkify_filename_under_cursor
 simple_yurii_note#linkify_selection
 simple_yurii_note#linkify_selection_from_clipboard
 simple_yurii_note#linkify_selection_new_note
+simple_yurii_note#lock_add
+simple_yurii_note#lock_remove
 simple_yurii_note#make_link
 simple_yurii_note#new_child
 simple_yurii_note#new_here_typed

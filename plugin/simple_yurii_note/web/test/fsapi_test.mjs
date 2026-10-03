@@ -76,6 +76,15 @@ try {
   check("hasSwap detects", await fsapi.hasSwap(root, "g.md"));
   fs.rmSync(path.join(root, ".g.md.swp"));
   check("hasSwap false", !(await fsapi.hasSwap(root, "g.md")));
+
+  // hasSwap: Vim のロックファイル（PID 入り）
+  const lock = fsapi.vimLockPath(root, "g.md");
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  fs.writeFileSync(lock, `pid=${process.pid}\npath=x\ntime=0\n`);
+  check("lock alive detects", await fsapi.hasSwap(root, "g.md"));
+  fs.writeFileSync(lock, "pid=99999999\npath=x\ntime=0\n");
+  check("lock dead ignored", !(await fsapi.hasSwap(root, "g.md")));
+  fs.rmSync(lock, { force: true });
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

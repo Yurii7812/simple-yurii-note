@@ -379,6 +379,97 @@ function! simple_yurii_note#is_vault_note(path) abort
   return s:is_root_note_path(a:path)
 endfunction
 
+" PKM ルート配下の .md か（存在しなくてもよい。noswapfile / ロック判定用）
+function! simple_yurii_note#is_vault_path(path) abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root) || empty(a:path)
+    return 0
+  endif
+  let l:path = fnamemodify(a:path, ':p')
+  let l:root = fnamemodify(l:root, ':p')
+  return s:is_markdown_file(l:path)
+        \ && stridx(l:path, l:root) == 0
+        \ && index(split(l:path, s:sep()), '.undo') < 0
+endfunction
+
+" ---------------------------------------------------------------------------
+" ロックファイル: アプリ（Electron / ブラウザ）が「Vim がこのノートを開いて
+" いる」ことを検知するための PID 入りロック。
+"   vault のノートは swap を作らない（noswapfile）代わりに、state dir の
+"   locks/<sha256(abs path) 16桁>.lock を見る。クラッシュ時の残骸は PID が
+"   生きているかで判定し、死んでいれば掃除する。
+" ---------------------------------------------------------------------------
+
+function! s:lock_dir() abort
+  let l:dir = s:state_dir() . s:sep() . 'locks'
+  if !isdirectory(l:dir)
+    call mkdir(l:dir, 'p')
+  endif
+  return l:dir
+endfunction
+
+function! s:lock_path(path) abort
+  return s:lock_dir() . s:sep() . strpart(sha256(fnamemodify(a:path, ':p')), 0, 16) . '.lock'
+endfunction
+
+function! s:pid_alive(pid) abort
+  if a:pid <= 0
+    return 0
+  endif
+  call system('kill -0 ' . a:pid . ' 2>/dev/null')
+  return v:shell_error == 0
+endfunction
+
+function! simple_yurii_note#lock_add(path) abort
+  if empty(a:path) || !simple_yurii_note#is_vault_path(a:path)
+    return
+  endif
+  call writefile([
+        \ 'pid=' . getpid(),
+        \ 'path=' . fnamemodify(a:path, ':p'),
+        \ 'time=' . localtime(),
+        \ ], s:lock_path(a:path))
+endfunction
+
+function! simple_yurii_note#lock_remove(path) abort
+  if empty(a:path)
+    return
+  endif
+  call delete(s:lock_path(a:path))
+endfunction
+
+" 死んだ PID のロックと、旧バージョンが vault 直下に残した swap を掃除する。
+function! simple_yurii_note#cleanup_stale_locks() abort
+  let l:dir = s:state_dir() . s:sep() . 'locks'
+  if isdirectory(l:dir)
+    for l:f in glob(l:dir . s:sep() . '*.lock', 0, 1)
+      let l:pid = 0
+      for l:ln in readfile(l:f)
+        let l:m = matchlist(l:ln, '^pid=\(\d\+\)$')
+        if !empty(l:m)
+          let l:pid = str2nr(l:m[1])
+        endif
+      endfor
+      if !s:pid_alive(l:pid)
+        call delete(l:f)
+      endif
+    endfor
+  endif
+  " vault 直下の swap 残骸（死んだ PID のもの）。noswapfile なので以後は増えない。
+  let l:root = s:get_pkm_root()
+  if empty(l:root)
+    return
+  endif
+  for l:pat in ['*.swp', '.*.swp', '*.swo', '.*.swo']
+    for l:f in glob(l:root . s:sep() . l:pat, 0, 1)
+      let l:info = swapinfo(l:f)
+      if empty(l:info) || !s:pid_alive(get(l:info, 'pid', 0))
+        call delete(l:f)
+      endif
+    endfor
+  endfor
+endfunction
+
 function! s:pkm_format() abort
   return get(g:, 'simple_yurii_note_format', 'v2')
 endfunction
@@ -502,7 +593,7 @@ function! s:guide_template() abort
         \ '## 環境のその他',
         \ '',
         \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
-        \ '- 編集は約5秒無操作で自動保存（バッファを離れるときは即保存。`g:simple_yurii_note_autosave=0` で無効）。vault は git で自動バックアップ（2分ごと）',
+        \ '- 編集は約5秒無操作で自動保存（バッファを離れるときは即保存。`g:simple_yurii_note_autosave=0` で無効）。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
         \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',

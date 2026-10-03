@@ -650,6 +650,23 @@ augroup simple_yurii_note_autosave
 augroup END
 
 " ---------------------------------------------------------------------------
+" Swap なし + ロックファイル（2026-10-04）
+"   vault のノートは swap を作らない（Obsidian 的に .swp の残骸と E325 を無くす。
+"   クラッシュ時に失うのは最大で自動保存の間隔ぶんだけ）。
+"   アプリとの衝突検知は state dir の PID 入りロックで行う。
+" ---------------------------------------------------------------------------
+
+autocmd BufReadPre,BufNewFile *.md if simple_yurii_note#is_vault_path(expand('<afile>:p')) | setlocal noswapfile | endif
+
+augroup simple_yurii_note_lock
+  autocmd!
+  autocmd BufReadPost,BufNewFile,BufEnter *.md call simple_yurii_note#lock_add(expand('<afile>:p'))
+  autocmd BufUnload,BufDelete,VimLeavePre *.md call simple_yurii_note#lock_remove(expand('<afile>:p'))
+augroup END
+
+autocmd VimEnter * call simple_yurii_note#cleanup_stale_locks()
+
+" ---------------------------------------------------------------------------
 " AutoSync: BufWritePost で update_one を起動
 " ---------------------------------------------------------------------------
 

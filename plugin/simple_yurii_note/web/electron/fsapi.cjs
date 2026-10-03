@@ -3,6 +3,8 @@
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
+const os = require("os");
+const crypto = require("crypto");
 const { execFile } = require("child_process");
 
 const SKIP_DIRS = new Set(["_tmp"]);
@@ -89,8 +91,34 @@ async function listVault(root) {
   return { files, rels: files.map(([r]) => r).sort(), titleState: await readTitleState(root) };
 }
 
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e && e.code === "EPERM";
+  }
+}
+
+// Vim プラグインが置くロックファイル（PID 入り）の場所。
+// プラグイン側: state dir/locks/<sha256(abs path) 16桁>.lock
+function vimLockPath(root, rel) {
+  const abs = safeJoin(root, rel);
+  const hash = crypto.createHash("sha256").update(abs).digest("hex").slice(0, 16);
+  return path.join(os.homedir(), ".vim", "simple_yurii_note", "locks", hash + ".lock");
+}
+
+// Vim がこのノートを開いているか。
+//   Vim は vault のノートに swap を作らない（noswapfile）ので、state dir の
+//   PID 入りロックで判定する。旧バージョンの swap も一応見る（移行期間用）。
 async function hasSwap(root, rel) {
   const p = safeJoin(root, rel);
+  try {
+    const text = await fsp.readFile(vimLockPath(root, rel), "utf8");
+    const m = /^pid=(\d+)$/m.exec(text);
+    if (m && pidAlive(Number(m[1]))) return true;
+  } catch { /* ロック無し */ }
   return fs.existsSync(p + ".swp")
     || fs.existsSync(path.join(path.dirname(p), "." + path.basename(p) + ".swp"))
     || fs.existsSync(path.join(path.dirname(p), "." + path.basename(p) + ".swo"));
@@ -124,4 +152,5 @@ async function apply(root, { writes = [], deletes = [] } = {}) {
 module.exports = {
   safeJoin, listMd, listVault, readNote, readBinary, writeNote, deleteNote,
   readTitleState, hasSwap, runSync, apply, pythonPath, TITLE_STATE_FILE, TRASH_DIR,
+  vimLockPath,
 };
