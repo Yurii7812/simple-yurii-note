@@ -249,6 +249,11 @@ nnoremap <silent> \H       <Cmd>call simple_yurii_note#hub_set()<CR>
 nnoremap <silent> \0       <Cmd>call simple_yurii_note#hub_list()<CR>
 " \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
+" \S … リンク行を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート。
+"   ビジュアル=選択範囲 / ノーマル=バッファ全体（主に index.md）。
+"   よみはリンク先ノートの front matter `yomi:`（\zy で登録）、無ければ pykakasi。
+nnoremap <silent> \S <Cmd>call simple_yurii_note#sort_yomi()<CR>
+xnoremap <silent> \S :<C-u>call simple_yurii_note#sort_selection()<CR>
 " <Space> / gs … ノートナビゲータ。状態は「打つ / 打たない」の1つだけ。
 "   ⏎ で打つのをやめる、i で打ちに戻る。/ はクエリを消して打つ。
 "   打たない状態のキーはローカルでもグローバルでも完全に同じ。
@@ -334,6 +339,9 @@ xnoremap <nowait> <silent> zk  :<C-u>call simple_yurii_note#v2_new_group_visual(
 " za: ca（クリップボードのノートを child に追加）と同じだが、関係ピッカーを
 " 出さず既定の「ノート」関係で固定する
 nnoremap <nowait> <silent> za  <Cmd>call simple_yurii_note#add_clipboard_before_up_note()<CR>
+" zA: za と同じだが、追加前に「表示名」を入力する（既定は za が使う表示名。
+"     空 Enter / Esc で中止）。Vim 標準の折りたたみ zA は上書きされる。
+nnoremap <nowait> <silent> zA  <Cmd>call simple_yurii_note#add_clipboard_before_up_note_named()<CR>
 " \e（旧 pe）: 現ノートを起点に親/子/文中を辿って 1 つの md へ展開（v2 専用、_tmp/T_<timestamp>.md）。
 " シンプル（深さ1つ）/ 詳細（親・子・文中を別々の深さ、前回設定を再利用可）を選ぶ。
 " 「p」は素の貼り付けと1文字目が被り、素の p が timeoutlen 待ちになるため \ 側へ移した。
@@ -357,6 +365,10 @@ nnoremap <nowait> <silent> zT  <Cmd>call simple_yurii_note#rename_title('')<CR>
 nnoremap <nowait> <silent> zl  <Cmd>call simple_yurii_note#rename_link_text_with_default('')<CR>
 " zL: 現在のリンク表示名を残して編集
 nnoremap <nowait> <silent> zL  <Cmd>call simple_yurii_note#rename_link_text('')<CR>
+" zy: カーソル下リンクの表示名（リンクが無ければ現在ノートのタイトル）のよみを
+"     front matter の yomi: マップへ登録/修正する。空 Enter で削除。
+"     よみは \S / :SortYomi の表示名ソートで使う（未登録は pykakasi が自動）。
+nnoremap <nowait> <silent> zy  <Cmd>call simple_yurii_note#set_yomi()<CR>
 " zd: Child: のリンク表示名をリンク先 YAML title に更新
 nnoremap <nowait> <silent> zd  <Cmd>RenameChildLinkTitles<CR>
 vnoremap <nowait> <silent> zd  :<C-u>'<,'>RenameChildLinkTitles<CR>

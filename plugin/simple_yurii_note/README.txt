@@ -97,7 +97,7 @@ filetype [N] →    → 新しい filetype を1文字入力（a-z、大文字に
 | | `:JumpParent` | Parent リンクが1つだけならリンク先へ直接移動、複数ある場合は `Parent:` 見出しへカーソル移動 |
 | | `:JumpChildTop` | `Child:` セクションの先頭行へカーソル移動 |
 | | `:JumpChildBottom` | `Child:` セクションの最後尾行へカーソル移動 |
-| | `:SortYomi` | Child セクションを読み仮名順にソート（`sort_yomi.py` 経由） |
+| | `:SortYomi` | バッファ内のリンク行を表示名のよみ順（五十音→ローマ字）にソート（`sort_yomi.py` 経由。`\S` と同じ。主に Index） |
 | | `:SortTime` | 範囲選択がある場合は選択範囲のリンク行を、未選択時は Child セクションのリンク行を時刻で昇順ソート |
 | | `:SortTime!` | `:SortTime` と同じ対象を時刻の降順（新しい順）でソート |
 

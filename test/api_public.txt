@@ -2,6 +2,7 @@ simple_yurii_note#add_clipboard
 simple_yurii_note#add_clipboard_as_child_with_parent
 simple_yurii_note#add_clipboard_before_up
 simple_yurii_note#add_clipboard_before_up_note
+simple_yurii_note#add_clipboard_before_up_note_named
 simple_yurii_note#add_clipboard_before_up_reverse
 simple_yurii_note#add_clipboard_to_branch
 simple_yurii_note#add_clipboard_to_top
@@ -85,6 +86,8 @@ simple_yurii_note#rename_title_with_default
 simple_yurii_note#replace_visual_selection
 simple_yurii_note#resolve_link
 simple_yurii_note#save_before_normal_jump
+simple_yurii_note#set_yomi
+simple_yurii_note#sort_selection
 simple_yurii_note#sort_time
 simple_yurii_note#sort_yomi
 simple_yurii_note#stack_copy_delete_line

@@ -439,6 +439,7 @@ function! s:guide_template() abort
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
         \ '- `\p`（ビジュアル）… クリップボードのファイル名を選択範囲のリンクに（無ければ何もしない）',
         \ '- `za` … リンク 1 本を今のノートに追加（`h`/`Enter`。相手の Parent は書かない）',
+        \ '- `zA` … `za` と同じだが、追加前に**表示名**を入力する（空 Enter / Esc で中止）',
         \ '- `zp` … `za` と同じ追加＋今のノートを相手の Parent に書く',
         \ '- `\P` … カーソル下リンクの Parent に今のノートを確認なしで追加',
         \ '- クリップボードを関係付きで追加: `ca` / `cu` / `\ca` / `tt` / `ta` / `\at` / `\bc`（`\ca`= `ca`、`\at`= `at` の逆方向）',
@@ -449,6 +450,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `zt` / `zT` … タイトル変更（空から / 現在を残して編集）',
         \ '- `zl` / `zL` … リンク表示名の変更（空から / 現在を残して編集）',
+        \ '- `zy` … カーソル下リンク（無ければ今のノート）の**よみ**を `yomi:` に登録/修正（空 Enter で削除）',
         \ '- `zd` … 子リンクの表示名をリンク先タイトルに更新',
         \ '- `mp` … YAML `filetype` を変更 ・ `yn` … 今のファイル名をヤンク',
         \ '',
@@ -515,6 +517,14 @@ function! s:guide_template() abort
         \ '',
         \ '- `\1`〜`\9` … ハブへ直行 ・ `\H` … 現在ノートを登録 ・ `\0` / `\h` … 一覧',
         \ '- ハブは Index（PKM ルート）ごとに保存。別の Index では別のハブ表になる',
+        \ '',
+        \ '## よみ順ソート（Index）',
+        \ '',
+        \ '- `\S`（ノーマル）… バッファ内の**リンク行**を表示名のよみ順（五十音 → ローマ字は末尾）に並べ替え',
+        \ '- `\S`（ビジュアル）… 選択した行のリンク行だけを同じ規則で並べ替え',
+        \ '- `:SortYomi` … `\S`（ノーマル）と同じ',
+        \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。無ければ pykakasi が自動',
+        \ '- `zy` で表示名ごとのよみを登録でき、その表示名が Index から消えると同期時に掃除される',
         \ '',
         \ '## Vim の基本操作（詳細）',
         \ '',
@@ -6502,6 +6512,37 @@ function! simple_yurii_note#add_clipboard_before_up_note() abort
   silent write
 endfunction
 
+" zA: za と同じだが、追加前に「表示名」を 1 つ入力する（既定は za が使う表示名。
+"     空 Enter / Esc で中止）。Vim 標準の折りたたみ zA は上書きされる。
+"     引数に文字列を渡すと input() を出さずその表示名を使う（テスト・自動化用）。
+function! simple_yurii_note#add_clipboard_before_up_note_named(...) abort
+  let l:link = s:pick_one_link()
+  if empty(l:link)
+    echo 'Error: リンクが見つかりません（カーソル下 or クリップボード）'
+    return
+  endif
+  let l:parts = s:extract_markdown_link(l:link)
+  let l:target = get(l:parts, 'target', '')
+  let l:default = get(l:parts, 'text', '')
+  if empty(l:target)
+    echohl WarningMsg | echo 'simple_yurii_note: リンクの形式が不正です' | echohl NONE
+    return
+  endif
+  if a:0 > 0
+    let l:name = a:1
+  else
+    let l:name = input('表示名: ', l:default)
+  endif
+  if empty(l:name)
+    echo 'simple_yurii_note: 中止しました'
+    return
+  endif
+  call s:insert_links_at_position(['[' . l:name . '](' . l:target . ')'])
+  call s:realtime_sync_apply()
+  silent write
+  echo 'simple_yurii_note: 表示名 ' . l:name . ' でリンクを追加'
+endfunction
+
 " 現ノートがグループ（attribute: group / index.md）かどうか
 function! s:buf_is_group() abort
   if s:is_current_index_buffer()
@@ -7071,21 +7112,103 @@ function! simple_yurii_note#open_index() abort
   endif
 endfunction
 
-function! simple_yurii_note#sort_yomi() abort
-  " sort_yomi.py が同ディレクトリにあれば呼び出す
-  let l:py_dir = fnamemodify(g:simple_yurii_note_python, ':h')
-  let l:sort_script = l:py_dir . s:sep() . 'sort_yomi.py'
-  if !filereadable(l:sort_script)
-    echohl ErrorMsg
-    echo 'sort_yomi.py not found at: ' . l:sort_script
-    echohl None
+" sort_yomi.py の場所（:SortYomi / \S / \zy が使う）
+function! s:sort_yomi_script() abort
+  return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'sort_yomi.py'
+endfunction
+
+" 指定行範囲のリンク行を表示名のよみ順に並べ替える。
+" リンクでない行（front matter・見出し・空行など）は位置ごと動かさない。
+function! s:sort_lines_by_yomi(first, last) abort
+  let l:script = s:sort_yomi_script()
+  if !filereadable(l:script)
+    echohl ErrorMsg | echo 'simple_yurii_note: sort_yomi.py が見つかりません: ' . l:script | echohl NONE
     return
   endif
-  if &modified | write | endif
-  let l:result = system(s:python_cmd() . ' ' . shellescape(l:sort_script) .
-        \ ' ' . shellescape(expand('%:p')))
-  echo l:result
-  edit!
+  let l:lines = getline(a:first, a:last)
+  if empty(l:lines)
+    return
+  endif
+  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(expand('%:p:h'))
+  let l:out = system(l:cmd, join(l:lines, "\n") . "\n")
+  if v:shell_error != 0
+    echohl WarningMsg | echo 'simple_yurii_note: よみソートに失敗しました（pykakasi 未導入?）' | echohl NONE
+    return
+  endif
+  let l:new = split(l:out, "\n", 1)
+  if !empty(l:new) && l:new[-1] ==# ''
+    call remove(l:new, -1)
+  endif
+  if len(l:new) != len(l:lines)
+    echohl WarningMsg | echo 'simple_yurii_note: よみソートの行数が一致しません' | echohl NONE
+    return
+  endif
+  let l:view = winsaveview()
+  call setline(a:first, l:new)
+  call winrestview(l:view)
+  echo printf('simple_yurii_note: %d 行をよみ順に並べ替えました', len(l:new))
+endfunction
+
+" \S（ノーマル）/ :SortYomi … バッファ内のリンク行をよみ順にソート（主に index.md）。
+function! simple_yurii_note#sort_yomi() abort
+  call s:sort_lines_by_yomi(1, line('$'))
+endfunction
+
+" \S（ビジュアル）… 選択した行のリンク行をよみ順にソート。
+function! simple_yurii_note#sort_selection() abort
+  let l:first = line("'<")
+  let l:last = line("'>")
+  if l:first <= 0 || l:last <= 0 || l:first > l:last
+    echo 'simple_yurii_note: 選択範囲がありません'
+    return
+  endif
+  call s:sort_lines_by_yomi(l:first, l:last)
+endfunction
+
+" zy … カーソル下リンクの表示名（無ければ現在ノートのタイトル）のよみを、
+"      リンク先ノート（無ければ現在ノート）の front matter `yomi:` に登録する。
+"      空 Enter / Esc で削除。pykakasi の推測を既定値に出す。
+"      引数に文字列を渡すと input() を出さずそのよみを使う（テスト・自動化用）。
+function! simple_yurii_note#set_yomi(...) abort
+  let l:script = s:sort_yomi_script()
+  if !filereadable(l:script)
+    echohl ErrorMsg | echo 'simple_yurii_note: sort_yomi.py が見つかりません: ' . l:script | echohl NONE
+    return
+  endif
+  let l:name = ''
+  let l:note = ''
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if !empty(l:lk) && !empty(get(l:lk, 'target', ''))
+    let l:resolved = simple_yurii_note#resolve_link(l:lk.target)
+    if filereadable(l:resolved)
+      let l:note = fnamemodify(l:resolved, ':p')
+      let l:name = l:lk.text
+    endif
+  endif
+  if empty(l:note)
+    let l:note = expand('%:p')
+    let l:name = simple_yurii_note#current_title()
+  endif
+  if empty(l:name) || empty(l:note) || !filereadable(l:note)
+    echohl WarningMsg | echo 'simple_yurii_note: ノート上で実行して' | echohl NONE
+    return
+  endif
+  if a:0 > 0
+    let l:reading = a:1
+  else
+    let l:guess = substitute(system(
+          \ s:python_cmd() . ' ' . shellescape(l:script) . ' guess ' . shellescape(l:name)),
+          \ '\n*$', '', '')
+    let l:reading = input('よみ(' . l:name . '): ', l:guess)
+  endif
+  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' set'
+        \ . ' --note ' . shellescape(l:note)
+        \ . ' --name ' . shellescape(l:name)
+        \ . ' --reading ' . shellescape(l:reading)
+  let l:out = substitute(system(l:cmd), '\n*$', '', '')
+  call simple_yurii_note#clear_title_cache()
+  silent! checktime
+  echo l:out
 endfunction
 
 function! s:extract_time_digits(text) abort

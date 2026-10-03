@@ -276,7 +276,10 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 
 - `:SimpleIndex` : `index.md` を開く
 - `:SimpleChooseIndexDir` : index ルート選択
-- `:SortYomi` : Child の読み順ソート
+- `:SortYomi` : バッファの**リンク行**を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート（`\S` のノーマルと同じ。主に `index.md`）
+- `\S` : ノーマル=バッファのリンク行 / ビジュアル=選択行をよみ順ソート。よみはリンク先の front matter `yomi:`（`zy` で登録）→ 無ければ pykakasi（`pip install --user pykakasi`）
+- `zy` : カーソル下リンク（無ければ今のノート）のよみを `yomi:` に登録/修正（空 `Enter` で削除）
+- `zA` : `za` と同じリンク追加だが、追加前に表示名を入力する
 - `:CheckPrefix` : プレフィクスチェック
 - `:OutlineEdit` / `\oe` : アウトライン編集（別バッファで見出し編集、`←/→` で `#` 数変更、`q` / `:write` / `ZZ` / `:OutlineApply` で反映）
 

@@ -62,6 +62,12 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from japanese_yomi import parse_yomi_map, set_yomi_map
+except ImportError:  # 実行ディレクトリ以外から import されたとき
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from japanese_yomi import parse_yomi_map, set_yomi_map
+
 RELATIONS: tuple[str, ...] = (
     "group", "索引", "前提", "論点", "見解", "ノート", "関連", "補足", "資料",
 )
@@ -1163,6 +1169,37 @@ def _links_from(lines: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+def _used_display_names(notes: dict) -> set[str]:
+    """vault 内のリンクが実際に使っている表示名 + 各ノートの title を集める。"""
+    used: set[str] = set()
+    for n in notes.values():
+        used.add(n["title"])
+        for kind in ("body", "parent", "back"):
+            for disp, _tg in _links_from(n.get(kind, [])):
+                if disp:
+                    used.add(disp)
+    return used
+
+
+def _prune_yomi_maps(notes: dict, used: set[str]) -> int:
+    """使われていない表示名の yomi を各ノートの front matter から取り除く。
+
+    ノート自身の title は常に残す。front matter を書き換えたノート数を返す。
+    """
+    changed = 0
+    for n in notes.values():
+        if not n["fm"]:
+            continue
+        mapping = parse_yomi_map(n["fm"])
+        if not mapping:
+            continue
+        keep = {k: v for k, v in mapping.items() if k in used or k == n["title"]}
+        if len(keep) != len(mapping):
+            n["fm"] = set_yomi_map(n["fm"], keep)
+            changed += 1
+    return changed
+
+
 def _simple_parse(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
     fm, rest = _split_front_matter(text.split("\n"))
@@ -1327,6 +1364,10 @@ def simple_sync(root) -> int:
         for t in body_t.get(p, []):
             if t != p:
                 index_of[t] = p
+
+    # 使われていない表示名の yomi を掃除する（\zy で登録した表示名が Index から
+    # 消えたら、同期時に一緒に消える）。ノート自身の title は常に残す。
+    _prune_yomi_maps(notes, _used_display_names(notes))
 
     changed = 0
     for p, n in notes.items():

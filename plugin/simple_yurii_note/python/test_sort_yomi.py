@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""japanese_yomi / sort_yomi の自己完結テスト（pytest 非依存・pykakasi 非依存）。
+
+読みは注入するので pykakasi が無くても通る。
+
+    python3 test_sort_yomi.py
+"""
+from __future__ import annotations
+
+import contextlib
+import io
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+import japanese_yomi as jy  # noqa: E402
+import note_format_v2 as nf  # noqa: E402
+import sort_yomi  # noqa: E402
+
+_FAILED: list[str] = []
+
+# テスト用の読み（pykakasi の代わり）
+_YOMI = {
+    "日記": "にっき",
+    "ハーブ・薬草": "はーぶやくそう",
+    "行動のために": "こうどうのために",
+    "タルパ": "たるぱ",
+    "解剖学": "かいぼうがく",
+    "就職": "しゅうしょく",
+    "知識管理": "ちしきかんり",
+    "筋トレ": "すじとれ",
+}
+
+
+def fake_reader(text: str) -> str:
+    return _YOMI.get(text, text)
+
+
+def check(cond: bool, msg: str) -> None:
+    if cond:
+        print(f"  ok   {msg}")
+    else:
+        print(f"  FAIL {msg}")
+        _FAILED.append(msg)
+
+
+def _link_lines(lines: list[str]) -> list[str]:
+    return [ln for ln in lines if jy._LINK_RE.search(ln)]
+
+
+def test_reading_key_order() -> None:
+    print("reading_key: 五十音順（かな）")
+    keys = {w: jy.reading_key(w) for w in ["日記", "解剖学", "就職", "タルパ"]}
+    check(keys["解剖学"] < keys["就職"] < keys["タルパ"] < keys["日記"], "かいぼう < しゅう < たるぱ < にっき")
+
+
+def test_reading_key_latin_last() -> None:
+    print("reading_key: ローマ字は末尾で英字順")
+    check(jy.reading_key("日記") < jy.reading_key("AI"), "かな < ローマ字")
+    check(jy.reading_key("AI") < jy.reading_key("Discord") < jy.reading_key("linux"), "AI < Discord < linux")
+
+
+def test_reading_key_ignores_long_vowel_middot() -> None:
+    print("reading_key: 長音・中黒を無視")
+    check(jy.reading_key("ハーブ・薬草") == jy.reading_key("はぶやくそう"), "ハーブ・薬草 == はぶやくそう")
+
+
+def test_yomi_map_roundtrip() -> None:
+    print("yomi map: parse / set の往復")
+    fm = ["---", "time: 1", "title: 筋トレ", "---"]
+    new_fm = jy.set_yomi_map(fm, {"筋トレ": "きんとれ", "筋トレ日記": "きんとれにっき"})
+    check(new_fm[0:3] == ["---", "time: 1", "title: 筋トレ"], "先頭は保持")
+    check(jy.parse_yomi_map(new_fm) == {"筋トレ": "きんとれ", "筋トレ日記": "きんとれにっき"}, "往復一致")
+    removed = jy.set_yomi_map(new_fm, {})
+    check(jy.parse_yomi_map(removed) == {}, "空マップでブロック削除")
+    check("yomi:" not in "\n".join(removed), "yomi 行が残らない")
+
+
+def test_set_get_yomi_file() -> None:
+    print("set/get_yomi: ノートファイルに保存")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "x.md"
+        p.write_text("---\ntime: 1\ntitle: 筋トレ\nattribute: group\n---\n\n# 筋トレ\n", encoding="utf-8")
+        check(jy.set_yomi(p, "筋トレ", "きんとれ") is True, "登録で True")
+        check(jy.set_yomi(p, "筋トレ", "きんとれ") is False, "同値は False")
+        check(jy.get_yomi(p, "筋トレ") == "きんとれ", "登録値を取得")
+        check(jy.set_yomi(p, "筋トレ", "") is True, "空で削除")
+        text = p.read_text(encoding="utf-8")
+        check("yomi:" not in text and "attribute: group" in text, "削除後も他キーは保持")
+
+
+def test_sort_lines_display_name() -> None:
+    print("sort_lines: リンク行だけ表示名で並ぶ・非リンク行は動かない")
+    lines = [
+        "# Index",
+        "",
+        "[日記](a.md)",
+        "[解剖学](b.md)",
+        "[タルパ](c.md)",
+        "[AI](i.md)",
+        "[Discord](h.md)",
+        "",
+        "散文",
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        out = jy.sort_lines(lines, d)
+    check(out[0:2] == ["# Index", ""], "先頭の見出し・空行はそのまま")
+    check(out[7:9] == ["", "散文"], "末尾の空行・散文はそのまま")
+    check(_link_lines(out) == [
+        "[解剖学](b.md)",
+        "[タルパ](c.md)",
+        "[日記](a.md)",
+        "[AI](i.md)",
+        "[Discord](h.md)",
+    ], "かな→ローマ字末尾の順")
+
+
+def test_sort_lines_yomi_override() -> None:
+    print("sort_lines: ノートの yomi: が pykakasi より優先")
+    with tempfile.TemporaryDirectory() as d:
+        note = Path(d) / "x.md"
+        note.write_text(
+            "---\ntitle: 筋トレ\nyomi:\n  \"筋トレ\": \"きんとれ\"\n---\n", encoding="utf-8"
+        )
+        lines = ["[筋トレ](x.md)", "[就職](f.md)"]
+        out = jy.sort_lines(lines, d)
+    check(out == ["[筋トレ](x.md)", "[就職](f.md)"], "きんとれ < しゅうしょく（すじとれなら負ける）")
+
+
+def test_sort_lines_stable() -> None:
+    print("sort_lines: 同じよみは元の順（安定）")
+    lines = ["[A](a.md)", "[B](b.md)", "[C](c.md)"]
+    with tempfile.TemporaryDirectory() as d:
+        out = jy.sort_lines(lines, d)
+    check(out == lines, "同よみは不変")
+
+
+def test_used_and_prune() -> None:
+    print("sync 掃除: 使われていない表示名の yomi を落とす")
+    notes = {
+        Path("/tmp/a.md"): {
+            "fm": [
+                "---",
+                "title: 筋トレ",
+                "yomi:",
+                '  "筋トレ": "きんとれ"',
+                '  "消えた名前": "けえた"',
+                "---",
+            ],
+            "title": "筋トレ",
+            "body": [],
+            "parent": [],
+            "back": [],
+        },
+        Path("/tmp/b.md"): {
+            "fm": ["---", "title: 日記", "yomi:", '  "使われない": "つかわれない"', "---"],
+            "title": "日記",
+            "body": ["[筋トレ](a.md)"],
+            "parent": ["[Index](index.md)"],
+            "back": [],
+        },
+    }
+    used = nf._used_display_names(notes)
+    check({"筋トレ", "日記", "Index"} <= used, "使用中の表示名と title を収集")
+    changed = nf._prune_yomi_maps(notes, used)
+    check(changed == 2, "2 ノートを掃除")
+    check(jy.parse_yomi_map(notes[Path("/tmp/a.md")]["fm"]) == {"筋トレ": "きんとれ"}, "使用中は残る")
+    check(jy.parse_yomi_map(notes[Path("/tmp/b.md")]["fm"]) == {}, "未使用は消える")
+
+
+def test_cli() -> None:
+    print("sort_yomi CLI: set / get / sort")
+    with tempfile.TemporaryDirectory() as d:
+        note = Path(d) / "x.md"
+        note.write_text("---\ntitle: 筋トレ\n---\n", encoding="utf-8")
+        rc = sort_yomi.main(["set", "--note", str(note), "--name", "筋トレ", "--reading", "きんとれ"])
+        check(rc == 0, "set が成功")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sort_yomi.main(["get", "--note", str(note), "--name", "筋トレ"])
+        check(buf.getvalue().strip() == "きんとれ", "get が登録値を返す")
+        data = "[日記](a.md)\n[解剖学](b.md)\n"
+        buf = io.StringIO()
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO(data)
+        try:
+            with contextlib.redirect_stdout(buf):
+                rc = sort_yomi.main(["sort", "--base", str(d)])
+        finally:
+            sys.stdin = old_stdin
+        check(rc == 0 and buf.getvalue() == "[解剖学](b.md)\n[日記](a.md)\n", "sort がよみ順")
+
+
+def main() -> int:
+    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+    for t in tests:
+        jy.set_reader(fake_reader)
+        try:
+            t()
+        finally:
+            jy.reset_reader()
+    print()
+    if _FAILED:
+        print(f"{len(_FAILED)} FAILED")
+        return 1
+    print("all passed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
