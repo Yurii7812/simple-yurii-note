@@ -443,7 +443,7 @@ function! s:guide_template() abort
         \ '- `\l`（ビジュアル）… 選択範囲をタイトルにした新ノートを作成し、選択をそのリンクに置換（Parent=元ノート、確認なし）',
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
         \ '- `\p`（ビジュアル）… クリップボードのファイル名を選択範囲のリンクに（無ければ何もしない）',
-        \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `r`=Related）',
+        \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `p`=Parent末尾 / `r`=Related）',
         \ '- `zA` … `za` と同じだが、追加前に**表示名**を入力する（空 Enter / Esc で中止）',
         \ '- `zp` … `za` と同じ追加＋今のノートを相手の Parent に書く',
         \ '- 関連: `za` 等で `r` を押すと `### Related` に**相互追加**（両ノートに。セクションはこの時だけ作る。片側で消すと次回同期で両方から消える。BackLink には出ない）',
@@ -6426,9 +6426,10 @@ function! s:ensure_blank_before_up() abort
   return 1
 endfunction
 
-" リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter / r。zn と同じ約束）。
+" リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter / p / r。zn と同じ約束）。
 "   h     … カーソル行の直下（本文）
 "   Enter … 本文の最後（### Parent の直前）
+"   p     … 今のノートの ### Parent 末尾（相手が親になる）
 "   r     … ### Related へ（今のノートと相手の両方に相互追加）
 " Esc / q / o は「何も置かない」で終わる。
 function! s:insert_links_at_position(links) abort
@@ -6436,13 +6437,26 @@ function! s:insert_links_at_position(links) abort
   if empty(l:links)
     return 0
   endif
-  echo 'h=カーソル直下 / Enter=本文の最後 / r=Related  (Esc で取り止め)'
+  echo 'h=カーソル直下 / Enter=本文の最後 / p=Parent末尾 / r=Related  (Esc で取り止め)'
   let l:ch = nr2char(getchar())
   redraw
   let l:num = char2nr(l:ch)
   if l:ch ==? 'q' || l:num == 27 || l:num == 3
     echo 'simple_yurii_note: 何も追加しない'
     return 0
+  endif
+  if l:ch ==? 'p'
+    " 今のノートの ### Parent 末尾に置く（相手が親になる）。zn / zk の p と同じ。
+    let l:added = 0
+    for l:lk in l:links
+      if s:append_link_to_buffer_section('up', l:lk)
+        let l:added += 1
+      endif
+    endfor
+    if l:added == 0
+      echo 'simple_yurii_note: Parent に追加できるリンクがありません（重複 or ### Parent 無し）'
+    endif
+    return l:added > 0
   endif
   if l:ch ==? 'r'
     " ### Related に相互追加: 今のノートの Related に相手、相手ノートの
