@@ -216,6 +216,33 @@ function pruneDangling(lines, rel, resolver) {
   return out;
 }
 
+// 対称でない Related リンク（相手側の Related に自分が無い）を掃除する。
+// Related は両側に同じ相手があるときだけ成立する（zr は両側に書く）。
+function pruneOneSidedRelated(lines, rel, resolver, relatedT) {
+  const dir = dirname(rel);
+  const oneSided = (tg) => {
+    const rp = resolver(tg, dir);
+    return rp === null || rp === rel || !(relatedT.get(rp)?.has(rel));
+  };
+  const out = [];
+  for (const ln of lines) {
+    if (LINK_LINE_RE.test(ln)) {
+      const tg = linkTarget(ln);
+      if (tg.toLowerCase().endsWith(".md") && oneSided(tg)) continue;
+      out.push(ln);
+      continue;
+    }
+    out.push(
+      replaceInlineLinks(ln, (full, disp, tg) => {
+        const base = tg.split("#")[0].trim();
+        if (base.toLowerCase().endsWith(".md") && oneSided(base)) return disp;
+        return full;
+      }),
+    );
+  }
+  return out;
+}
+
 function simpleRender(rel, n, parentLines, back, titles) {
   let lines = n.fm.length ? n.fm.slice() : ["---", "title: " + n.title, "---"];
   lines = lines.concat(n.body);
@@ -295,6 +322,27 @@ export function runSync(files, prevTitleState) {
     if (n.fm.some((ln) => GROUP_ATTR_RE.test(ln))) groupSet.add(rel);
   }
 
+  // `### Related` は対称。両側に同じ相手があるペアだけ成立する（zr は両側に
+  // 書くので通常はそのまま）。片側で消されたら次回 sync で反対側からも消える。
+  for (const rel of rels) {
+    const n = notes.get(rel);
+    n.related = preserveParent(n.related, rel, res, titles);
+    n.related = pruneDangling(n.related, rel, res);
+  }
+  const relatedT = new Map();
+  for (const rel of rels) {
+    const ts = new Set();
+    for (const [, tg] of linksFrom(notes.get(rel).related)) {
+      const rp = res(tg, dirname(rel));
+      if (rp !== null && rp !== rel) ts.add(rp);
+    }
+    relatedT.set(rel, ts);
+  }
+  for (const rel of rels) {
+    const n = notes.get(rel);
+    n.related = pruneOneSidedRelated(n.related, rel, res, relatedT);
+  }
+
   const changed = new Map();
   for (const rel of rels) {
     const n = notes.get(rel);
@@ -304,11 +352,6 @@ export function runSync(files, prevTitleState) {
 
     let parentLines = preserveParent(n.parent, rel, res, titles);
     parentLines = pruneDangling(parentLines, rel, res);
-
-    // `### Related` もユーザー管理（zr で足す）。削除・追加はせず、表示名の
-    // 追従と消えたファイルへのリンク掃除だけする。incoming（BackLink）には出さない。
-    n.related = preserveParent(n.related, rel, res, titles);
-    n.related = pruneDangling(n.related, rel, res);
 
     const parentSet = new Set();
     for (const [, tg] of linksFrom(n.parent)) {

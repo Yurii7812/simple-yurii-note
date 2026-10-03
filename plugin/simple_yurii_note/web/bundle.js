@@ -186,6 +186,30 @@
     }
     return out;
   }
+  function pruneOneSidedRelated(lines, rel, resolver2, relatedT) {
+    const dir = dirname(rel);
+    const oneSided = (tg) => {
+      const rp = resolver2(tg, dir);
+      return rp === null || rp === rel || !relatedT.get(rp)?.has(rel);
+    };
+    const out = [];
+    for (const ln of lines) {
+      if (LINK_LINE_RE.test(ln)) {
+        const tg = linkTarget(ln);
+        if (tg.toLowerCase().endsWith(".md") && oneSided(tg)) continue;
+        out.push(ln);
+        continue;
+      }
+      out.push(
+        replaceInlineLinks(ln, (full, disp, tg) => {
+          const base2 = tg.split("#")[0].trim();
+          if (base2.toLowerCase().endsWith(".md") && oneSided(base2)) return disp;
+          return full;
+        })
+      );
+    }
+    return out;
+  }
   function simpleRender(rel, n, parentLines, back, titles) {
     let lines = n.fm.length ? n.fm.slice() : ["---", "title: " + n.title, "---"];
     lines = lines.concat(n.body);
@@ -252,6 +276,24 @@
       }
       if (n.fm.some((ln) => GROUP_ATTR_RE.test(ln))) groupSet.add(rel);
     }
+    for (const rel of rels) {
+      const n = notes.get(rel);
+      n.related = preserveParent(n.related, rel, res, titles);
+      n.related = pruneDangling(n.related, rel, res);
+    }
+    const relatedT = /* @__PURE__ */ new Map();
+    for (const rel of rels) {
+      const ts = /* @__PURE__ */ new Set();
+      for (const [, tg] of linksFrom(notes.get(rel).related)) {
+        const rp = res(tg, dirname(rel));
+        if (rp !== null && rp !== rel) ts.add(rp);
+      }
+      relatedT.set(rel, ts);
+    }
+    for (const rel of rels) {
+      const n = notes.get(rel);
+      n.related = pruneOneSidedRelated(n.related, rel, res, relatedT);
+    }
     const changed = /* @__PURE__ */ new Map();
     for (const rel of rels) {
       const n = notes.get(rel);
@@ -259,8 +301,6 @@
       n.body = pruneDangling(n.body, rel, res);
       let parentLines = preserveParent(n.parent, rel, res, titles);
       parentLines = pruneDangling(parentLines, rel, res);
-      n.related = preserveParent(n.related, rel, res, titles);
-      n.related = pruneDangling(n.related, rel, res);
       const parentSet = /* @__PURE__ */ new Set();
       for (const [, tg] of linksFrom(n.parent)) {
         const rp = res(tg, dirname(rel));

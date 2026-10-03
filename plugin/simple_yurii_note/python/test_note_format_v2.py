@@ -937,8 +937,8 @@ def test_simple_sync_filename_display_follows_before_first_sync() -> None:
         check("[みかん](a.md)" in b, "ファイル名表示は自動扱いで追従する")
 
 
-def test_simple_sync_related_is_user_managed() -> None:
-    print("simple_sync: ### Related は zr 由来のユーザーセクション（sync は勝手に作らない・BackLink に出ない）")
+def test_simple_sync_related_one_sided_is_pruned() -> None:
+    print("simple_sync: 片側にしか無い ### Related は sync が外す（対称管理）")
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "index.md").write_text(
@@ -953,15 +953,50 @@ def test_simple_sync_related_is_user_managed() -> None:
         _plain_note(root / "b.md", "B", "")
         v2.simple_sync(root)
         a = (root / "a.md").read_text(encoding="utf-8")
-        check(f"{RELATED_MARK}\n[B](b.md)\n{DOWN_MARK}" in a,
-              "Related は Parent と BackLink の間にそのまま残る")
+        check(RELATED_MARK not in a, "片側だけの Related は見出しごと消える")
+        check("[B](b.md)" not in a, "Related のリンク行も残らない")
         b = (root / "b.md").read_text(encoding="utf-8")
-        check("[A](a.md)" not in b, "関連リンクは相手の BackLink に出ない")
-        check(RELATED_MARK not in b, "sync は相手に Related を勝手に作らない")
+        check("[A](a.md)" not in b, "sync は相手に Related を勝手に作らない")
         check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
-        # Related が無いノートには作られない（b は元のまま）
-        b2 = (root / "b.md").read_text(encoding="utf-8")
-        check(RELATED_MARK not in b2, "Related 無しノートは Related 無しのまま")
+
+
+def test_simple_sync_related_mutual_stays_until_one_side_removed() -> None:
+    print("simple_sync: 相互 Related は残り、片側を消すと反対側からも消える")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        (root / "a.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: A\n---\n\n# A\n\n本文。\n\n"
+            f"{UP_MARK}\n{RELATED_MARK}\n[B](b.md)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        (root / "b.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n"
+            f"{UP_MARK}\n{RELATED_MARK}\n[A](a.md)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check(f"{RELATED_MARK}\n[B](b.md)" in a, "相互 Related は a に残る")
+        check(f"{RELATED_MARK}\n[A](a.md)" in b, "相互 Related は b に残る")
+        check("[B](b.md)" not in regions(b)[1] and "[A](a.md)" not in regions(a)[1],
+              "Related は相手の BackLink に出ない（outgoing 扱い）")
+        check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
+        # b 側から Related を消す → a 側からも消える（ユーザー報告の不具合）
+        (root / "b.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n"
+            f"{UP_MARK}\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        check(RELATED_MARK not in a, "b で消したら a の Related も消える")
+        check("[B](b.md)" not in a, "a の Related リンクも残らない")
+        check(v2.simple_sync(root) == 0, "掃除後は 2 回目 0 changes（冪等）")
 
 
 def test_simple_sync_related_retitle_and_prune() -> None:
@@ -972,7 +1007,11 @@ def test_simple_sync_related_retitle_and_prune() -> None:
             "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
             encoding="utf-8",
         )
-        _plain_note(root / "a.md", "OldTitle", "")
+        (root / "a.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: OldTitle\n---\n\n# OldTitle\n\n"
+            f"{UP_MARK}\n{RELATED_MARK}\n[B](b.md)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
         (root / "b.md").write_text(
             "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n"
             f"{UP_MARK}\n{RELATED_MARK}\n[OldTitle](a.md)\n[消えた](gone.md)\n{DOWN_MARK}\n",
@@ -981,21 +1020,26 @@ def test_simple_sync_related_retitle_and_prune() -> None:
         v2.simple_sync(root)
         b = (root / "b.md").read_text(encoding="utf-8")
         check("[消えた](gone.md)" not in b, "Related の消えたリンク行は行ごと消える")
-        check("[OldTitle](a.md)" in b, "Related の表示名は現タイトル（まだ変更無し）のまま")
+        check("[OldTitle](a.md)" in b, "相互の Related は残る")
         retitle(root / "a.md", "NewTitle")
         v2.simple_sync(root)
         b = (root / "b.md").read_text(encoding="utf-8")
+        a = (root / "a.md").read_text(encoding="utf-8")
         check("[NewTitle](a.md)" in b, "Related の表示名もタイトルに追従")
         check("[OldTitle](a.md)" not in b, "旧表示は残らない")
-        # Related を空にしたら見出しも消える
-        (root / "b.md").write_text(
-            "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n"
-            f"{UP_MARK}\n{RELATED_MARK}\n{DOWN_MARK}\n",
-            encoding="utf-8",
-        )
+        check("[NewTitle](a.md)" not in a and "[B](b.md)" in a,
+              "追従はリンク先のタイトル側だけ（自分の表示名は相手のタイトル）")
+        # 両側から Related を空にしたら見出しも消える
+        for f, title, body in (("a.md", "NewTitle", "[B](b.md)"), ("b.md", "B", "[NewTitle](a.md)")):
+            (root / f).write_text(
+                f"---\ntime: 2026-01-01 00:00:00\ntitle: {title}\n---\n\n# {title}\n\n"
+                f"{UP_MARK}\n{RELATED_MARK}\n{DOWN_MARK}\n",
+                encoding="utf-8",
+            )
         v2.simple_sync(root)
-        b = (root / "b.md").read_text(encoding="utf-8")
-        check(RELATED_MARK not in b, "空の Related は見出しごと消える")
+        for f in ("a.md", "b.md"):
+            text = (root / f).read_text(encoding="utf-8")
+            check(RELATED_MARK not in text, f"空の Related は見出しごと消える ({f})")
         check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
 
 

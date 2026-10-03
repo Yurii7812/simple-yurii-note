@@ -1148,9 +1148,9 @@ def sync_vault(root) -> int:
 # ---------------------------------------------------------------------------
 # simple sync: 本文リンク = 子（outgoing）。Parent = 手書き ＋ Index/グループ（sync 管理）。
 #   BackLink = incoming − Parent − 自分の outgoing。
-#   `### Related` は zr で両ノートに相互に書くユーザー管理セクション。
-#   sync は表示名の追従と消えたファイルへの掃除だけで、追加・削除・
-#   incoming への反映はしない。
+#   `### Related` は zr が両ノートに相互に書く対称セクション。sync は
+#   表示名の追従・消えたファイルの掃除・対称性の維持（片側だけのペアを外す）
+#   だけを行い、リンクの追加はしない。incoming へも反映しない。
 # ---------------------------------------------------------------------------
 
 _SIMPLE_INLINE_LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -1310,6 +1310,39 @@ def _prune_dangling(lines: list[str], path: Path, resolver) -> list[str]:
     return out
 
 
+def _prune_one_sided_related(lines: list[str], path: Path, resolver,
+                             related_t: dict) -> list[str]:
+    """対称でない Related リンク（相手側の Related に自分が無い）を掃除する。
+
+    Related は両側に同じ相手があるときだけ成立する（zr は両側に書く）。
+    片側で消されたら、次回 sync でもう片側からも消える。
+    行の扱いは `_prune_dangling` と同じ（リンク単独行は行ごと、
+    文中リンクは表示名の文字だけ残す）。
+    """
+    def one_sided(tg: str) -> bool:
+        rp = resolver(tg, path.parent)
+        return rp is None or rp == path or path not in related_t.get(rp, set())
+
+    out: list[str] = []
+    for ln in lines:
+        if _SIMPLE_LINK_LINE_RE.match(ln):
+            tg = _link_target(ln)
+            if tg.lower().endswith(".md") and one_sided(tg):
+                continue
+            out.append(ln)
+            continue
+
+        def repl(m):
+            disp, tg = m.group(1), m.group(2)
+            base = tg.split("#", 1)[0].strip()
+            if base.lower().endswith(".md") and one_sided(base):
+                return disp
+            return m.group(0)
+
+        out.append(_SIMPLE_INLINE_LINK.sub(repl, ln))
+    return out
+
+
 def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back: list[Path], titles: dict) -> str:
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
@@ -1390,6 +1423,23 @@ def simple_sync(root) -> int:
     # 消えたら、同期時に一緒に消える）。ノート自身の title は常に残す。
     _prune_yomi_maps(notes, _used_display_names(notes))
 
+    # `### Related` は対称。両側に同じ相手があるペアだけ成立する（zr は両側に
+    # 書くので通常はそのまま）。片側で消されたら次回 sync で反対側からも消える。
+    # 表示名はタイトルに追従し、消えたファイルへのリンクは掃除する。
+    for p, n in notes.items():
+        n["related"] = _preserve_parent(n["related"], p, res, titles)
+        n["related"] = _prune_dangling(n["related"], p, res)
+    related_t: dict[Path, set[Path]] = {}
+    for p, n in notes.items():
+        ts: set[Path] = set()
+        for _d, tg in _links_from(n["related"]):
+            rp = res(tg, p.parent)
+            if rp is not None and rp != p:
+                ts.add(rp)
+        related_t[p] = ts
+    for p, n in notes.items():
+        n["related"] = _prune_one_sided_related(n["related"], p, res, related_t)
+
     changed = 0
     for p, n in notes.items():
         # 本文リンクの表示名をリンク先タイトルに追従させ、消えたファイルへの
@@ -1400,12 +1450,6 @@ def simple_sync(root) -> int:
         # リンクは残骸なので掃除する（行全体がリンクの行のみ）。表示名は追従。
         parent_lines = _preserve_parent(n["parent"], p, res, titles)
         parent_lines = _prune_dangling(parent_lines, p, res)
-        # `### Related` もユーザー管理（zr で足す）。削除・追加はせず、
-        # 表示名の追従と消えたファイルへのリンク掃除だけする。
-        # 関連リンクは incoming（BackLink）に出さない＝BackLink は従来どおり
-        # 本文リンク由来のみ。
-        n["related"] = _preserve_parent(n["related"], p, res, titles)
-        n["related"] = _prune_dangling(n["related"], p, res)
         parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
             rp = res(tg, p.parent)
