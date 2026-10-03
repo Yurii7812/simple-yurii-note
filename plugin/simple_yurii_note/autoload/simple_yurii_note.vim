@@ -547,7 +547,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `zt` / `zT` … タイトル変更（空から / 現在を残して編集）',
         \ '- `zl` / `zL` … リンク表示名の変更（空から / 現在を残して編集）',
-        \ '- `zy` / `zY` … カーソル下リンク（無ければ今のノート）の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）。`yomi:` に表示名が複数あるときは番号で表示名を選ぶ',
+        \ '- `zy` / `zY` … **今開いているノート**の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）。`yomi:` に表示名が複数あるときは番号で表示名を選ぶ',
         \ '- `zd` … 子リンクの表示名をリンク先タイトルに更新',
         \ '- `mp` … YAML `filetype` を変更 ・ `yn` … 今のファイル名をヤンク',
         \ '',
@@ -7412,28 +7412,16 @@ function! simple_yurii_note#sort_selection() abort
   call s:sort_lines_by_yomi(l:first, l:last)
 endfunction
 
-" zy … カーソル下リンクの表示名（無ければ現在ノートのタイトル）のよみを、
-"      リンク先ノート（無ければ現在ノート）の front matter `yomi:` に登録する。
+" zy … 今開いているノートの表示名（タイトル）のよみを、
+"      そのノートの front matter `yomi:` に登録する。
 "      空 Enter / Esc で削除。pykakasi の推測を既定値に出す。
-"      対象ノートの `yomi:` に表示名が複数あるときは番号で表示名を選んでから編集する。
+"      `yomi:` に表示名が複数あるときは番号で表示名を選んでから編集する。
 "      引数に文字列を渡すと input() を出さずそのよみを使う（テスト・自動化用）。
-" よみ操作の対象（表示名, ノートパス）を決める。
-" リンク下ならリンク先、リンクが無ければ現在ノートのタイトル。
+" よみ操作の対象（表示名, ノートパス）を決める。常に今開いているノート。
+" 表示名が複数ある場合の選択は s:yomi_choose_name() が行う。
 function! s:yomi_target() abort
-  let l:name = ''
-  let l:note = ''
-  let l:lk = simple_yurii_note#get_link_under_cursor()
-  if !empty(l:lk) && !empty(get(l:lk, 'target', ''))
-    let l:resolved = simple_yurii_note#resolve_link(l:lk.target)
-    if filereadable(l:resolved)
-      let l:note = fnamemodify(l:resolved, ':p')
-      let l:name = l:lk.text
-    endif
-  endif
-  if empty(l:note)
-    let l:note = expand('%:p')
-    let l:name = simple_yurii_note#current_title()
-  endif
+  let l:note = expand('%:p')
+  let l:name = simple_yurii_note#current_title()
   if empty(l:name) || empty(l:note) || !filereadable(l:note)
     echohl WarningMsg | echo 'simple_yurii_note: ノート上で実行して' | echohl NONE
     return ['', '']

@@ -365,7 +365,7 @@ nnoremap <nowait> <silent> zT  <Cmd>call simple_yurii_note#rename_title('')<CR>
 nnoremap <nowait> <silent> zl  <Cmd>call simple_yurii_note#rename_link_text_with_default('')<CR>
 " zL: 現在のリンク表示名を残して編集
 nnoremap <nowait> <silent> zL  <Cmd>call simple_yurii_note#rename_link_text('')<CR>
-" zy: カーソル下リンクの表示名（リンクが無ければ現在ノートのタイトル）のよみを
+" zy: 今開いているノートのタイトルのよみを
 "     空欄から変更する（zt と同じ流儀。Esc で中止）。
 "     よみは \S / :SortYomi の表示名ソートで使う。
 nnoremap <nowait> <silent> zy  <Cmd>call simple_yurii_note#rename_yomi_with_default('')<CR>
