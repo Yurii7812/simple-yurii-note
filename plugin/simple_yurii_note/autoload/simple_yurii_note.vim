@@ -3066,8 +3066,15 @@ function! simple_yurii_note#refresh_link_hints() abort
     return
   endif
   let l:full_labels = []
+  " 1〜0（1文字）と z1 等（2文字）が混ざるときは、1文字側に半角スペースを足して
+  " リンク本文の開始位置を揃える（ラベルは最大2文字なので幅は最大2）。
+  let l:width = 1
+  for l:label in keys(b:yurii_hint_map)
+    let l:width = max([l:width, strdisplaywidth(l:label)])
+  endfor
   for [l:label, l:pos] in items(b:yurii_hint_map)
-    call prop_add(l:pos.lnum, l:pos.col, {'type': s:hint_prop_type, 'text': l:label})
+    let l:text = l:label . repeat(' ', l:width - strdisplaywidth(l:label))
+    call prop_add(l:pos.lnum, l:pos.col, {'type': s:hint_prop_type, 'text': l:text})
     if strchars(l:label) > 1 | call add(l:full_labels, l:label) | endif
   endfor
   call s:hint_sync_full_maps(l:full_labels)
