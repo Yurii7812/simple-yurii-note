@@ -450,7 +450,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `zt` / `zT` … タイトル変更（空から / 現在を残して編集）',
         \ '- `zl` / `zL` … リンク表示名の変更（空から / 現在を残して編集）',
-        \ '- `zy` … カーソル下リンク（無ければ今のノート）の**よみ**を `yomi:` に登録/修正（空 Enter で削除）',
+        \ '- `zy` / `zY` … カーソル下リンク（無ければ今のノート）の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）',
         \ '- `zd` … 子リンクの表示名をリンク先タイトルに更新',
         \ '- `mp` … YAML `filetype` を変更 ・ `yn` … 今のファイル名をヤンク',
         \ '',
@@ -524,7 +524,7 @@ function! s:guide_template() abort
         \ '- `\S`（ビジュアル）… 選択した行のリンク行だけを同じ規則で並べ替え',
         \ '- `:SortYomi` … `\S`（ノーマル）と同じ',
         \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。未登録は pykakasi で `yomi:` に自動追加',
-        \ '- `zy` で表示名ごとのよみを手で修正/削除できる。表示名が Index から消えると同期時に掃除される',
+        \ '- `zy` / `zY` で表示名ごとのよみを手で修正/削除できる。表示名が Index から消えると同期時に掃除される',
         \ '',
         \ '## Vim の基本操作（詳細）',
         \ '',
@@ -7183,12 +7183,9 @@ endfunction
 "      リンク先ノート（無ければ現在ノート）の front matter `yomi:` に登録する。
 "      空 Enter / Esc で削除。pykakasi の推測を既定値に出す。
 "      引数に文字列を渡すと input() を出さずそのよみを使う（テスト・自動化用）。
-function! simple_yurii_note#set_yomi(...) abort
-  let l:script = s:sort_yomi_script()
-  if !filereadable(l:script)
-    echohl ErrorMsg | echo 'simple_yurii_note: sort_yomi.py が見つかりません: ' . l:script | echohl NONE
-    return
-  endif
+" よみ操作の対象（表示名, ノートパス）を決める。
+" リンク下ならリンク先、リンクが無ければ現在ノートのタイトル。
+function! s:yomi_target() abort
   let l:name = ''
   let l:note = ''
   let l:lk = simple_yurii_note#get_link_under_cursor()
@@ -7205,24 +7202,90 @@ function! simple_yurii_note#set_yomi(...) abort
   endif
   if empty(l:name) || empty(l:note) || !filereadable(l:note)
     echohl WarningMsg | echo 'simple_yurii_note: ノート上で実行して' | echohl NONE
+    return ['', '']
+  endif
+  return [l:name, l:note]
+endfunction
+
+" sort_yomi.py を呼ぶ小道具
+function! s:yomi_py(script, sub, extra) abort
+  return substitute(system(
+        \ s:python_cmd() . ' ' . shellescape(a:script) . ' ' . a:sub . ' ' . a:extra),
+        \ '\n*$', '', '')
+endfunction
+
+function! s:yomi_guess(script, name) abort
+  return s:yomi_py(a:script, 'guess', shellescape(a:name))
+endfunction
+
+function! s:yomi_get(script, note, name) abort
+  return s:yomi_py(a:script, 'get',
+        \ '--note ' . shellescape(a:note) . ' --name ' . shellescape(a:name))
+endfunction
+
+" よみを書き込む（空文字で削除）。非対話の低レベル。
+function! s:apply_yomi(note, name, reading) abort
+  let l:script = s:sort_yomi_script()
+  if !filereadable(l:script)
+    echohl ErrorMsg | echo 'simple_yurii_note: sort_yomi.py が見つかりません: ' . l:script | echohl NONE
+    return
+  endif
+  let l:out = s:yomi_py(l:script, 'set',
+        \ '--note ' . shellescape(a:note)
+        \ . ' --name ' . shellescape(a:name)
+        \ . ' --reading ' . shellescape(a:reading))
+  call simple_yurii_note#clear_title_cache()
+  silent! checktime
+  echo l:out
+endfunction
+
+" zy / zY の非対話版。引数があればそのよみを使う（テスト・自動化用）。
+function! simple_yurii_note#set_yomi(...) abort
+  let [l:name, l:note] = s:yomi_target()
+  if empty(l:name)
     return
   endif
   if a:0 > 0
     let l:reading = a:1
   else
-    let l:guess = substitute(system(
-          \ s:python_cmd() . ' ' . shellescape(l:script) . ' guess ' . shellescape(l:name)),
-          \ '\n*$', '', '')
-    let l:reading = input('よみ(' . l:name . '): ', l:guess)
+    let l:reading = s:yomi_guess(s:sort_yomi_script(), l:name)
   endif
-  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' set'
-        \ . ' --note ' . shellescape(l:note)
-        \ . ' --name ' . shellescape(l:name)
-        \ . ' --reading ' . shellescape(l:reading)
-  let l:out = substitute(system(l:cmd), '\n*$', '', '')
-  call simple_yurii_note#clear_title_cache()
-  silent! checktime
-  echo l:out
+  call s:apply_yomi(l:note, l:name, l:reading)
+endfunction
+
+" zy … よみを空欄から変更（zt と同じ流儀）。Esc で中止。
+"      既定値を消して Enter なら削除（既定が空のときの空 Enter は変更なし）。
+function! simple_yurii_note#rename_yomi_with_default(default) abort
+  let [l:name, l:note] = s:yomi_target()
+  if empty(l:name)
+    return
+  endif
+  let l:reading = input('よみ(' . l:name . '): ', a:default, "\x01")
+  if l:reading ==# "\x01"
+    echo 'simple_yurii_note: 中止'
+    return
+  endif
+  if empty(l:reading) && empty(a:default)
+    echo 'simple_yurii_note: 変更なし'
+    return
+  endif
+  call s:apply_yomi(l:note, l:name, l:reading)
+endfunction
+
+" zY … 現在のよみ（未登録なら pykakasi 推測）を残して編集（zT と同じ流儀）。
+function! simple_yurii_note#rename_yomi(args) abort
+  let [l:name, l:note] = s:yomi_target()
+  if empty(l:name)
+    return
+  endif
+  let l:default = a:args
+  if empty(l:default)
+    let l:default = s:yomi_get(s:sort_yomi_script(), l:note, l:name)
+    if empty(l:default)
+      let l:default = s:yomi_guess(s:sort_yomi_script(), l:name)
+    endif
+  endif
+  call simple_yurii_note#rename_yomi_with_default(l:default)
 endfunction
 
 function! s:extract_time_digits(text) abort

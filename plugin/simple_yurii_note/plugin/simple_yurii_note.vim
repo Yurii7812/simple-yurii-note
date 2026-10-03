@@ -366,9 +366,12 @@ nnoremap <nowait> <silent> zl  <Cmd>call simple_yurii_note#rename_link_text_with
 " zL: 現在のリンク表示名を残して編集
 nnoremap <nowait> <silent> zL  <Cmd>call simple_yurii_note#rename_link_text('')<CR>
 " zy: カーソル下リンクの表示名（リンクが無ければ現在ノートのタイトル）のよみを
-"     front matter の yomi: マップへ登録/修正する。空 Enter で削除。
-"     よみは \S / :SortYomi の表示名ソートで使う（未登録は pykakasi が自動）。
-nnoremap <nowait> <silent> zy  <Cmd>call simple_yurii_note#set_yomi()<CR>
+"     空欄から変更する（zt と同じ流儀。Esc で中止）。
+"     よみは \S / :SortYomi の表示名ソートで使う。
+nnoremap <nowait> <silent> zy  <Cmd>call simple_yurii_note#rename_yomi_with_default('')<CR>
+" zY: 現在のよみ（未登録なら pykakasi 推測）を残して編集（zT と同じ流儀。
+"     全部消して Enter でよみを削除）。
+nnoremap <nowait> <silent> zY  <Cmd>call simple_yurii_note#rename_yomi('')<CR>
 " zd: Child: のリンク表示名をリンク先 YAML title に更新
 nnoremap <nowait> <silent> zd  <Cmd>RenameChildLinkTitles<CR>
 vnoremap <nowait> <silent> zd  :<C-u>'<,'>RenameChildLinkTitles<CR>
