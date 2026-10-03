@@ -164,8 +164,27 @@ export async function writeFile(rootHandle, rel, text) {
 
 export async function deleteFile(rootHandle, rel) {
   if (isElectron()) return window.pkm.remove(rel);
+  // ブラウザ: .trash/<日時>_<名前> へコピーしてから削除（ソフト削除）。
+  // Electron 側 (fsapi.cjs) と同じ規則。.trash はドット始まりで一覧・sync の対象外。
   const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
-  await dir.removeEntry(rel.slice(rel.lastIndexOf("/") + 1));
+  const name = rel.slice(rel.lastIndexOf("/") + 1);
+  const fh = await dir.getFileHandle(name);
+  const text = await (await fh.getFile()).text();
+  const now = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  const ts = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+  const trashDir = await getDirHandle(rootHandle, ".trash", true);
+  let trashName = `${ts}_${name}`;
+  for (let i = 1; await fileExists(trashDir, trashName); i++) trashName = `${ts}_${i}_${name}`;
+  const th = await trashDir.getFileHandle(trashName, { create: true });
+  const w = await th.createWritable();
+  await w.write(text);
+  await w.close();
+  await dir.removeEntry(name);
+}
+
+async function fileExists(dirHandle, name) {
+  try { await dirHandle.getFileHandle(name); return true; } catch { return false; }
 }
 
 // Electron 専用: 複数書き込み + 削除 + Python sync をまとめて実行

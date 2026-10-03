@@ -60,9 +60,14 @@ try {
   const after = await snapshot(root);
   check("idempotent", JSON.stringify(before) === JSON.stringify(after));
 
-  // delete
+  // delete（ソフト削除: .trash へ移動）
   await fsapi.apply(root, { deletes: ["b.md"] });
   check("delete removes file", !fs.existsSync(path.join(root, "b.md")));
+  const trashFiles = fs.existsSync(path.join(root, fsapi.TRASH_DIR))
+    ? fs.readdirSync(path.join(root, fsapi.TRASH_DIR))
+    : [];
+  check("delete moves to .trash", trashFiles.some((n) => n.endsWith("_b.md")), trashFiles.join(","));
+  check("trash is not listed", !(await fsapi.listMd(root)).some((r) => r.includes(".trash")));
   const afterDelete = await snapshot(root);
   check("delete prunes refs", !afterDelete["a.md"].includes("(b.md)"), afterDelete["a.md"]);
 

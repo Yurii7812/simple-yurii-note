@@ -480,7 +480,28 @@
   async function deleteFile(rootHandle, rel) {
     if (isElectron()) return window.pkm.remove(rel);
     const dir = await getDirHandle(rootHandle, rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
-    await dir.removeEntry(rel.slice(rel.lastIndexOf("/") + 1));
+    const name2 = rel.slice(rel.lastIndexOf("/") + 1);
+    const fh = await dir.getFileHandle(name2);
+    const text = await (await fh.getFile()).text();
+    const now = /* @__PURE__ */ new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    const ts = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+    const trashDir = await getDirHandle(rootHandle, ".trash", true);
+    let trashName = `${ts}_${name2}`;
+    for (let i = 1; await fileExists(trashDir, trashName); i++) trashName = `${ts}_${i}_${name2}`;
+    const th = await trashDir.getFileHandle(trashName, { create: true });
+    const w = await th.createWritable();
+    await w.write(text);
+    await w.close();
+    await dir.removeEntry(name2);
+  }
+  async function fileExists(dirHandle, name2) {
+    try {
+      await dirHandle.getFileHandle(name2);
+      return true;
+    } catch {
+      return false;
+    }
   }
   async function apply(rootHandle, { writes = [], deletes = [] } = {}) {
     if (!isElectron()) throw new Error("apply() is Electron-only");
@@ -29654,7 +29675,7 @@ ${attr}---
   async function deleteCurrent() {
     const rel = state.current;
     if (!rel) return;
-    if (!confirm(`\u300C${titleOf(rel)}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\uFF08\u5B9F\u30D5\u30A1\u30A4\u30EB\u3092\u524A\u9664\u3057\u307E\u3059\uFF09`)) return;
+    if (!confirm(`\u300C${titleOf(rel)}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\uFF08.trash \u3078\u79FB\u52D5\u3002git \u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u304B\u3089\u3082\u623B\u305B\u307E\u3059\uFF09`)) return;
     await deleteFile(state.root, rel);
     state.files.delete(rel);
     state.rels = state.rels.filter((r) => r !== rel);
@@ -29667,7 +29688,7 @@ ${attr}---
       $("note-view").hidden = true;
       $("empty").hidden = false;
     }
-    toast("\u524A\u9664\u3057\u307E\u3057\u305F");
+    toast(".trash \u3078\u79FB\u52D5\u3057\u307E\u3057\u305F");
   }
   function wireToolbar() {
     $("open-btn").onclick = pickAndOpen;

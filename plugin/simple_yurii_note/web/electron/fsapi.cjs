@@ -7,6 +7,12 @@ const { execFile } = require("child_process");
 
 const SKIP_DIRS = new Set(["_tmp"]);
 const TITLE_STATE_FILE = ".pkm_title_state_v2.json";
+const TRASH_DIR = ".trash";
+
+function timestampCompact(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
 
 function safeJoin(root, rel) {
   const p = path.resolve(root, rel);
@@ -43,8 +49,30 @@ async function writeNote(root, rel, text) {
   await fsp.writeFile(p, text, "utf8");
 }
 
+// 削除はソフト削除: .trash/<日時>_<名前> へ移動する（誤削除からの復元用）。
+// .trash はドット始まりなので一覧・sync の対象外。git バックアップとも二重。
 async function deleteNote(root, rel) {
-  await fsp.rm(safeJoin(root, rel), { force: true });
+  const p = safeJoin(root, rel);
+  let st;
+  try { st = await fsp.stat(p); } catch { return; }
+  if (!st.isFile()) {
+    await fsp.rm(p, { force: true, recursive: true });
+    return;
+  }
+  const dir = path.join(root, TRASH_DIR);
+  await fsp.mkdir(dir, { recursive: true });
+  const ts = timestampCompact();
+  let dest = path.join(dir, `${ts}_${path.basename(rel)}`);
+  for (let i = 1; fs.existsSync(dest); i++) {
+    dest = path.join(dir, `${ts}_${i}_${path.basename(rel)}`);
+  }
+  try {
+    await fsp.rename(p, dest);
+  } catch {
+    // 別デバイス等で rename できないときはコピーしてから消す
+    await fsp.copyFile(p, dest);
+    await fsp.unlink(p);
+  }
 }
 
 async function readTitleState(root) {
@@ -95,5 +123,5 @@ async function apply(root, { writes = [], deletes = [] } = {}) {
 
 module.exports = {
   safeJoin, listMd, listVault, readNote, readBinary, writeNote, deleteNote,
-  readTitleState, hasSwap, runSync, apply, pythonPath, TITLE_STATE_FILE,
+  readTitleState, hasSwap, runSync, apply, pythonPath, TITLE_STATE_FILE, TRASH_DIR,
 };

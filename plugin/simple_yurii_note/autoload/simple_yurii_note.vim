@@ -374,6 +374,11 @@ function! s:is_root_note_path(path) abort
         \ && index(split(l:path, s:sep()), '.undo') < 0
 endfunction
 
+" 自動保存などから使う公開版: PKM ルート配下の .md か
+function! simple_yurii_note#is_vault_note(path) abort
+  return s:is_root_note_path(a:path)
+endfunction
+
 function! s:pkm_format() abort
   return get(g:, 'simple_yurii_note_format', 'v2')
 endfunction
@@ -497,6 +502,7 @@ function! s:guide_template() abort
         \ '## 環境のその他',
         \ '',
         \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
+        \ '- 編集は約5秒無操作で自動保存（`g:simple_yurii_note_autosave=0` で無効）。vault は git で自動バックアップ（2分ごと）',
         \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',

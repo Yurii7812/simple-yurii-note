@@ -563,7 +563,7 @@ async function newNote(isGroup) {
 async function deleteCurrent() {
   const rel = state.current;
   if (!rel) return;
-  if (!confirm(`「${titleOf(rel)}」を削除しますか？（実ファイルを削除します）`)) return;
+  if (!confirm(`「${titleOf(rel)}」を削除しますか？（.trash へ移動。git バックアップからも戻せます）`)) return;
   await vault.deleteFile(state.root, rel);
   state.files.delete(rel);
   state.rels = state.rels.filter((r) => r !== rel);
@@ -573,7 +573,7 @@ async function deleteCurrent() {
   const next = state.tabs[state.tabs.length - 1] || (state.notes.has("index.md") ? "index.md" : state.rels[0]);
   if (next) openNote(next);
   else { $("note-view").hidden = true; $("empty").hidden = false; }
-  toast("削除しました");
+  toast(".trash へ移動しました");
 }
 
 // ---------------------------------------------------------------- toolbar wiring

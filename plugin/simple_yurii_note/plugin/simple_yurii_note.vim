@@ -571,6 +571,59 @@ if g:simple_yurii_note_persistent_undo
 endif
 
 " ---------------------------------------------------------------------------
+" AutoSave: 無操作デバウンスで vault の .md を自動書き込み
+"   g:simple_yurii_note_autosave        (既定 1。0 で無効)
+"   g:simple_yurii_note_autosave_delay  (既定 5000ms。最後の変更からこの時間で保存)
+"   - vault 配下の .md だけ / modified のときだけ / 挿入・操作中は後回し
+"   - 書き込み後は既存の BufWritePost autosync が走る
+" ---------------------------------------------------------------------------
+
+if !exists('g:simple_yurii_note_autosave')
+  let g:simple_yurii_note_autosave = 1
+endif
+if !exists('g:simple_yurii_note_autosave_delay')
+  let g:simple_yurii_note_autosave_delay = 5000
+endif
+
+function! s:schedule_autosave() abort
+  if !g:simple_yurii_note_autosave || !has('timers') | return | endif
+  if exists('s:autosave_timer') && s:autosave_timer > 0
+    call timer_stop(s:autosave_timer)
+  endif
+  let s:autosave_timer = timer_start(g:simple_yurii_note_autosave_delay,
+        \ {-> s:autosave_now()})
+endfunction
+
+function! s:autosave_now(...) abort
+  let s:autosave_timer = 0
+  if !g:simple_yurii_note_autosave
+    return
+  endif
+  " 挿入・置換・操作中（d の途中など）はもう一度待つ
+  if mode() =~# '^[iR]' || index(['o', 'c'], mode(1)) >= 0
+    call s:schedule_autosave()
+    return
+  endif
+  if !&modified || &buftype !=# '' || &readonly
+    return
+  endif
+  let l:file = expand('%:p')
+  if empty(l:file) || l:file !~? '\.md$'
+    return
+  endif
+  if !simple_yurii_note#is_vault_note(l:file)
+    return
+  endif
+  silent! update
+endfunction
+
+augroup simple_yurii_note_autosave
+  autocmd!
+  autocmd TextChanged,TextChangedI *.md call s:schedule_autosave()
+  autocmd InsertLeave *.md call s:schedule_autosave()
+augroup END
+
+" ---------------------------------------------------------------------------
 " AutoSync: BufWritePost で update_one を起動
 " ---------------------------------------------------------------------------
 
