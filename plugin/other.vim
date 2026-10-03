@@ -239,32 +239,14 @@ function! s:open_with_default_app(path) abort
   call s:schedule_activate(s:app_base_for(l:path))
 endfunction
 
-" gm: カーソル下の URL / Markdown リンクを既定アプリで開く。
-" URL が無ければ現在のファイルを既定アプリで開く。
-function! s:open_default_for_cursor() abort
-  let l:line = getline('.')
-  let l:url = matchstr(l:line, 'https\?://[^ \t)>"''\]]\+')
-  if !empty(l:url)
-    call s:open_with_default_app(l:url)
-    return
-  endif
-  let l:mt = matchlist(l:line, '\[[^]]*\](\([^)]\+\))')
-  if !empty(l:mt)
-    let l:target = substitute(l:mt[1], '#.*$', '', '')
-    if l:target =~? '^https\?://'
-      call s:open_with_default_app(l:target)
-      return
-    endif
-    let l:fp = fnamemodify(expand('%:p:h') . '/' . l:target, ':p')
-    if filereadable(l:fp)
-      call s:open_with_default_app(l:fp)
-      return
-    endif
-  endif
+" gm: 今開いているノートを既定アプリで開く。
+" （カーソル下のリンクは見ない。行内にリンクがあるだけで別のノートが
+"   開いてしまう事故を防ぐため、2026-10-04 にリンク追従を廃止した）
+function! s:open_current_note() abort
   call s:open_with_default_app(expand('%:p'))
 endfunction
 
-nnoremap <silent> gm :<C-u>call <SID>open_default_for_cursor()<CR>
+nnoremap <silent> gm :<C-u>call <SID>open_current_note()<CR>
 
 " すべての変更済みバッファを保存するショートカット
 nnoremap \w :wa<CR>

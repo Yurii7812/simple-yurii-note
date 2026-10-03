@@ -93,6 +93,7 @@ SYMMETRIC: frozenset[str] = frozenset({"関連"})
 BACKLINK = "バックリンク"
 
 UP_MARK = "### Parent"
+RELATED_MARK = "### Related"
 DOWN_MARK = "### BackLink"
 # 旧見張り（新しい順）。parse だけが読む。render は新表記（## Parent / ## Child）に統一する。
 LEGACY_UP_MARK3 = "Parent"  # `##` なしの旧 v2 見張り
@@ -1145,7 +1146,11 @@ def sync_vault(root) -> int:
 
 
 # ---------------------------------------------------------------------------
-# simple sync: Parent = 本文リンクの張り元(incoming) / BackLink = 自分が張ったリンク(outgoing)
+# simple sync: 本文リンク = 子（outgoing）。Parent = 手書き ＋ Index/グループ（sync 管理）。
+#   BackLink = incoming − Parent − 自分の outgoing。
+#   `### Related` は zr で両ノートに相互に書くユーザー管理セクション。
+#   sync は表示名の追従と消えたファイルへの掃除だけで、追加・削除・
+#   incoming への反映はしない。
 # ---------------------------------------------------------------------------
 
 _SIMPLE_INLINE_LINK = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -1174,7 +1179,7 @@ def _used_display_names(notes: dict) -> set[str]:
     used: set[str] = set()
     for n in notes.values():
         used.add(n["title"])
-        for kind in ("body", "parent", "back"):
+        for kind in ("body", "parent", "related", "back"):
             for disp, _tg in _links_from(n.get(kind, [])):
                 if disp:
                     used.add(disp)
@@ -1206,6 +1211,7 @@ def _simple_parse(path: Path) -> dict:
     title = _fm_title(fm) or path.stem
     body: list[str] = []
     parent: list[str] = []
+    related: list[str] = []
     back: list[str] = []
     cur = "body"
     for ln in rest:
@@ -1213,11 +1219,20 @@ def _simple_parse(path: Path) -> dict:
         if s == UP_MARK:
             cur = "parent"
             continue
+        if s == RELATED_MARK:
+            cur = "related"
+            continue
         if s == DOWN_MARK:
             cur = "back"
             continue
-        (body if cur == "body" else parent if cur == "parent" else back).append(ln)
-    return {"fm": fm, "title": title, "body": body, "parent": parent, "back": back}
+        (
+            body if cur == "body"
+            else parent if cur == "parent"
+            else related if cur == "related"
+            else back
+        ).append(ln)
+    return {"fm": fm, "title": title, "body": body, "parent": parent,
+            "related": related, "back": back}
 
 
 def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict,
@@ -1307,6 +1322,12 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
         lines.append(UP_MARK)
         lines += parent_lines
+        # `### Related` は zr で足したときだけ存在する（sync が勝手に作らない）。
+        # 中身が空（全部消えた）になったら見出しも外す。
+        related = [ln for ln in n.get("related", [])]
+        if any(ln.strip() for ln in related):
+            lines.append(RELATED_MARK)
+            lines += related
         lines.append(DOWN_MARK)
         for t in back:
             lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
@@ -1379,6 +1400,12 @@ def simple_sync(root) -> int:
         # リンクは残骸なので掃除する（行全体がリンクの行のみ）。表示名は追従。
         parent_lines = _preserve_parent(n["parent"], p, res, titles)
         parent_lines = _prune_dangling(parent_lines, p, res)
+        # `### Related` もユーザー管理（zr で足す）。削除・追加はせず、
+        # 表示名の追従と消えたファイルへのリンク掃除だけする。
+        # 関連リンクは incoming（BackLink）に出さない＝BackLink は従来どおり
+        # 本文リンク由来のみ。
+        n["related"] = _preserve_parent(n["related"], p, res, titles)
+        n["related"] = _prune_dangling(n["related"], p, res)
         parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
             rp = res(tg, p.parent)
@@ -1419,9 +1446,14 @@ def simple_sync(root) -> int:
         auto_parent: list[Path] = []
         desired: list[Path] = []
         dseen: set[Path] = set()
-        # 自分の本文（outgoing）にもリンクがある相手は BackLink に出さない。
-        # 本文（中央）に出ているなら、BackLink は同じリンクの繰り返しになる。
+        # 自分の本文（outgoing）または Related にもリンクがある相手は BackLink に
+        # 出さない（同じリンクの繰り返しになる）。Related は相互に書くので、
+        # 両側に Related があるペアは BackLink には現れない。
         out_set = set(body_t.get(p, []))
+        for _d, tg in _links_from(n["related"]):
+            rp = res(tg, p.parent)
+            if rp is not None and rp != p:
+                out_set.add(rp)
         for s in incoming.get(p, []):
             if s == p or s in dseen or s in out_set:
                 continue

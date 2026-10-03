@@ -60,6 +60,20 @@ title: タイトル未設定
 
 ### Parent
 [a](a.md)
+### Related
+[r](r.md)
+### BackLink
+`,
+  "r.md": `---
+time: 2026-01-01 00:00:04
+title: 関連ノート
+---
+
+# 関連ノート
+
+### Parent
+### Related
+[b](b.md)
 ### BackLink
 `,
 };

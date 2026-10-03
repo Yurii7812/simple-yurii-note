@@ -1,6 +1,7 @@
 (() => {
   // src/sync.js
   var UP_MARK = "### Parent";
+  var RELATED_MARK = "### Related";
   var DOWN_MARK = "### BackLink";
   var TITLE_STATE_FILE = ".pkm_title_state_v2.json";
   var INLINE_LINK_RE = /\[([^\]]*)\]\(([^)]+)\)/;
@@ -95,6 +96,7 @@
     const title = fmTitle(fm) || stem(rel);
     const body = [];
     const parent = [];
+    const related = [];
     const back = [];
     let cur2 = "body";
     for (const ln of rest) {
@@ -103,13 +105,17 @@
         cur2 = "parent";
         continue;
       }
+      if (s === RELATED_MARK) {
+        cur2 = "related";
+        continue;
+      }
       if (s === DOWN_MARK) {
         cur2 = "back";
         continue;
       }
-      (cur2 === "body" ? body : cur2 === "parent" ? parent : back).push(ln);
+      (cur2 === "body" ? body : cur2 === "parent" ? parent : cur2 === "related" ? related : back).push(ln);
     }
-    return { fm, title, attr: fmAttr(fm), body, parent, back };
+    return { fm, title, attr: fmAttr(fm), body, parent, related, back };
   }
   function linksFrom(lines) {
     const out = [];
@@ -188,6 +194,10 @@
       if (lines.length && last2.trim() !== "" && !LINK_LINE_RE.test(last2)) lines.push("");
       lines.push(UP_MARK);
       lines = lines.concat(parentLines);
+      if (n.related.some((ln) => ln.trim() !== "")) {
+        lines.push(RELATED_MARK);
+        lines = lines.concat(n.related);
+      }
       lines.push(DOWN_MARK);
       for (const t2 of back) lines.push(`[${titles.get(t2)}](${relPath(dirname(rel), t2)})`);
     }
@@ -249,6 +259,8 @@
       n.body = pruneDangling(n.body, rel, res);
       let parentLines = preserveParent(n.parent, rel, res, titles);
       parentLines = pruneDangling(parentLines, rel, res);
+      n.related = preserveParent(n.related, rel, res, titles);
+      n.related = pruneDangling(n.related, rel, res);
       const parentSet = /* @__PURE__ */ new Set();
       for (const [, tg] of linksFrom(n.parent)) {
         const rp = res(tg, dirname(rel));
@@ -273,6 +285,10 @@
         }
       }
       const outSet = new Set(bodyT.get(rel));
+      for (const [, tg] of linksFrom(n.related)) {
+        const rp = res(tg, dirname(rel));
+        if (rp !== null && rp !== rel) outSet.add(rp);
+      }
       const autoParent = [];
       const desired = [];
       const dseen = /* @__PURE__ */ new Set();
@@ -29029,6 +29045,7 @@
     tabs: [],
     current: null,
     parentLines: [],
+    relatedLines: [],
     backLines: [],
     fm: [],
     dirty: false,
@@ -29216,6 +29233,7 @@
   function loadNoteToEditor(n) {
     state.fm = n.fm.slice();
     state.parentLines = n.parent.slice();
+    state.relatedLines = n.related.slice();
     state.backLines = n.back.slice();
     state.loading = true;
     editor.setDoc(n.body.join("\n"));
@@ -29282,6 +29300,7 @@
     };
     if (!rel) {
       $("rel-parent").innerHTML = "";
+      $("rel-related").innerHTML = "";
       $("rel-children").innerHTML = "";
       $("rel-back").innerHTML = "";
       return;
@@ -29302,6 +29321,21 @@
       }
     }));
     setList("rel-parent", parents, { removable: true, addLabel: "\uFF0B \u89AA\u3092\u8FFD\u52A0", onAdd: () => pickNote((r) => addParent(r)) });
+    const relatedItems = linkLines(state.relatedLines, rel).map((it) => ({
+      ...it,
+      remove: () => {
+        const idx = state.relatedLines.findIndex((ln) => {
+          const m = INLINE_LINK_RE2.exec(ln);
+          return m && resolver(m[2], dirname(rel)) === it.rel;
+        });
+        if (idx >= 0) {
+          state.relatedLines.splice(idx, 1);
+          markDirty();
+          renderRelations();
+        }
+      }
+    }));
+    setList("rel-related", relatedItems, { removable: true, addLabel: "\uFF0B \u95A2\u9023\u3092\u8FFD\u52A0", onAdd: () => pickNote((r) => addRelated(r)) });
     const children = linkLines(n.body, rel).map((it) => ({ ...it }));
     setList("rel-children", children, { addLabel: "\uFF0B \u5B50\u3092\u8FFD\u52A0", onAdd: () => pickNote((r) => addChild(r)) });
     const backs = linkLines(n.back, rel).map((it) => ({ ...it }));
@@ -29319,6 +29353,35 @@
       renderRelations();
       toast("\u89AA\u306B\u8FFD\u52A0\uFF08\u4FDD\u5B58\u3067\u53CD\u6620\uFF09");
     }
+  }
+  async function addRelated(targetRel) {
+    const rel = state.current;
+    if (!rel || rel === targetRel) return;
+    const dupIn = (lines, dir, want) => lines.some((l) => {
+      const m = INLINE_LINK_RE2.exec(l);
+      return m && resolver(m[2], dir) === want;
+    });
+    const tn = state.notes.get(targetRel);
+    if (!tn) return;
+    if (!dupIn(state.relatedLines, dirname(rel), targetRel)) {
+      state.relatedLines.push(`[${titleOf(targetRel)}](${relPath(dirname(rel), targetRel)})`);
+    }
+    if (!dupIn(tn.related, dirname(targetRel), rel)) {
+      tn.related.push(`[${titleOf(rel)}](${relPath(dirname(targetRel), rel)})`);
+    }
+    const title = $("title-input").value.trim() || stem(rel);
+    const overrides2 = /* @__PURE__ */ new Map([
+      [rel, assembleNote(rel, {
+        fm: setFmTitle(state.fm, title),
+        body: [],
+        parent: state.parentLines,
+        related: state.relatedLines,
+        back: state.backLines
+      }, editor.getDoc().split("\n"))],
+      [targetRel, assembleNote(targetRel, tn)]
+    ]);
+    await syncAndWrite(overrides2);
+    toast("\u95A2\u9023\u306B\u76F8\u4E92\u8FFD\u52A0\u3057\u307E\u3057\u305F");
   }
   function addChild(targetRel) {
     const rel = state.current;
@@ -29411,6 +29474,18 @@
     else out.push("title: " + title);
     return out;
   }
+  function assembleNote(rel, n, bodyLines) {
+    const lines = [...n.fm, ...bodyLines !== void 0 ? bodyLines : n.body];
+    if (basename(rel) !== "index.md") {
+      const last2 = lines[lines.length - 1];
+      if (last2 === void 0 || last2.trim() !== "" && !LINK_LINE_RE2.test(last2)) lines.push("");
+      lines.push(UP_MARK, ...n.parent);
+      if (n.related.some((l) => l.trim() !== "")) lines.push(RELATED_MARK, ...n.related);
+      lines.push(DOWN_MARK, ...n.back);
+    }
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return lines.join("\n") + "\n";
+  }
   async function saveCurrent(opts = {}) {
     const rel = state.current;
     if (!rel) return true;
@@ -29429,14 +29504,7 @@
     const title = $("title-input").value.trim() || stem(rel);
     const fm = setFmTitle(state.fm, title);
     const bodyLines = editor.getDoc().split("\n");
-    const lines = [...fm, ...bodyLines];
-    if (basename(rel) !== "index.md") {
-      const last2 = lines[lines.length - 1];
-      if (last2 === void 0 || last2.trim() !== "" && !LINK_LINE_RE2.test(last2)) lines.push("");
-      lines.push(UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines);
-    }
-    while (lines.length && lines[lines.length - 1] === "") lines.pop();
-    const raw = lines.join("\n") + "\n";
+    const raw = assembleNote(rel, { fm, body: [], parent: state.parentLines, related: state.relatedLines, back: state.backLines }, bodyLines);
     await syncAndWrite(/* @__PURE__ */ new Map([[rel, raw]]));
     if (!opts.autosave) toast("\u4FDD\u5B58\u3057\u307E\u3057\u305F");
     return true;
@@ -29487,6 +29555,7 @@
     if (!n) return;
     state.fm = n.fm.slice();
     state.parentLines = n.parent.slice();
+    state.relatedLines = n.related.slice();
     state.backLines = n.back.slice();
     const body = n.body.join("\n");
     if (editor.getDoc() !== body) {
@@ -29530,7 +29599,9 @@ ${attr}---
       while (bodyLines.length && bodyLines[bodyLines.length - 1].trim() === "") bodyLines.pop();
       if (bodyLines.length && !LINK_LINE_RE2.test(bodyLines[bodyLines.length - 1])) bodyLines.push("");
       bodyLines.push(link);
-      const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
+      const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines];
+      if (state.relatedLines.some((l) => l.trim() !== "")) lines.push(RELATED_MARK, ...state.relatedLines);
+      lines.push(DOWN_MARK, ...state.backLines);
       overrides2.set(cur2, lines.join("\n") + "\n");
     } else {
       text += "\n" + UP_MARK + "\n" + DOWN_MARK + "\n";
@@ -29636,12 +29707,14 @@ ${attr}---
       "save-state",
       "open-btn",
       "rel-parent",
+      "rel-related",
       "rel-children",
       "rel-back"
     ]) {
       els[id2] = $(id2);
     }
     $("rel-parent").dataset.label = "\u89AA (Parent)";
+    $("rel-related").dataset.label = "\u95A2\u9023 (Related)";
     $("rel-children").dataset.label = "\u5B50 (\u672C\u6587\u30EA\u30F3\u30AF)";
     $("rel-back").dataset.label = "\u88AB\u30EA\u30F3\u30AF (BackLink)";
     initTheme();

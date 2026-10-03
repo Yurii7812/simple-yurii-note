@@ -55,7 +55,7 @@ let g:simple_yurii_note_root = expand('~/memo')
 
 ### 現在のファイルをブラウザで開く
 
-Normal モードで `gm` を押すと、現在のファイルを開きます。Linux では `xdg-open`、WSL では Windows 側の既定ブラウザを使用します。WSL で `wslview` があればそれを優先し、無い場合は Windows 標準の `cmd.exe` に `file://` URI を渡します。
+Normal モードで `gm` を押すと、今開いているノートを開きます（カーソル下のリンクは見ません）。Linux では `xdg-open`、WSL では Windows 側の既定ブラウザを使用します。WSL で `wslview` があればそれを優先し、無い場合は Windows 標準の `cmd.exe` に `file://` URI を渡します。
 
 ---
 
@@ -280,6 +280,7 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 - `\S` : ノーマル=バッファのリンク行 / ビジュアル=選択行をよみ順ソート。よみはリンク先の front matter `yomi:` を優先し、未登録は pykakasi のよみを `yomi:` に自動追加（`zy` で手直し。`pip install --user pykakasi`）
 - `zy` / `zY` : カーソル下リンク（無ければ今のノート）のよみを変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して `Enter` は削除）
 - `zA` : `za` と同じリンク追加だが、追加前に表示名を入力する
+- `za` / `zp` : カーソル下リンク（無ければクリップボード）を今のノートに追加。位置キー `h`（カーソル直下）/ `Enter`（本文の最後）/ `r`（`### Related` に**相互追加**＝両ノートに書く）。`zp` はさらに相手の `### Parent` に今のノートを書く
 - `:CheckPrefix` : プレフィクスチェック
 - `:OutlineEdit` / `\oe` : アウトライン編集（別バッファで見出し編集、`←/→` で `#` 数変更、`q` / `:write` / `ZZ` / `:OutlineApply` で反映）
 

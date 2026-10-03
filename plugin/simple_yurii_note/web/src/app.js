@@ -1,5 +1,5 @@
 import * as vault from "./vault.js";
-import { runSync, parseNote, dumpTitleState, relPath, dirname, basename, stem, normalizePath, UP_MARK, DOWN_MARK } from "./sync.js";
+import { runSync, parseNote, dumpTitleState, relPath, dirname, basename, stem, normalizePath, UP_MARK, RELATED_MARK, DOWN_MARK } from "./sync.js";
 import { createEditor } from "./editor.js";
 
 const LINK_LINE_RE = /^\s*(\[[^\]]*\]\([^)]+\))\s*(?:—\s*\S+)?\s*$/;
@@ -14,6 +14,7 @@ const state = {
   tabs: [],
   current: null,
   parentLines: [],
+  relatedLines: [],
   backLines: [],
   fm: [],
   dirty: false,
@@ -214,6 +215,7 @@ async function openNote(rel) {
 function loadNoteToEditor(n) {
   state.fm = n.fm.slice();
   state.parentLines = n.parent.slice();
+  state.relatedLines = n.related.slice();
   state.backLines = n.back.slice();
   state.loading = true;
   editor.setDoc(n.body.join("\n"));
@@ -270,7 +272,7 @@ function renderRelations() {
   };
 
   if (!rel) {
-    $("rel-parent").innerHTML = ""; $("rel-children").innerHTML = ""; $("rel-back").innerHTML = "";
+    $("rel-parent").innerHTML = ""; $("rel-related").innerHTML = ""; $("rel-children").innerHTML = ""; $("rel-back").innerHTML = "";
     return;
   }
   const n = state.notes.get(rel);
@@ -287,6 +289,18 @@ function renderRelations() {
   }));
   setList("rel-parent", parents, { removable: true, addLabel: "＋ 親を追加", onAdd: () => pickNote((r) => addParent(r)) });
 
+  const relatedItems = linkLines(state.relatedLines, rel).map((it) => ({
+    ...it,
+    remove: () => {
+      const idx = state.relatedLines.findIndex((ln) => {
+        const m = INLINE_LINK_RE.exec(ln);
+        return m && resolver(m[2], dirname(rel)) === it.rel;
+      });
+      if (idx >= 0) { state.relatedLines.splice(idx, 1); markDirty(); renderRelations(); }
+    },
+  }));
+  setList("rel-related", relatedItems, { removable: true, addLabel: "＋ 関連を追加", onAdd: () => pickNote((r) => addRelated(r)) });
+
   const children = linkLines(n.body, rel).map((it) => ({ ...it }));
   setList("rel-children", children, { addLabel: "＋ 子を追加", onAdd: () => pickNote((r) => addChild(r)) });
 
@@ -301,6 +315,35 @@ function addParent(targetRel) {
     state.parentLines.push(line);
     markDirty(); renderRelations(); toast("親に追加（保存で反映）");
   }
+}
+
+// zr 相当: ### Related に相互追加（今のノートと相手の両方に書く）。
+// sync は Related を勝手に作らないので、ここで両ノートを明示的に書く。
+async function addRelated(targetRel) {
+  const rel = state.current;
+  if (!rel || rel === targetRel) return;
+  const dupIn = (lines, dir, want) => lines.some((l) => {
+    const m = INLINE_LINK_RE.exec(l);
+    return m && resolver(m[2], dir) === want;
+  });
+  const tn = state.notes.get(targetRel);
+  if (!tn) return;
+  if (!dupIn(state.relatedLines, dirname(rel), targetRel)) {
+    state.relatedLines.push(`[${titleOf(targetRel)}](${relPath(dirname(rel), targetRel)})`);
+  }
+  if (!dupIn(tn.related, dirname(targetRel), rel)) {
+    tn.related.push(`[${titleOf(rel)}](${relPath(dirname(targetRel), rel)})`);
+  }
+  const title = $("title-input").value.trim() || stem(rel);
+  const overrides = new Map([
+    [rel, assembleNote(rel, {
+      fm: setFmTitle(state.fm, title), body: [], parent: state.parentLines,
+      related: state.relatedLines, back: state.backLines,
+    }, editor.getDoc().split("\n"))],
+    [targetRel, assembleNote(targetRel, tn)],
+  ]);
+  await syncAndWrite(overrides);
+  toast("関連に相互追加しました");
 }
 
 function addChild(targetRel) {
@@ -384,6 +427,21 @@ function setFmTitle(fm, title) {
   return out;
 }
 
+// ノート 1 つ分のテキストを組み立てる（saveCurrent と同じ並び）。
+// bodyLines を渡せばそれを本文に、省略すれば n.body を使う。
+function assembleNote(rel, n, bodyLines) {
+  const lines = [...n.fm, ...(bodyLines !== undefined ? bodyLines : n.body)];
+  if (basename(rel) !== "index.md") {
+    const last = lines[lines.length - 1];
+    if (last === undefined || (last.trim() !== "" && !LINK_LINE_RE.test(last))) lines.push("");
+    lines.push(UP_MARK, ...n.parent);
+    if (n.related.some((l) => l.trim() !== "")) lines.push(RELATED_MARK, ...n.related);
+    lines.push(DOWN_MARK, ...n.back);
+  }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines.join("\n") + "\n";
+}
+
 async function saveCurrent(opts = {}) {
   const rel = state.current;
   if (!rel) return true;
@@ -396,14 +454,7 @@ async function saveCurrent(opts = {}) {
   const title = $("title-input").value.trim() || stem(rel);
   const fm = setFmTitle(state.fm, title);
   const bodyLines = editor.getDoc().split("\n");
-  const lines = [...fm, ...bodyLines];
-  if (basename(rel) !== "index.md") {
-    const last = lines[lines.length - 1];
-    if (last === undefined || (last.trim() !== "" && !LINK_LINE_RE.test(last))) lines.push("");
-    lines.push(UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines);
-  }
-  while (lines.length && lines[lines.length - 1] === "") lines.pop();
-  const raw = lines.join("\n") + "\n";
+  const raw = assembleNote(rel, { fm, body: [], parent: state.parentLines, related: state.relatedLines, back: state.backLines }, bodyLines);
   await syncAndWrite(new Map([[rel, raw]]));
   if (!opts.autosave) toast("保存しました");
   return true;
@@ -459,6 +510,7 @@ function syncSelfFromNotes() {
   if (!n) return;
   state.fm = n.fm.slice();
   state.parentLines = n.parent.slice();
+  state.relatedLines = n.related.slice();
   state.backLines = n.back.slice();
   const body = n.body.join("\n");
   if (editor.getDoc() !== body) { state.loading = true; editor.setDoc(body); state.loading = false; }
@@ -495,7 +547,9 @@ async function newNote(isGroup) {
     while (bodyLines.length && bodyLines[bodyLines.length - 1].trim() === "") bodyLines.pop();
     if (bodyLines.length && !LINK_LINE_RE.test(bodyLines[bodyLines.length - 1])) bodyLines.push("");
     bodyLines.push(link);
-    const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines, DOWN_MARK, ...state.backLines];
+    const lines = [...state.fm, ...bodyLines, UP_MARK, ...state.parentLines];
+    if (state.relatedLines.some((l) => l.trim() !== "")) lines.push(RELATED_MARK, ...state.relatedLines);
+    lines.push(DOWN_MARK, ...state.backLines);
     overrides.set(cur, lines.join("\n") + "\n");
   } else {
     text += "\n" + UP_MARK + "\n" + DOWN_MARK + "\n";
@@ -572,10 +626,11 @@ function init() {
   for (const id of ["overlay", "overlay-msg", "overlay-open", "overlay-pick", "toolbar", "vault-name",
     "search", "note-list", "tabs", "title-input", "editor", "empty", "note-view", "save-btn",
     "new-btn", "new-group-btn", "delete-btn", "theme-btn", "modal",
-    "toast", "save-state", "open-btn", "rel-parent", "rel-children", "rel-back"]) {
+    "toast", "save-state", "open-btn", "rel-parent", "rel-related", "rel-children", "rel-back"]) {
     els[id] = $(id);
   }
   $("rel-parent").dataset.label = "親 (Parent)";
+  $("rel-related").dataset.label = "関連 (Related)";
   $("rel-children").dataset.label = "子 (本文リンク)";
   $("rel-back").dataset.label = "被リンク (BackLink)";
   initTheme();

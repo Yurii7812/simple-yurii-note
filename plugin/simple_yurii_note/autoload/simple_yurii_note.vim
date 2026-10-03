@@ -438,9 +438,10 @@ function! s:guide_template() abort
         \ '- `\l`（ビジュアル）… 選択範囲をタイトルにした新ノートを作成し、選択をそのリンクに置換（Parent=元ノート、確認なし）',
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
         \ '- `\p`（ビジュアル）… クリップボードのファイル名を選択範囲のリンクに（無ければ何もしない）',
-        \ '- `za` … リンク 1 本を今のノートに追加（`h`/`Enter`。相手の Parent は書かない）',
+        \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `r`=Related）',
         \ '- `zA` … `za` と同じだが、追加前に**表示名**を入力する（空 Enter / Esc で中止）',
         \ '- `zp` … `za` と同じ追加＋今のノートを相手の Parent に書く',
+        \ '- 関連: `za` 等で `r` を押すと `### Related` に**相互追加**（両ノートに。セクションはこの時だけ作る。BackLink には出ない）',
         \ '- `\P` … カーソル下リンクの Parent に今のノートを確認なしで追加',
         \ '- クリップボードを関係付きで追加: `ca` / `cu` / `\ca` / `tt` / `ta` / `\at` / `\bc`（`\ca`= `ca`、`\at`= `at` の逆方向）',
         \ '- `\L`（ノーマル）… 全ノートを全文検索（タイトル優先）→ カーソル位置にリンク挿入（`:LinkPick`）',
@@ -495,7 +496,7 @@ function! s:guide_template() abort
         \ '',
         \ '## 環境のその他',
         \ '',
-        \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … カーソル下のファイルを既定アプリで開く',
+        \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
         \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',
@@ -992,7 +993,7 @@ endfunction
 
 function! s:is_known_section_header_text(text) abort
   let l:sec = s:bare_section_name(a:text)
-  return index(['parent', 'up', 'child', 'down', 'branch', 'back', 'backlink'], l:sec) >= 0
+  return index(['parent', 'up', 'related', 'child', 'down', 'branch', 'back', 'backlink'], l:sec) >= 0
 endfunction
 
 function! s:find_section_index_in_lines(lines, name) abort
@@ -1139,6 +1140,36 @@ function! s:append_link_to_buffer_section(name, link) abort
 
   call append(l:end, a:link)
   return 1
+endfunction
+
+" ### Related を無ければ ### Parent と ### BackLink の間に作る。見出し行番号を返す（無理なら 0）。
+" index.md など見張りの無いノートでは作らない（関連はノート間の機能）。
+function! s:ensure_related_section_in_buffer() abort
+  let l:rel = s:find_section_line('related')
+  if l:rel > 0
+    return l:rel
+  endif
+  let l:ins = s:up_end_line()
+  if l:ins <= 0
+    let l:back = s:find_section_line('back')
+    if l:back > 1
+      let l:ins = l:back - 1
+    endif
+  endif
+  if l:ins <= 0
+    return 0
+  endif
+  call append(l:ins, s:v2_related_mark)
+  return l:ins + 1
+endfunction
+
+" 今のバッファの ### Related にリンクを 1 本足す。Related 内に同じリンク先が
+" あれば足さない（本文に同じリンクがあっても Related には足せる）。追加で 1。
+function! s:append_related_to_buffer(link) abort
+  if s:ensure_related_section_in_buffer() <= 0
+    return 0
+  endif
+  return s:append_link_to_buffer_section('related', a:link)
 endfunction
 
 function! s:append_structural_link_to_buffer(link) abort
@@ -4148,6 +4179,7 @@ endfunction
 " front matter 終端行と、本文側で末尾寄りの --- 2 本（上側開始 / 下側開始）を返す。
 " 2 本無ければ EOF に補って返す。本文中の --- は末尾 2 本にならないので無視される。
 let s:v2_up_mark   = '### Parent'
+let s:v2_related_mark = '### Related'
 let s:v2_down_mark = '### BackLink'
 " 旧見張り（新しい順: `##` なしの Parent/Child -> こっちにとって/そっちにとって
 " -> している/されている）。まだ移行していないノートも読めるように残す。
@@ -4819,6 +4851,68 @@ function! s:simple_add_parent(file, parent_path, parent_title) abort
     call insert(l:lines, l:link, l:hdr + 1)
   endif
   call writefile(l:lines, a:file)
+endfunction
+
+" simple: file の ### Related に other_path へのリンクを 1 本足す（zr の相手側）。
+"   見出しが無ければ ### Parent と ### BackLink の間に作る。Related 内に同じ
+"   リンク先が既にあれば何もしない。追加したら 1 を返す。
+function! s:simple_add_related(file, other_path, other_title) abort
+  if !filereadable(a:file)
+    return 0
+  endif
+  let l:lines = readfile(a:file)
+  let l:dir = fnamemodify(a:file, ':h')
+  let l:link = s:make_link_from_dir(a:other_path, a:other_title, l:dir)
+  let l:up = -1
+  let l:back = -1
+  for l:i in range(0, len(l:lines) - 1)
+    let l:s = trim(l:lines[l:i])
+    if l:s ==# s:v2_up_mark && l:up < 0
+      let l:up = l:i
+    endif
+    if l:s ==# s:v2_down_mark && l:back < 0
+      let l:back = l:i
+    endif
+  endfor
+  if l:up < 0 && l:back < 0
+    return 0
+  endif
+  let l:rel = -1
+  for l:i in range(l:up + 1, (l:back >= 0 ? l:back : len(l:lines)) - 1)
+    if trim(l:lines[l:i]) ==# s:v2_related_mark
+      let l:rel = l:i
+      break
+    endif
+  endfor
+  if l:rel < 0
+    " 見出しを作って、その直後にリンクを置く
+    let l:ins = l:back >= 0 ? l:back : len(l:lines)
+    call insert(l:lines, s:v2_related_mark, l:ins)
+    call insert(l:lines, l:link, l:ins + 1)
+  else
+    " Related セクション末尾（次の ### 見出し or 末尾）へ。重複は解決先で見る。
+    let l:end = len(l:lines)
+    for l:i in range(l:rel + 1, len(l:lines) - 1)
+      if trim(l:lines[l:i]) =~# '^###\s'
+        let l:end = l:i
+        break
+      endif
+    endfor
+    let l:new_fp = fnamemodify(simple_yurii_note#resolve_link(a:other_path, l:dir), ':p')
+    for l:i in range(l:rel + 1, l:end - 1)
+      let l:tg = s:extract_target(l:lines[l:i])
+      if empty(l:tg) || empty(l:new_fp)
+        continue
+      endif
+      let l:fp = fnamemodify(simple_yurii_note#resolve_link(l:tg, l:dir), ':p')
+      if l:fp ==# l:new_fp
+        return 0
+      endif
+    endfor
+    call insert(l:lines, l:link, l:end)
+  endif
+  call writefile(l:lines, a:file)
+  return 1
 endfunction
 
 " simple: yes/no を聞く（既定 yes）
@@ -6326,22 +6420,50 @@ function! s:ensure_blank_before_up() abort
   return 1
 endfunction
 
-" リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter のみ。zn と同じ約束）。
+" リンクを「どこに置くか」を 1 文字で選ばせる（h / Enter / r。zn と同じ約束）。
 "   h     … カーソル行の直下（本文）
 "   Enter … 本文の最後（### Parent の直前）
+"   r     … ### Related へ（今のノートと相手の両方に相互追加）
 " Esc / q / o は「何も置かない」で終わる。
 function! s:insert_links_at_position(links) abort
   let l:links = a:links
   if empty(l:links)
     return 0
   endif
-  echo 'h=カーソル直下 / Enter=本文の最後  (Esc で取り止め)'
+  echo 'h=カーソル直下 / Enter=本文の最後 / r=Related  (Esc で取り止め)'
   let l:ch = nr2char(getchar())
   redraw
   let l:num = char2nr(l:ch)
   if l:ch ==? 'q' || l:num == 27 || l:num == 3
     echo 'simple_yurii_note: 何も追加しない'
     return 0
+  endif
+  if l:ch ==? 'r'
+    " ### Related に相互追加: 今のノートの Related に相手、相手ノートの
+    " Related に今のノート（対称）。sync は Related を勝手に作らないので、
+    " ここで初めてセクションが生まれる。
+    let l:cur = expand('%:p')
+    if empty(l:cur)
+      echohl WarningMsg | echo 'simple_yurii_note: 名前付きファイルで実行して' | echohl None
+      return 0
+    endif
+    let l:cur_title = simple_yurii_note#current_title()
+    let l:added = 0
+    for l:lk in l:links
+      let l:tgt = simple_yurii_note#resolve_link(s:extract_target(l:lk))
+      if empty(l:tgt) || !filereadable(l:tgt)
+        echo 'Warning: not found: ' . s:extract_target(l:lk)
+        continue
+      endif
+      if s:append_related_to_buffer(l:lk)
+        let l:added += 1
+      endif
+      call s:simple_add_related(l:tgt, l:cur, l:cur_title)
+    endfor
+    if l:added == 0
+      echo 'simple_yurii_note: Related は変更なし（既に追加済み）'
+    endif
+    return l:added > 0
   endif
   if l:ch ==? 'h'
     let l:ins = line('.')
@@ -7260,7 +7382,7 @@ function! simple_yurii_note#rename_yomi_with_default(default) abort
   if empty(l:name)
     return
   endif
-  let l:reading = input('よみ(' . l:name . '): ', a:default, "\x01")
+  let l:reading = inputdialog('よみ(' . l:name . '): ', a:default, "\x01")
   if l:reading ==# "\x01"
     echo 'simple_yurii_note: 中止'
     return

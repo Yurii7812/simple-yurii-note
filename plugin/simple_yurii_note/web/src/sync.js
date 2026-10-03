@@ -8,6 +8,7 @@
 //     新テキストだけを返す (書き込みは vault.js 側)。
 
 export const UP_MARK = "### Parent";
+export const RELATED_MARK = "### Related";
 export const DOWN_MARK = "### BackLink";
 export const TITLE_STATE_FILE = ".pkm_title_state_v2.json";
 
@@ -124,15 +125,17 @@ export function parseNote(text, rel) {
   const title = fmTitle(fm) || stem(rel);
   const body = [];
   const parent = [];
+  const related = [];
   const back = [];
   let cur = "body";
   for (const ln of rest) {
     const s = ln.trim();
     if (s === UP_MARK) { cur = "parent"; continue; }
+    if (s === RELATED_MARK) { cur = "related"; continue; }
     if (s === DOWN_MARK) { cur = "back"; continue; }
-    (cur === "body" ? body : cur === "parent" ? parent : back).push(ln);
+    (cur === "body" ? body : cur === "parent" ? parent : cur === "related" ? related : back).push(ln);
   }
-  return { fm, title, attr: fmAttr(fm), body, parent, back };
+  return { fm, title, attr: fmAttr(fm), body, parent, related, back };
 }
 
 function linksFrom(lines) {
@@ -221,6 +224,12 @@ function simpleRender(rel, n, parentLines, back, titles) {
     if (lines.length && last.trim() !== "" && !LINK_LINE_RE.test(last)) lines.push("");
     lines.push(UP_MARK);
     lines = lines.concat(parentLines);
+    // `### Related` は zr で足したときだけ存在する（sync が勝手に作らない）。
+    // 中身が空（全部消えた）になったら見出しも外す。Python と同順。
+    if (n.related.some((ln) => ln.trim() !== "")) {
+      lines.push(RELATED_MARK);
+      lines = lines.concat(n.related);
+    }
     lines.push(DOWN_MARK);
     for (const t of back) lines.push(`[${titles.get(t)}](${relPath(dirname(rel), t)})`);
   }
@@ -296,6 +305,11 @@ export function runSync(files, prevTitleState) {
     let parentLines = preserveParent(n.parent, rel, res, titles);
     parentLines = pruneDangling(parentLines, rel, res);
 
+    // `### Related` もユーザー管理（zr で足す）。削除・追加はせず、表示名の
+    // 追従と消えたファイルへのリンク掃除だけする。incoming（BackLink）には出さない。
+    n.related = preserveParent(n.related, rel, res, titles);
+    n.related = pruneDangling(n.related, rel, res);
+
     const parentSet = new Set();
     for (const [, tg] of linksFrom(n.parent)) {
       const rp = res(tg, dirname(rel));
@@ -322,7 +336,13 @@ export function runSync(files, prevTitleState) {
       }
     }
 
+    // 自分の本文（outgoing）または Related にもリンクがある相手は BackLink に
+    // 出さない（同じリンクの繰り返しになる）。Python と同順。
     const outSet = new Set(bodyT.get(rel));
+    for (const [, tg] of linksFrom(n.related)) {
+      const rp = res(tg, dirname(rel));
+      if (rp !== null && rp !== rel) outSet.add(rp);
+    }
     const autoParent = [];
     const desired = [];
     const dseen = new Set();
@@ -397,7 +417,7 @@ export function relationsOf(notes, rels, resolver) {
     const parseLinks = (lines) => linksFrom(lines)
       .map(([, tg]) => resolver(tg, dirname(rel)))
       .filter((x) => x !== null && x !== rel);
-    info.set(rel, { rel, title: n.title, attr: n.attr, body: parseLinks(n.body), parent: parseLinks(n.parent), back: parseLinks(n.back) });
+    info.set(rel, { rel, title: n.title, attr: n.attr, body: parseLinks(n.body), parent: parseLinks(n.parent), related: parseLinks(n.related), back: parseLinks(n.back) });
   }
   return info;
 }
