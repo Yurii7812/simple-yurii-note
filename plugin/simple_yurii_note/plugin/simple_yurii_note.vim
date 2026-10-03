@@ -617,10 +617,36 @@ function! s:autosave_now(...) abort
   silent! update
 endfunction
 
+" バッファ/ウィンドウを離れるとき・フォーカスを失ったときは、デバウンスを
+" 待たずに今すぐ保存する。リンク間の移動（:buffer 等で既に開いているノートへ
+" 移る場合）は 'autowriteall' が効かないため、ここで書き残しを防ぐ。
+function! s:autosave_before_leave() abort
+  if !g:simple_yurii_note_autosave
+    return
+  endif
+  if !&modified || &buftype !=# '' || &readonly
+    return
+  endif
+  let l:file = expand('%:p')
+  if empty(l:file) || l:file !~? '\.md$'
+    return
+  endif
+  if !simple_yurii_note#is_vault_note(l:file)
+    return
+  endif
+  if exists('s:autosave_timer') && s:autosave_timer > 0
+    call timer_stop(s:autosave_timer)
+    let s:autosave_timer = 0
+  endif
+  silent! update
+endfunction
+
 augroup simple_yurii_note_autosave
   autocmd!
   autocmd TextChanged,TextChangedI *.md call s:schedule_autosave()
   autocmd InsertLeave *.md call s:schedule_autosave()
+  autocmd BufLeave,WinLeave *.md call s:autosave_before_leave()
+  autocmd FocusLost *.md call s:autosave_before_leave()
 augroup END
 
 " ---------------------------------------------------------------------------

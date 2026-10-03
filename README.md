@@ -121,7 +121,8 @@ Normal モードへ戻ったときの英語入力化は、状態取得に失敗�
 - メタ情報: YAML front matter（`title`, `time`, `filetype` など）
 - 関係性: Markdown リンク `[表示名](target.md)`
 - 同期: Parent/Child は編集直後に相手側へ反映し、保存時 AutoSync は軽量な単一ファイル同期、`:UpdateMD` は全体整合
-- 自動保存: Vim は約5秒無操作で vault の `.md` を自動保存（`g:simple_yurii_note_autosave`）。
+- 自動保存: Vim は約5秒無操作で vault の `.md` を自動保存（バッファを離れるときは即保存。
+  `g:simple_yurii_note_autosave`）。
   vault は git で自動バックアップ（2分ごと・`~/files/yurii-note/.git` とローカル bare ミラーの2か所）。
   アプリの削除は `.trash/` へ移動し、`yurii-note-restore`（fzf）で復元できる。
 
