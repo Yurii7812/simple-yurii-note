@@ -9,6 +9,7 @@ ERR=$(mktemp)
 trap 'rm -f "$OUT" "$ERR"' EXIT
 
 python3 "$REPO/test/vim_static_check.py"
+python3 "$REPO/test/check_guide.py"
 
 timeout 60 vim -u "$REPO/vimrc_simple-yurii-note" -es \
   -c "let g:simple_yurii_note_api_out='$OUT'" \

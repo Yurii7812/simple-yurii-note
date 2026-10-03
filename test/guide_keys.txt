@@ -1,0 +1,16 @@
+# s:guide_template() に必ず含めるトークン（1行1つ、# はコメント）。
+# マッピング由来のキーは check_guide.py が plugin から自動照合するので、
+# ここには位置キー・コマンド・概念など「マッピングに無いが載せたいもの」を書く。
+h
+Enter
+o
+:LinkPick
+:Rg
+:UpdateMD
+:UpdateAll
+Parent
+BackLink
+語:
+語:;
+語;
+語::
