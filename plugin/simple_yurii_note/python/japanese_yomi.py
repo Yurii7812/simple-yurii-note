@@ -288,3 +288,35 @@ def sort_lines(lines: list[str], base_dir) -> list[str]:
     for slot, (_k, _i, ln) in zip(slots, keyed):
         out[slot] = ln
     return out
+
+
+def persist_readings(lines: list[str], base_dir) -> int:
+    """リンク行の表示名のよみが未登録なら、pykakasi で作って yomi: に書き込む。
+
+    `\\S` のソート時に呼ぶ。ローマ字のまま等でよみが変わらない表示名は書かない。
+    書いた件数を返す。
+    """
+    count = 0
+    seen: set[tuple[str, str]] = set()
+    for line in lines:
+        m = _LINK_RE.search(line)
+        if not m:
+            continue
+        disp = m.group(1)
+        note = resolve_note(base_dir, m.group(2))
+        if note is None or not note.is_file():
+            continue
+        key = (str(note), disp)
+        if key in seen:
+            continue
+        seen.add(key)
+        if get_yomi(note, disp):
+            continue
+        reading = reading_for(disp)
+        if not reading or reading == disp:
+            continue
+        if not any(_RANK.get(ch) is not None for ch in kata2hira(reading)):
+            continue
+        if set_yomi(note, disp, reading):
+            count += 1
+    return count

@@ -171,6 +171,22 @@ def test_used_and_prune() -> None:
     check(jy.parse_yomi_map(notes[Path("/tmp/b.md")]["fm"]) == {}, "未使用は消える")
 
 
+def test_persist_readings() -> None:
+    print("persist_readings: \\S のとき未登録のよみを yomi: に書く")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "a.md").write_text("---\ntitle: 日記\n---\n", encoding="utf-8")
+        (root / "b.md").write_text("---\ntitle: AI\n---\n", encoding="utf-8")
+        lines = ["[日記](a.md)", "[AI](b.md)", "[無い](none.md)"]
+        check(jy.persist_readings(lines, d) == 1, "かなに変わる表示名だけ追加")
+        check(jy.get_yomi(root / "a.md", "日記") == "にっき", "a.md に登録")
+        check(jy.get_yomi(root / "b.md", "AI") == "", "ローマ字のままは書かない")
+        check(jy.persist_readings(lines, d) == 0, "2 回目は追加なし")
+        jy.set_yomi(root / "a.md", "日記", "ひびき")
+        check(jy.persist_readings(["[日記](a.md)"], d) == 0, "既存の手動よみは上書きしない")
+        check(jy.get_yomi(root / "a.md", "日記") == "ひびき", "手動よみが残る")
+
+
 def test_cli() -> None:
     print("sort_yomi CLI: set / get / sort")
     with tempfile.TemporaryDirectory() as d:
@@ -183,15 +199,19 @@ def test_cli() -> None:
             sort_yomi.main(["get", "--note", str(note), "--name", "筋トレ"])
         check(buf.getvalue().strip() == "きんとれ", "get が登録値を返す")
         data = "[日記](a.md)\n[解剖学](b.md)\n"
+        report = Path(d) / "report.txt"
         buf = io.StringIO()
         old_stdin = sys.stdin
         sys.stdin = io.StringIO(data)
         try:
             with contextlib.redirect_stdout(buf):
-                rc = sort_yomi.main(["sort", "--base", str(d)])
+                rc = sort_yomi.main(
+                    ["sort", "--base", str(d), "--report-file", str(report)]
+                )
         finally:
             sys.stdin = old_stdin
         check(rc == 0 and buf.getvalue() == "[解剖学](b.md)\n[日記](a.md)\n", "sort がよみ順")
+        check(report.read_text(encoding="utf-8").strip() == "0", "report-file に追加件数 0")
 
 
 def main() -> int:

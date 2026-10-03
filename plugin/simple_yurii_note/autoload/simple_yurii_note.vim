@@ -520,11 +520,11 @@ function! s:guide_template() abort
         \ '',
         \ '## よみ順ソート（Index）',
         \ '',
-        \ '- `\S`（ノーマル）… バッファ内の**リンク行**を表示名のよみ順（五十音 → ローマ字は末尾）に並べ替え',
+        \ '- `\S`（ノーマル）… バッファ内の**リンク行**を表示名のよみ順（五十音 → ローマ字は末尾）に並べ替え（未登録のよみは `yomi:` に自動追加）',
         \ '- `\S`（ビジュアル）… 選択した行のリンク行だけを同じ規則で並べ替え',
         \ '- `:SortYomi` … `\S`（ノーマル）と同じ',
-        \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。無ければ pykakasi が自動',
-        \ '- `zy` で表示名ごとのよみを登録でき、その表示名が Index から消えると同期時に掃除される',
+        \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。未登録は pykakasi で `yomi:` に自動追加',
+        \ '- `zy` で表示名ごとのよみを手で修正/削除できる。表示名が Index から消えると同期時に掃除される',
         \ '',
         \ '## Vim の基本操作（詳細）',
         \ '',
@@ -7119,6 +7119,7 @@ endfunction
 
 " 指定行範囲のリンク行を表示名のよみ順に並べ替える。
 " リンクでない行（front matter・見出し・空行など）は位置ごと動かさない。
+" 未登録の表示名は pykakasi のよみをリンク先の yomi: に書き込む（\S の副作用）。
 function! s:sort_lines_by_yomi(first, last) abort
   let l:script = s:sort_yomi_script()
   if !filereadable(l:script)
@@ -7129,11 +7130,19 @@ function! s:sort_lines_by_yomi(first, last) abort
   if empty(l:lines)
     return
   endif
+  let l:report = tempname()
   let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(expand('%:p:h'))
+        \ . ' --report-file ' . shellescape(l:report)
   let l:out = system(l:cmd, join(l:lines, "\n") . "\n")
   if v:shell_error != 0
+    call delete(l:report)
     echohl WarningMsg | echo 'simple_yurii_note: よみソートに失敗しました（pykakasi 未導入?）' | echohl NONE
     return
+  endif
+  let l:added = 0
+  if filereadable(l:report)
+    let l:added = str2nr(get(readfile(l:report), 0, '0'))
+    call delete(l:report)
   endif
   let l:new = split(l:out, "\n", 1)
   if !empty(l:new) && l:new[-1] ==# ''
@@ -7146,7 +7155,12 @@ function! s:sort_lines_by_yomi(first, last) abort
   let l:view = winsaveview()
   call setline(a:first, l:new)
   call winrestview(l:view)
-  echo printf('simple_yurii_note: %d 行をよみ順に並べ替えました', len(l:new))
+  if l:added
+    silent! checktime
+    echo printf('simple_yurii_note: %d 行をよみ順に並べ替え（未登録のよみ %d 件を yomi: に追加）', len(l:new), l:added)
+  else
+    echo printf('simple_yurii_note: %d 行をよみ順に並べ替えました', len(l:new))
+  endif
 endfunction
 
 " \S（ノーマル）/ :SortYomi … バッファ内のリンク行をよみ順にソート（主に index.md）。

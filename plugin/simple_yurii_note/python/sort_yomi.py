@@ -10,6 +10,7 @@
                                         # READING 省略時は推測。空文字で削除
 
 ソートはリンク行だけを対象にし、リンクでない行は位置ごと動かさない。
+`sort` は未登録の表示名のよみを pykakasi で `yomi:` に書き込む（`--dry-run` で抑止）。
 """
 from __future__ import annotations
 
@@ -36,6 +37,12 @@ def main(argv: list[str]) -> int:
 
     p_sort = sub.add_parser("sort", help="stdin の行をよみ順にソート")
     p_sort.add_argument("--base", default=".", help="リンク解決の基準ディレクトリ")
+    p_sort.add_argument(
+        "--dry-run", action="store_true", help="未登録のよみを yomi: に書き込まない"
+    )
+    p_sort.add_argument(
+        "--report-file", default=None, help="yomi: に追加した件数を書き出すファイル"
+    )
 
     p_guess = sub.add_parser("guess", help="名前のよみを表示")
     p_guess.add_argument("name")
@@ -57,6 +64,11 @@ def main(argv: list[str]) -> int:
         if lines and lines[-1] == "":
             lines.pop()
         _warn_if_missing()
+        added = 0
+        if not args.dry_run:
+            added = jy.persist_readings(lines, args.base)
+        if args.report_file:
+            Path(args.report_file).write_text(f"{added}\n", encoding="utf-8")
         out = jy.sort_lines(lines, args.base)
         if out:
             sys.stdout.write("\n".join(out) + "\n")
