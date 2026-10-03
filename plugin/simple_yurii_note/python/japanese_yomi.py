@@ -205,6 +205,16 @@ def get_yomi(path, name: str) -> str:
     return parse_yomi_map(fm).get(name, "")
 
 
+def list_yomi_names(path) -> list[str]:
+    """ノートの front matter の yomi マップの表示名を登録順に返す。"""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    fm, _rest = split_front_matter(text.split("\n"))
+    return list(parse_yomi_map(fm))
+
+
 def set_yomi(path, name: str, reading: str) -> bool:
     """ノートの yomi マップに name → reading を登録（reading 空で削除）。
 

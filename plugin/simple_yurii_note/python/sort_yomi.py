@@ -6,6 +6,7 @@
     sort_yomi.py sort --base DIR        # stdin の行をソートして stdout へ
     sort_yomi.py guess NAME             # NAME のよみを表示
     sort_yomi.py get  --note PATH --name NAME
+    sort_yomi.py list --note PATH       # yomi の表示名を登録順に一覧
     sort_yomi.py set  --note PATH --name NAME [--reading READING]
                                         # READING 省略時は推測。空文字で削除
 
@@ -51,6 +52,9 @@ def main(argv: list[str]) -> int:
     p_get.add_argument("--note", required=True)
     p_get.add_argument("--name", required=True)
 
+    p_list = sub.add_parser("list", help="ノートの yomi の表示名を一覧")
+    p_list.add_argument("--note", required=True)
+
     p_set = sub.add_parser("set", help="ノートに yomi を登録/削除")
     p_set.add_argument("--note", required=True)
     p_set.add_argument("--name", required=True)
@@ -81,6 +85,11 @@ def main(argv: list[str]) -> int:
 
     if args.mode == "get":
         print(jy.get_yomi(args.note, args.name))
+        return 0
+
+    if args.mode == "list":
+        for name in jy.list_yomi_names(args.note):
+            print(name)
         return 0
 
     if args.mode == "set":

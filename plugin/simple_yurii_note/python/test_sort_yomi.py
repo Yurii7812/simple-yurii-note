@@ -92,6 +92,19 @@ def test_set_get_yomi_file() -> None:
         check("yomi:" not in text and "attribute: group" in text, "削除後も他キーは保持")
 
 
+def test_list_yomi_names() -> None:
+    print("list_yomi_names: 登録順の表示名一覧")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "x.md"
+        p.write_text(
+            "---\ntime: 1\ntitle: ハーブ・薬草\nyomi:\n"
+            '  "ハーブ": "はーぶ"\n  "薬草": "やくそう"\n---\n',
+            encoding="utf-8",
+        )
+        check(jy.list_yomi_names(p) == ["ハーブ", "薬草"], "登録順に返す")
+        check(jy.list_yomi_names(Path(d) / "none.md") == [], "無いファイルは空")
+
+
 def test_sort_lines_display_name() -> None:
     print("sort_lines: リンク行だけ表示名で並ぶ・非リンク行は動かない")
     lines = [
@@ -198,6 +211,10 @@ def test_cli() -> None:
         with contextlib.redirect_stdout(buf):
             sort_yomi.main(["get", "--note", str(note), "--name", "筋トレ"])
         check(buf.getvalue().strip() == "きんとれ", "get が登録値を返す")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sort_yomi.main(["list", "--note", str(note)])
+        check(buf.getvalue().split() == ["筋トレ"], "list が登録順に表示名を返す")
         data = "[日記](a.md)\n[解剖学](b.md)\n"
         report = Path(d) / "report.txt"
         buf = io.StringIO()

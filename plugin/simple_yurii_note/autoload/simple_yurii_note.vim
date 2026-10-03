@@ -547,7 +547,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `zt` / `zT` … タイトル変更（空から / 現在を残して編集）',
         \ '- `zl` / `zL` … リンク表示名の変更（空から / 現在を残して編集）',
-        \ '- `zy` / `zY` … カーソル下リンク（無ければ今のノート）の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）',
+        \ '- `zy` / `zY` … カーソル下リンク（無ければ今のノート）の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）。`yomi:` に表示名が複数あるときは番号で表示名を選ぶ',
         \ '- `zd` … 子リンクの表示名をリンク先タイトルに更新',
         \ '- `mp` … YAML `filetype` を変更 ・ `yn` … 今のファイル名をヤンク',
         \ '',
@@ -622,7 +622,7 @@ function! s:guide_template() abort
         \ '- `\S`（ビジュアル）… 選択した行のリンク行だけを同じ規則で並べ替え',
         \ '- `:SortYomi` … `\S`（ノーマル）と同じ',
         \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。未登録は pykakasi で `yomi:` に自動追加',
-        \ '- `zy` / `zY` で表示名ごとのよみを手で修正/削除できる。表示名が Index から消えると同期時に掃除される',
+        \ '- `zy` / `zY` で表示名ごとのよみを手で修正/削除できる（表示名が複数あれば番号で選ぶ）。表示名が Index から消えると同期時に掃除される',
         \ '',
         \ '## Vim の基本操作（詳細）',
         \ '',
@@ -7415,6 +7415,7 @@ endfunction
 " zy … カーソル下リンクの表示名（無ければ現在ノートのタイトル）のよみを、
 "      リンク先ノート（無ければ現在ノート）の front matter `yomi:` に登録する。
 "      空 Enter / Esc で削除。pykakasi の推測を既定値に出す。
+"      対象ノートの `yomi:` に表示名が複数あるときは番号で表示名を選んでから編集する。
 "      引数に文字列を渡すと input() を出さずそのよみを使う（テスト・自動化用）。
 " よみ操作の対象（表示名, ノートパス）を決める。
 " リンク下ならリンク先、リンクが無ければ現在ノートのタイトル。
@@ -7456,6 +7457,54 @@ function! s:yomi_get(script, note, name) abort
         \ '--note ' . shellescape(a:note) . ' --name ' . shellescape(a:name))
 endfunction
 
+" 対象ノートの `yomi:` に登録された表示名（登録順）。
+function! s:yomi_names(script, note) abort
+  if !filereadable(a:script)
+    return []
+  endif
+  let l:out = s:yomi_py(a:script, 'list', '--note ' . shellescape(a:note))
+  return filter(split(l:out, "\n"), {_, v -> !empty(v)})
+endfunction
+
+" `yomi:` の表示名が複数あるときは番号で選ばせる（1つ以下ならそのまま）。
+" 今の表示名が未登録なら候補の末尾に足す。戻り値は選ばれた表示名（中止なら ''）。
+function! s:yomi_choose_name(script, note, name) abort
+  let l:names = s:yomi_names(a:script, a:note)
+  if len(l:names) < 2
+    return a:name
+  endif
+  if !empty(a:name) && index(l:names, a:name) < 0
+    call add(l:names, a:name)
+  endif
+  let l:menu = join(map(copy(l:names), {i, v -> (i + 1) . '=' . v}), '  ')
+  let l:choice = inputdialog('表示名を選択 (' . l:menu . '): ',
+        \ string(index(l:names, a:name) + 1), "\x01")
+  if l:choice ==# "\x01" || empty(trim(l:choice))
+    echo 'simple_yurii_note: 中止'
+    return ''
+  endif
+  let l:num = str2nr(trim(l:choice))
+  if l:num < 1 || l:num > len(l:names)
+    echohl WarningMsg | echo 'simple_yurii_note: 番号が範囲外です' | echohl NONE
+    return ''
+  endif
+  return l:names[l:num - 1]
+endfunction
+
+" よみの入力と保存（表示名は確定済み）。既定値を消して Enter なら削除。
+function! s:yomi_input(note, name, default) abort
+  let l:reading = inputdialog('よみ(' . a:name . '): ', a:default, "\x01")
+  if l:reading ==# "\x01"
+    echo 'simple_yurii_note: 中止'
+    return
+  endif
+  if empty(l:reading) && empty(a:default)
+    echo 'simple_yurii_note: 変更なし'
+    return
+  endif
+  call s:apply_yomi(a:note, a:name, l:reading)
+endfunction
+
 " よみを書き込む（空文字で削除）。非対話の低レベル。
 function! s:apply_yomi(note, name, reading) abort
   let l:script = s:sort_yomi_script()
@@ -7488,26 +7537,27 @@ endfunction
 
 " zy … よみを空欄から変更（zt と同じ流儀）。Esc で中止。
 "      既定値を消して Enter なら削除（既定が空のときの空 Enter は変更なし）。
+"      `yomi:` に表示名が複数あるときは番号で表示名を選んでから編集する。
 function! simple_yurii_note#rename_yomi_with_default(default) abort
   let [l:name, l:note] = s:yomi_target()
   if empty(l:name)
     return
   endif
-  let l:reading = inputdialog('よみ(' . l:name . '): ', a:default, "\x01")
-  if l:reading ==# "\x01"
-    echo 'simple_yurii_note: 中止'
+  let l:name = s:yomi_choose_name(s:sort_yomi_script(), l:note, l:name)
+  if empty(l:name)
     return
   endif
-  if empty(l:reading) && empty(a:default)
-    echo 'simple_yurii_note: 変更なし'
-    return
-  endif
-  call s:apply_yomi(l:note, l:name, l:reading)
+  call s:yomi_input(l:note, l:name, a:default)
 endfunction
 
 " zY … 現在のよみ（未登録なら pykakasi 推測）を残して編集（zT と同じ流儀）。
+"      表示名の選択は zy と同じ（`yomi:` に複数あれば番号で選ぶ）。
 function! simple_yurii_note#rename_yomi(args) abort
   let [l:name, l:note] = s:yomi_target()
+  if empty(l:name)
+    return
+  endif
+  let l:name = s:yomi_choose_name(s:sort_yomi_script(), l:note, l:name)
   if empty(l:name)
     return
   endif
@@ -7518,7 +7568,7 @@ function! simple_yurii_note#rename_yomi(args) abort
       let l:default = s:yomi_guess(s:sort_yomi_script(), l:name)
     endif
   endif
-  call simple_yurii_note#rename_yomi_with_default(l:default)
+  call s:yomi_input(l:note, l:name, l:default)
 endfunction
 
 function! s:extract_time_digits(text) abort
