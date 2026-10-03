@@ -416,6 +416,12 @@ function! s:pid_alive(pid) abort
   if a:pid <= 0
     return 0
   endif
+  " Linux は /proc で見る。system('kill -0 …') は一瞬端末を cooked モードへ
+  " 戻すため、Vim 起動直後に走ると端末応答（DA2/OSC 10,11/CPR）が画面へ生
+  " エコーされる（ロックの掃除は VimEnter で必ず走る）。/proc が無ければ従来通り。
+  if isdirectory('/proc')
+    return isdirectory('/proc/' . a:pid)
+  endif
   call system('kill -0 ' . a:pid . ' 2>/dev/null')
   return v:shell_error == 0
 endfunction
