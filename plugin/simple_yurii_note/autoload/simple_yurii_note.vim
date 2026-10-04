@@ -3972,7 +3972,7 @@ function! simple_yurii_note#trash_list() abort
   call fzf#run(fzf#wrap({
         \ 'source': l:source,
         \ 'sink': function('s:trash_sink'),
-        \ 'options': '--delimiter=\t --with-nth=2 --accept-nth=1'
+        \ 'options': '--delimiter="\t" --with-nth=2 --accept-nth=1'
         \   . ' --prompt=' . shellescape('ゴミ箱(⏎=復元)> ')
         \   . ' --preview "sed -n ''1,200p'' -- {1}"'
         \   . ' --preview-window=right:50%',
