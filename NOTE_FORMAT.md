@@ -251,7 +251,9 @@ merge（両方 14 桁タイムスタンプ）: `note_format_v2.py dupcheck A B` 
 `plugin/simple_yurii_note/python/expand_v2.py`。旧 v1 時代の `expand_s.py`
 （`\se` / `:ExpandLinks`）とは別物 ── あちらは `Parent:`/`Child:`/`Back:`
 という v1 の見出し名を前提にしており、v2 の見張りコメント形式には
-対応していない（v2 ノートに対して壊れた出力になる）。
+対応していない（v2 ノートに対して壊れた出力になる）。`expand_s.py` の
+出力先は vault 直下ではなく `ROOT/.trash/T_*.md`（使い捨て。sync・検索に
+出ない）。
 
 **辿る方向:**
 

@@ -7,7 +7,7 @@ usage:
 
 - FILE の本文と Child セクションにある markdown リンクを展開する
 - Back セクション以降は読まない
-- 生成先は ROOT/T_YYMMDDhhmmss.md
+- 生成先は ROOT/.trash/T_YYMMDDhhmmss.md（使い捨て。sync・検索・一覧の対象外）
 - DEPTH は再帰展開の深さ
     0: 展開しない（空ファイルになりうる）
     1: 直接リンクのみ
@@ -24,6 +24,7 @@ from pathlib import Path
 LINK_RE = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 TITLE_RE = re.compile(r'^title:\s*(.*)$', re.IGNORECASE)
 H1_RE = re.compile(r'^#{1,6}\s+(.+)$')
+TRASH_DIR = '.trash'  # 展開の使い捨て出力先。ドット始まりなので sync・検索に出ない。
 
 
 def bare_section_name(text: str) -> str:
@@ -500,8 +501,8 @@ def build_expanded_content(source_path: Path, root: Path, depth: int) -> list[st
 
 def expand_note(file_path: Path, root: Path, depth: int) -> Path:
     ts = timestamp_filename()
-    t_path = root / f'T_{ts}.md'
-    root.mkdir(parents=True, exist_ok=True)
+    t_path = root / TRASH_DIR / f'T_{ts}.md'
+    t_path.parent.mkdir(parents=True, exist_ok=True)
     write_lines(t_path, build_expanded_content(file_path, root, depth))
     return t_path
 

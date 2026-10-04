@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from expand_s import build_expanded_content
+from expand_s import build_expanded_content, expand_note
 
 
 def write_note(path: Path, title: str, body: str = "", child: str = "") -> None:
@@ -30,3 +30,16 @@ def test_expand_includes_body_links_and_child_hierarchy(tmp_path: Path) -> None:
     assert "## Child" in content
     assert "### Grandchild" in content
     assert "grandchild text" in content
+
+
+def test_expand_note_writes_into_trash(tmp_path: Path) -> None:
+    root = tmp_path
+    source = root / "source.md"
+    write_note(source, "Source", "本文")
+
+    t_path = expand_note(source, root, 1)
+
+    assert t_path.parent == root / ".trash"
+    assert t_path.name.startswith("T_")
+    assert t_path.read_text(encoding="utf-8").startswith("# Source")
+    assert not (root / t_path.name).exists()
