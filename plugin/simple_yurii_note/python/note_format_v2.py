@@ -1174,11 +1174,17 @@ def _links_from(lines: list[str]) -> list[tuple[str, str]]:
     return out
 
 
-def _used_display_names(notes: dict) -> set[str]:
-    """vault 内のリンクが実際に使っている表示名 + 各ノートの title を集める。"""
+def _used_display_names(notes: dict, incoming: dict | None = None) -> set[str]:
+    """vault 内のリンクが実際に使っている表示名を集める。
+
+    incoming を渡すと、各ノートの title は「そのノートへのリンクがあるとき」だけ
+    使用中とみなす（BackLink に title で出るため）。渡さない場合は従来どおり全 title を
+    使用中とみなす（テスト・単体利用の互換）。
+    """
     used: set[str] = set()
-    for n in notes.values():
-        used.add(n["title"])
+    for p, n in notes.items():
+        if incoming is None or incoming.get(p):
+            used.add(n["title"])
         for kind in ("body", "parent", "related", "back"):
             for disp, _tg in _links_from(n.get(kind, [])):
                 if disp:
@@ -1189,7 +1195,8 @@ def _used_display_names(notes: dict) -> set[str]:
 def _prune_yomi_maps(notes: dict, used: set[str]) -> int:
     """使われていない表示名の yomi を各ノートの front matter から取り除く。
 
-    ノート自身の title は常に残す。front matter を書き換えたノート数を返す。
+    使用中の表示名（リンクの表示名、および incoming のあるノートの title）だけ残す。
+    front matter を書き換えたノート数を返す。
     """
     changed = 0
     for n in notes.values():
@@ -1198,7 +1205,7 @@ def _prune_yomi_maps(notes: dict, used: set[str]) -> int:
         mapping = parse_yomi_map(n["fm"])
         if not mapping:
             continue
-        keep = {k: v for k, v in mapping.items() if k in used or k == n["title"]}
+        keep = {k: v for k, v in mapping.items() if k in used}
         if len(keep) != len(mapping):
             n["fm"] = set_yomi_map(n["fm"], keep)
             changed += 1
@@ -1420,8 +1427,8 @@ def simple_sync(root) -> int:
                 index_of[t] = p
 
     # 使われていない表示名の yomi を掃除する（\zy で登録した表示名が Index から
-    # 消えたら、同期時に一緒に消える）。ノート自身の title は常に残す。
-    _prune_yomi_maps(notes, _used_display_names(notes))
+    # 消えたら、同期時に一緒に消える）。ノート自身の title は incoming があるときだけ残す。
+    _prune_yomi_maps(notes, _used_display_names(notes, incoming))
 
     # `### Related` は対称。両側に同じ相手があるペアだけ成立する（zr は両側に
     # 書くので通常はそのまま）。片側で消されたら次回 sync で反対側からも消える。

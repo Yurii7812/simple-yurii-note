@@ -9,6 +9,7 @@ simple_yurii_note#add_clipboard_to_top
 simple_yurii_note#add_current_as_parent_here
 simple_yurii_note#add_from_clipboard
 simple_yurii_note#add_to_parent
+simple_yurii_note#after_shell_rm
 simple_yurii_note#at_add
 simple_yurii_note#at_add_reverse
 simple_yurii_note#autosync_on_save

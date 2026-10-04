@@ -169,19 +169,23 @@ def test_used_and_prune() -> None:
             "back": [],
         },
         Path("/tmp/b.md"): {
-            "fm": ["---", "title: 日記", "yomi:", '  "使われない": "つかわれない"', "---"],
+            "fm": ["---", "title: 日記", "yomi:",
+                   '  "日記": "にっき"',
+                   '  "使われない": "つかわれない"', "---"],
             "title": "日記",
             "body": ["[筋トレ](a.md)"],
             "parent": ["[Index](index.md)"],
             "back": [],
         },
     }
-    used = nf._used_display_names(notes)
-    check({"筋トレ", "日記", "Index"} <= used, "使用中の表示名と title を収集")
+    incoming = {Path("/tmp/a.md"): [Path("/tmp/b.md")], Path("/tmp/b.md"): []}
+    used = nf._used_display_names(notes, incoming)
+    check({"筋トレ", "Index"} <= used, "使用中の表示名と title を収集")
+    check("日記" not in used, "リンクの無いノートの title は未使用")
     changed = nf._prune_yomi_maps(notes, used)
     check(changed == 2, "2 ノートを掃除")
     check(jy.parse_yomi_map(notes[Path("/tmp/a.md")]["fm"]) == {"筋トレ": "きんとれ"}, "使用中は残る")
-    check(jy.parse_yomi_map(notes[Path("/tmp/b.md")]["fm"]) == {}, "未使用は消える")
+    check(jy.parse_yomi_map(notes[Path("/tmp/b.md")]["fm"]) == {}, "未使用は消える（title も）")
 
 
 def test_persist_readings() -> None:

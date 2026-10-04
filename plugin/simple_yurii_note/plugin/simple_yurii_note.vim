@@ -119,6 +119,29 @@ if !exists('g:simple_yurii_note_gallery_port')
   let g:simple_yurii_note_gallery_port = 8765
 endif
 
+" :!rm % / :silent !rm % など Vim の :! でノートを消してもゴミ箱へ回す（bash 限定）。
+" 非対話 bash が $BASH_ENV を読む性質を使い、rm をラップする（shell/yurii-note-rm-guard.sh）。
+if !exists('g:simple_yurii_note_rm_guard')
+  let g:simple_yurii_note_rm_guard = 1
+endif
+if g:simple_yurii_note_rm_guard && !has('win32') && executable('bash')
+  let s:rm_guard = s:plugin_root . '/shell/yurii-note-rm-guard.sh'
+  if filereadable(s:rm_guard)
+    if empty($BASH_ENV)
+      let $BASH_ENV = s:rm_guard
+    elseif $BASH_ENV !=# s:rm_guard
+      let g:simple_yurii_note_rm_guard = 0
+      echohl WarningMsg | echom 'simple_yurii_note: $BASH_ENV が既にあるため rm ゴミ箱ガードは無効' | echohl NONE
+    endif
+  endif
+endif
+
+augroup simple_yurii_note_shell_trash
+  autocmd!
+  " :!rm などでノートのファイルが消えていたら、バッファを閉じて同期する
+  autocmd ShellCmdPost * call simple_yurii_note#after_shell_rm()
+augroup END
+
 " 挿入モードの <C-G> が timeoutlen 待ちにならないようにする。
 " vim-surround は挿入モードに <C-G>s / <C-G>S / <C-S> を張るため、素の
 " <C-G>u（undo 区切り）などが「s が続くかも」で待たされる。挿入モードの

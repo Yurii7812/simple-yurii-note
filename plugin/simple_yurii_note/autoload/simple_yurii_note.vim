@@ -354,7 +354,12 @@ function! s:get_pkm_root() abort
   if empty(l:root)
     return ''
   endif
-  return fnamemodify(expand(l:root), ':p')
+  let l:root = fnamemodify(expand(l:root), ':p')
+  " rm ゴミ箱ガード（bash）に vault を知らせる
+  if !has('win32')
+    let $YURII_NOTE_VAULT = l:root
+  endif
+  return l:root
 endfunction
 
 function! s:index_path(root) abort
@@ -3974,6 +3979,28 @@ function! simple_yurii_note#trash_list() abort
         \ }))
 endfunction
 
+" :!rm % などの後始末。今のノートのファイルが消えていたらバッファを閉じて同期する
+" （rm ガードで .trash へ入っていれば \tr で戻せる）。
+function! simple_yurii_note#after_shell_rm() abort
+  let l:file = expand('%:p')
+  if empty(l:file) || filereadable(l:file)
+    return
+  endif
+  if !simple_yurii_note#is_vault_path(l:file)
+    return
+  endif
+  let l:root = s:get_pkm_root()
+  if !empty(l:root)
+    call s:run_sync([g:simple_yurii_note_python, 'update', l:root])
+  endif
+  let l:buf = bufnr('%')
+  call simple_yurii_note#push_history()
+  if l:buf > 0 && bufexists(l:buf)
+    silent! execute 'bwipeout! ' . l:buf
+  endif
+  echo 'ファイルが無くなったので閉じました（ゴミ箱なら \tr で復元）'
+endfunction
+
 function! simple_yurii_note#push_history() abort
   let l:file = simple_yurii_note#current_file()
   if empty(l:file) | return | endif
@@ -6921,16 +6948,18 @@ endfunction
 " 追加するリンクを 1 行で取り出す。優先は「カーソル下のリンク」、
 " 無ければクリップボード。za / zp 共通。
 function! s:pick_one_link() abort
-  let l:lk = simple_yurii_note#get_link_under_cursor()
-  if !empty(l:lk) && !empty(l:lk.target) && l:lk.target =~? '\.md\(#.*\)\?$'
-    return s:link_from_clipboard_raw(l:lk.target)
-  endif
+  " クリップボード / ヤンクを優先する（カーソルがリンク上にあっても、
+  " コピー／ヤンクしたリンクを貼る）。無ければカーソル下のリンクを使う。
   for l:raw in split(s:clipboard_text(), "\n")
     let l:target = s:extract_target(l:raw)
     if !empty(l:target) && filereadable(simple_yurii_note#resolve_link(l:target))
       return s:link_from_clipboard_raw(l:raw)
     endif
   endfor
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if !empty(l:lk) && !empty(l:lk.target) && l:lk.target =~? '\.md\(#.*\)\?$'
+    return s:link_from_clipboard_raw(l:lk.target)
+  endif
   return ''
 endfunction
 
