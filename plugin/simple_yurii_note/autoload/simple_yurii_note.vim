@@ -619,7 +619,7 @@ function! s:guide_template() abort
         \ '## 環境のその他',
         \ '',
         \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
-        \ '- 編集は約5秒無操作で自動保存、Esc でも即保存（vault の .md / .csv 対象。バッファを離れるときも即保存。`g:simple_yurii_note_autosave=0` で無効）。`gm` / `\A` / `\tD` / 同期の前は必ず保存してから実行。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
+        \ '- 編集は約1.5秒無操作で自動保存（挿入中も。Esc でも即保存。vault の .md / .csv 対象。バッファを離れるときも即保存。`g:simple_yurii_note_autosave=0` で無効）。`gm` / `\A` / `\tD` / 同期の前は必ず保存してから実行。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
         \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',
@@ -5557,6 +5557,12 @@ function! s:reload_timer_cb(timer) abort
 endfunction
 
 function! s:do_reload() abort
+  " 挿入・置換・操作待ち・コマンドライン中は何もしない（:edit はテキストロックで
+  " 失敗し、checktime の自動再読み込みが編集中のバッファを乱すため）。
+  " 次の保存・離脱時の autosync が改めて reload を呼ぶ。
+  if mode() =~# '^[iR]' || index(['o', 'c'], mode(1)) >= 0
+    return
+  endif
   " 全バッファの外部変更を検出
   checktime
   " 現在バッファが未保存でなければ再読み込み（カーソル位置保持）

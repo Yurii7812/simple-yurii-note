@@ -603,18 +603,21 @@ endif
 " ---------------------------------------------------------------------------
 " AutoSave: 「保存が要る瞬間」に vault の .md / .csv を自動書き込み
 "   g:simple_yurii_note_autosave        (既定 1。0 で無効)
-"   g:simple_yurii_note_autosave_delay  (既定 5000ms。最後の変更からこの時間で保存)
+"   g:simple_yurii_note_autosave_delay  (既定 1500ms。最後の変更からこの時間で保存)
 "   - 対象は vault 配下の .md / .csv（同期が走るのは .md だけ）
-"   - 無操作デバウンス + Esc で即保存 + バッファ/ウィンドウを離れるとき即保存
+"   - 無操作デバウンス（挿入・置換中も含む）+ Esc で即保存 +
+"     バッファ/ウィンドウを離れるとき即保存
 "   - 外部アプリで開く前（gm / \A）・ゴミ箱へ移す前（\tD）・同期の前も
 "     呼び出し側が simple_yurii_note#save_current_note() で書き出す
+"   - ターミナルを×で閉じる（SIGHUP）は Vim 側でフックできないため、
+"     挿入中でも短めのデバウンスで書き、未保存の窓を小さくしている
 " ---------------------------------------------------------------------------
 
 if !exists('g:simple_yurii_note_autosave')
   let g:simple_yurii_note_autosave = 1
 endif
 if !exists('g:simple_yurii_note_autosave_delay')
-  let g:simple_yurii_note_autosave_delay = 5000
+  let g:simple_yurii_note_autosave_delay = 1500
 endif
 
 function! s:schedule_autosave() abort
@@ -631,8 +634,9 @@ function! s:autosave_now(...) abort
   if !g:simple_yurii_note_autosave
     return
   endif
-  " 挿入・置換・操作中（d の途中など）はもう一度待つ
-  if mode() =~# '^[iR]' || index(['o', 'c'], mode(1)) >= 0
+  " 操作待ち（d の途中）・コマンドライン中はもう一度待つ。挿入・置換中でも
+  " 「書くだけ」は安全なので保存する（未保存の窓を小さくするため）。
+  if index(['o', 'c'], mode(1)) >= 0
     call s:schedule_autosave()
     return
   endif
