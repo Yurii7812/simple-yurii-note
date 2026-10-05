@@ -29676,6 +29676,7 @@ ${attr}---
     const rel = state.current;
     if (!rel) return;
     if (!confirm(`\u300C${titleOf(rel)}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\uFF08.trash \u3078\u79FB\u52D5\u3002git \u30D0\u30C3\u30AF\u30A2\u30C3\u30D7\u304B\u3089\u3082\u623B\u305B\u307E\u3059\uFF09`)) return;
+    if (state.dirty) await saveCurrent({ autosave: true });
     await deleteFile(state.root, rel);
     state.files.delete(rel);
     state.rels = state.rels.filter((r) => r !== rel);

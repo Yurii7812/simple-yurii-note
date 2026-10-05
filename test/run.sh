@@ -32,3 +32,6 @@ else
   echo "NG: 公開APIが変化した（上記の差分）" >&2
   exit 1
 fi
+
+# 保存タイミング（Esc 即保存・gm 前保存・\tD 前保存など）の回帰網
+sh "$REPO/test/autosave_net.sh"

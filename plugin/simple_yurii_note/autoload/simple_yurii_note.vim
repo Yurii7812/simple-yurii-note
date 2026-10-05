@@ -397,6 +397,21 @@ function! simple_yurii_note#is_vault_path(path) abort
         \ && index(split(l:path, s:sep()), '.undo') < 0
 endfunction
 
+" 自動保存の対象か（vault ルート配下の .md / .csv。同期が走るのは .md だけ）
+function! simple_yurii_note#is_autosave_target(path) abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root) || empty(a:path) || !filereadable(a:path)
+    return 0
+  endif
+  if a:path !~? '\.\(md\|csv\)$'
+    return 0
+  endif
+  let l:path = fnamemodify(a:path, ':p')
+  let l:root = fnamemodify(l:root, ':p')
+  return stridx(l:path, l:root) == 0
+        \ && index(split(l:path, s:sep()), '.undo') < 0
+endfunction
+
 " ---------------------------------------------------------------------------
 " ロックファイル: アプリ（Electron / ブラウザ）が「Vim がこのノートを開いて
 " いる」ことを検知するための PID 入りロック。
@@ -604,7 +619,7 @@ function! s:guide_template() abort
         \ '## 環境のその他',
         \ '',
         \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
-        \ '- 編集は約5秒無操作で自動保存（バッファを離れるときは即保存。`g:simple_yurii_note_autosave=0` で無効）。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
+        \ '- 編集は約5秒無操作で自動保存、Esc でも即保存（vault の .md / .csv 対象。バッファを離れるときも即保存。`g:simple_yurii_note_autosave=0` で無効）。`gm` / `\A` / `\tD` / 同期の前は必ず保存してから実行。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
         \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',
@@ -3917,6 +3932,8 @@ function! simple_yurii_note#trash_current() abort
   let l:dir = s:trash_dir()
   if !isdirectory(l:dir) | call mkdir(l:dir, 'p') | endif
   let l:dest = s:trash_dest(l:dir, fnamemodify(l:file, ':t'))
+  " 未保存の編集もゴミ箱に入るように、rename の前に書き出す
+  call simple_yurii_note#save_current_note()
   call rename(l:file, l:dest)
   " 消えたノートへのリンク行を掃除するため全体を同期（バッファを閉じる前に）
   if !empty(l:root) | call s:run_sync([g:simple_yurii_note_python, 'update', l:root]) | endif
@@ -5475,6 +5492,20 @@ function! simple_yurii_note#update_current_buffer() abort
   endif
 endfunction
 
+" 現在バッファに未保存の変更があれば書き出す。
+" 「外部アプリで開く前」「ゴミ箱へ移す前」「同期の前」など、保存が要る瞬間に使う。
+" 保存したら 1、変更なし・特殊バッファなど対象外なら 0 を返す。
+function! simple_yurii_note#save_current_note() abort
+  if !&modified || &buftype !=# '' || !&modifiable || &readonly
+    return 0
+  endif
+  if empty(expand('%:p'))
+    return 0
+  endif
+  silent! update
+  return !&modified
+endfunction
+
 " ---------------------------------------------------------------------------
 " UpdateMD / UpdateAll
 " ---------------------------------------------------------------------------
@@ -5493,6 +5524,10 @@ function! simple_yurii_note#update_md(arg) abort
     call s:setup_persistent_undo_for_root(l:root)
   endif
   call simple_yurii_note#check_missing_prefix_in_current_dir()
+  " 同期は disk を正とするので、編集中のノートは先に書き出す
+  if simple_yurii_note#is_vault_note(expand('%:p'))
+    call simple_yurii_note#save_current_note()
+  endif
   let l:out = s:run_sync([g:simple_yurii_note_python, 'update', l:root])
   if v:shell_error
     echoerr substitute(l:out, '\n\+$', '', '')
@@ -9330,6 +9365,10 @@ function! simple_yurii_note#open_web() abort
   endif
   let l:webdir = fnamemodify(g:simple_yurii_note_python, ':h:h') . '/web'
   let l:root = s:get_pkm_root()
+  " アプリは disk を読むので、編集中のノートは先に書き出す（古い内容で開かない）
+  if simple_yurii_note#is_vault_note(expand('%:p'))
+    call simple_yurii_note#save_current_note()
+  endif
   " デスクトップアプリ (Electron) があればそれを使う。パス固定でフォルダ選択不要。
   let l:electron = l:webdir . '/node_modules/.bin/electron'
   if executable(l:electron) && filereadable(l:webdir . '/electron/main.cjs')

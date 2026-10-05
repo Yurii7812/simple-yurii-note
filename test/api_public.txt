@@ -38,6 +38,7 @@ simple_yurii_note#hub_map
 simple_yurii_note#hub_open
 simple_yurii_note#hub_set
 simple_yurii_note#init_persistent_undo_if_ready
+simple_yurii_note#is_autosave_target
 simple_yurii_note#is_vault_note
 simple_yurii_note#is_vault_path
 simple_yurii_note#jump_down_bottom
@@ -94,6 +95,7 @@ simple_yurii_note#rename_yomi_with_default
 simple_yurii_note#replace_visual_selection
 simple_yurii_note#resolve_link
 simple_yurii_note#save_before_normal_jump
+simple_yurii_note#save_current_note
 simple_yurii_note#set_yomi
 simple_yurii_note#sort_selection
 simple_yurii_note#sort_time

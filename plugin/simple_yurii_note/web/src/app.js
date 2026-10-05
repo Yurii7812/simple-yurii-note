@@ -564,6 +564,8 @@ async function deleteCurrent() {
   const rel = state.current;
   if (!rel) return;
   if (!confirm(`「${titleOf(rel)}」を削除しますか？（.trash へ移動。git バックアップからも戻せます）`)) return;
+  // 削除直前に保留中の編集を書き出しておく（未保存分が消えないように）
+  if (state.dirty) await saveCurrent({ autosave: true });
   await vault.deleteFile(state.root, rel);
   state.files.delete(rel);
   state.rels = state.rels.filter((r) => r !== rel);

@@ -29,6 +29,7 @@ front matter はタイトル欄、`### Parent` は右パネルのリスト、`##
 ## 保存と同期
 
 - **自動保存**（既定。編集が止まって約 1.2 秒。タブ切替/非表示/移動時にも保存）。手動は `Ctrl+S`。
+- 削除（`.trash` へ移動）の直前にも保留中の編集を書き出す（未保存分が消えないように）。
 - **同期の正は Python** `note_format_v2.py` の `simple_sync()`。
   - Electron: main プロセスが保存後に `python3 note_format_v2.py update ROOT` を実行。
   - ブラウザ: `web/src/sync.js` の JS 移植を実行（サーバーも Python も呼べないため）。

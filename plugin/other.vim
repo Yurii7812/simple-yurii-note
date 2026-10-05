@@ -242,7 +242,10 @@ endfunction
 " gm: 今開いているノートを既定アプリで開く。
 " （カーソル下のリンクは見ない。行内にリンクがあるだけで別のノートが
 "   開いてしまう事故を防ぐため、2026-10-04 にリンク追従を廃止した）
+" 既定アプリ（.md → ブラウザ、.csv → LibreOffice 等）は disk を読むので、
+" 未保存の変更があれば先に書き出してから開く。
 function! s:open_current_note() abort
+  call simple_yurii_note#save_current_note()
   call s:open_with_default_app(expand('%:p'))
 endfunction
 

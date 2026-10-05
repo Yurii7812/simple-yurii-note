@@ -601,11 +601,13 @@ if g:simple_yurii_note_persistent_undo
 endif
 
 " ---------------------------------------------------------------------------
-" AutoSave: 無操作デバウンスで vault の .md を自動書き込み
+" AutoSave: 「保存が要る瞬間」に vault の .md / .csv を自動書き込み
 "   g:simple_yurii_note_autosave        (既定 1。0 で無効)
 "   g:simple_yurii_note_autosave_delay  (既定 5000ms。最後の変更からこの時間で保存)
-"   - vault 配下の .md だけ / modified のときだけ / 挿入・操作中は後回し
-"   - 書き込み後は既存の BufWritePost autosync が走る
+"   - 対象は vault 配下の .md / .csv（同期が走るのは .md だけ）
+"   - 無操作デバウンス + Esc で即保存 + バッファ/ウィンドウを離れるとき即保存
+"   - 外部アプリで開く前（gm / \A）・ゴミ箱へ移す前（\tD）・同期の前も
+"     呼び出し側が simple_yurii_note#save_current_note() で書き出す
 " ---------------------------------------------------------------------------
 
 if !exists('g:simple_yurii_note_autosave')
@@ -634,17 +636,35 @@ function! s:autosave_now(...) abort
     call s:schedule_autosave()
     return
   endif
+  call s:autosave_write()
+endfunction
+
+" 対象（vault 配下の .md / .csv）で modified なら書き出す。
+" 書いたら 1、対象外・変更なしなら 0。
+function! s:autosave_write() abort
   if !&modified || &buftype !=# '' || &readonly
-    return
+    return 0
   endif
   let l:file = expand('%:p')
-  if empty(l:file) || l:file !~? '\.md$'
-    return
+  if !simple_yurii_note#is_autosave_target(l:file)
+    return 0
   endif
-  if !simple_yurii_note#is_vault_note(l:file)
-    return
+  if exists('s:autosave_timer') && s:autosave_timer > 0
+    call timer_stop(s:autosave_timer)
+    let s:autosave_timer = 0
   endif
   silent! update
+  return 1
+endfunction
+
+" Esc（挿入モードを抜けた時）は無操作デバウンスを待たず即保存する。
+" 保存回数は増えず、保存のタイミングが前倒しになるだけ。
+function! s:autosave_on_insert_leave() abort
+  if !g:simple_yurii_note_autosave
+    return
+  endif
+  " InsertLeave の最中は mode() がまだ 'i' のことがあるため、モード判定はしない
+  call s:autosave_write()
 endfunction
 
 " バッファ/ウィンドウを離れるとき・フォーカスを失ったときは、デバウンスを
@@ -654,29 +674,15 @@ function! s:autosave_before_leave() abort
   if !g:simple_yurii_note_autosave
     return
   endif
-  if !&modified || &buftype !=# '' || &readonly
-    return
-  endif
-  let l:file = expand('%:p')
-  if empty(l:file) || l:file !~? '\.md$'
-    return
-  endif
-  if !simple_yurii_note#is_vault_note(l:file)
-    return
-  endif
-  if exists('s:autosave_timer') && s:autosave_timer > 0
-    call timer_stop(s:autosave_timer)
-    let s:autosave_timer = 0
-  endif
-  silent! update
+  call s:autosave_write()
 endfunction
 
 augroup simple_yurii_note_autosave
   autocmd!
-  autocmd TextChanged,TextChangedI *.md call s:schedule_autosave()
-  autocmd InsertLeave *.md call s:schedule_autosave()
-  autocmd BufLeave,WinLeave *.md call s:autosave_before_leave()
-  autocmd FocusLost *.md call s:autosave_before_leave()
+  autocmd TextChanged,TextChangedI *.md,*.csv call s:schedule_autosave()
+  autocmd InsertLeave *.md,*.csv call s:autosave_on_insert_leave()
+  autocmd BufLeave,WinLeave *.md,*.csv call s:autosave_before_leave()
+  autocmd FocusLost *.md,*.csv call s:autosave_before_leave()
 augroup END
 
 " ---------------------------------------------------------------------------
