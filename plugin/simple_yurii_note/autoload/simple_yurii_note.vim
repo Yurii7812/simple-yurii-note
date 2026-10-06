@@ -1868,6 +1868,54 @@ function! s:find_reciprocal_link_pos(target_path, source_name) abort
   if !filereadable(a:target_path)
     return [0, 0]
   endif
+  " 呼び出し元は対象ファイルを開いた直後なので、現在のバッファを C 実装の
+  " search() で走査する。旧実装は readfile + 全行 Vimscript ループで、
+  " 1 万行の index.md へ Parent リンクで戻ると 800ms 超かかっていた。
+  let l:cur = expand('%:p')
+  if !empty(l:cur)
+        \ && fnamemodify(l:cur, ':p') ==# fnamemodify(a:target_path, ':p')
+    let l:save = winsaveview()
+    try
+      let l:hi = line('$')
+      let l:back_pat = s:section_search_pat('back')
+      if !empty(l:back_pat)
+        call cursor(1, 1)
+        let l:back = search(l:back_pat, 'cW')
+        if l:back > 0
+          let l:hi = l:back - 1
+        endif
+      endif
+      " ファイル名の実文字列で候補行だけを search() で拾い、その行のリンクを
+      " 従来と同じ判定（target の末尾 == source_name）で確認する。
+      let l:name_pat = escape(a:source_name, "\\.*$^~[]")
+      let l:lnum = 1
+      while l:lnum > 0 && l:lnum <= l:hi
+        call cursor(l:lnum, 1)
+        let l:hit = search(l:name_pat, 'cW', l:hi)
+        if l:hit <= 0
+          break
+        endif
+        let l:line = getline(l:hit)
+        let l:start = 0
+        while 1
+          let l:m = matchstrpos(l:line, s:link_pat, l:start)
+          if len(l:m) < 3 || l:m[1] < 0
+            break
+          endif
+          let l:parts = matchlist(l:m[0], '\v\[([^\]]+)\]\(([^)]*)\)')
+          if fnamemodify(get(l:parts, 2, ''), ':t') ==# a:source_name
+            return [l:hit, l:m[1] + 1]
+          endif
+          let l:start = l:m[2]
+        endwhile
+        let l:lnum = l:hit + 1
+      endwhile
+    finally
+      call winrestview(l:save)
+    endtry
+    return [0, 0]
+  endif
+  " 対象が現在のバッファでない場合のフォールバック（従来の readfile 走査）
   let l:lines = readfile(a:target_path)
   let l:back_line = len(l:lines) + 1
   for l:i in range(0, len(l:lines) - 1)
