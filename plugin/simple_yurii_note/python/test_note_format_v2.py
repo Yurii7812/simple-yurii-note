@@ -1043,6 +1043,97 @@ def test_simple_sync_related_retitle_and_prune() -> None:
         check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
 
 
+def test_simple_sync_anchor_link_counts_as_child_and_keeps_fragment() -> None:
+    print("simple_sync: #見出し付きリンクは子として数え、タイトル追従でも # を保つ")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        _plain_note(root / "a.md", "A", "[B](b.md#まとめ)")
+        _plain_note(root / "b.md", "B", "")
+        v2.simple_sync(root)
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check("[A](a.md)" in regions(b)[1], "子として BackLink に出る（# は無視）")
+        retitle(root / "b.md", "B2")
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        check("[B2](b.md#まとめ)" in a, "表示名は追従し #まとめ は残る")
+        check("[B](b.md#まとめ)" not in a, "旧表示は残らない")
+        check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
+
+
+def test_simple_sync_anchor_parent_and_related_keep_fragment() -> None:
+    print("simple_sync: Parent / Related の #見出し は表示名追従後も残る")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        (root / "a.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: A\n---\n\n# A\n\n本文。\n\n"
+            f"{UP_MARK}\n[B](b.md#まとめ)\n{RELATED_MARK}\n[B](b.md#関連)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        (root / "b.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n"
+            f"{UP_MARK}\n{RELATED_MARK}\n[A](a.md)\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        v2.simple_sync(root)
+        retitle(root / "b.md", "B2")
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        check("[B2](b.md#まとめ)" in a, "Parent は表示名追従後も #まとめ を保つ")
+        check("[B2](b.md#関連)" in a, "Related は表示名追従後も #関連 を保つ")
+        check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
+
+
+def test_simple_sync_anchor_dangling_is_pruned() -> None:
+    print("simple_sync: #見出し付きでも消えたファイルへのリンクは掃除する")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        _plain_note(root / "a.md", "A",
+                    "[消えた](gone.md#まとめ)\n以前 [消えた](gone.md#x) の話。")
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        check("gone.md" not in a, "行リンクは行ごと、文中は文字だけ残す")
+        check("以前 消えた の話。" in a, "文中リンクは文章を残す")
+        check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
+
+
+def test_simple_sync_backlink_has_no_fragment() -> None:
+    print("simple_sync: BackLink は同期で作り直され # は付かない（既知の制限）")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "index.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index\n---\n\n# Index\n",
+            encoding="utf-8",
+        )
+        (root / "a.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: A\n---\n\n# A\n\n本文。\n\n"
+            f"{UP_MARK}\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        (root / "b.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: B\n---\n\n# B\n\n[B](a.md#まとめ)\n\n"
+            f"{UP_MARK}\n{DOWN_MARK}\n",
+            encoding="utf-8",
+        )
+        v2.simple_sync(root)
+        a = (root / "a.md").read_text(encoding="utf-8")
+        b = (root / "b.md").read_text(encoding="utf-8")
+        check("[B](b.md)" in regions(a)[1], "BackLink は # 無しで作り直される")
+        check("[B](a.md#まとめ)" in b, "リンク元の本文は # を保つ")
+        check(v2.simple_sync(root) == 0, "2 回目 0 changes（冪等）")
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

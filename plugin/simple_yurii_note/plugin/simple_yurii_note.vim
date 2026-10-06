@@ -437,6 +437,9 @@ xnoremap <silent> \p        :<C-u>call simple_yurii_note#linkify_selection_from_
 " （\p とは別キー。\p の確認プロンプトは廃止したので、必要なときはこれ）
 nnoremap <nowait> <silent> \P <Cmd>call simple_yurii_note#add_current_as_parent_here()<CR>
 nnoremap <silent> \oe       <Cmd>OutlineEdit<CR>
+" zo … カーソル下の .md リンク先ノートの見出し（アウトライン）を選び、
+" リンク先に #スラッグ（GitHub 互換）を付ける。先頭の「（見出しなし）」で解除。
+nnoremap <nowait> <silent> zo <Cmd>call simple_yurii_note#link_to_outline()<CR>
 nnoremap <silent> \gi       <Cmd>call simple_yurii_note#open_gallery_smart()<CR>
 " アプリ (Electron / ブラウザ) を開く。vault はアプリ側 (既定 ~/files/yurii-note)。
 " 既定では使われていない \A。(\w は other.vim の :wa なので使わない)

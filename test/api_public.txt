@@ -48,6 +48,7 @@ simple_yurii_note#jump_link
 simple_yurii_note#jump_relation_link
 simple_yurii_note#jump_section_header
 simple_yurii_note#jump_up
+simple_yurii_note#link_to_outline
 simple_yurii_note#linkify_filename_under_cursor
 simple_yurii_note#linkify_selection
 simple_yurii_note#linkify_selection_from_clipboard

@@ -175,6 +175,128 @@ function! s:outline_collect() abort
   return l:items
 endfunction
 
+" ---------------------------------------------------------------------------
+" 見出しアンカー（#スラッグ）: GitHub / VS Code 互換
+"   [表示名](note.md#スラッグ) の # 以降を扱う。スラッグは GitHub
+"   （github-slugger）の近似: 小文字化 → 記号除去（ASCII 句読点と日本語の約物。
+"   `-` `_` は残す）→ 空白を `-` に。日本語の文字はそのまま残る。
+"   重複見出しは GitHub と同じ `-1` `-2`（s:slugger_unique）。
+" ---------------------------------------------------------------------------
+
+function! s:gh_slug(text) abort
+  let l:s = tolower(trim(a:text))
+  " ASCII の句読点・記号（英数と `-` `_` は残す）
+  let l:s = substitute(l:s, '[!-,.\/:-@\[-\^`{-~]', '', 'g')
+  " 日本語の約物（読点・句点・括弧・中黒など）
+  let l:s = substitute(l:s, '[、。，．・：；？！゛゜ヽヾゝゞ「」『』【】〔〕（）［］｛｝〈〉《》…〜～—―‐]', '', 'g')
+  let l:s = substitute(l:s, '\s', '-', 'g')
+  return l:s
+endfunction
+
+" github-slugger と同じ重複処理（foo, foo-1, foo-2 …）。seen は呼び出し側で保持。
+function! s:slugger_unique(seen, base) abort
+  let l:result = a:base
+  while has_key(a:seen, l:result)
+    let a:seen[a:base] = get(a:seen, a:base, 0) + 1
+    let l:result = a:base . '-' . a:seen[a:base]
+  endwhile
+  let a:seen[l:result] = 0
+  return l:result
+endfunction
+
+function! s:link_base(target) abort
+  return matchstr(a:target, '^[^#]*')
+endfunction
+
+function! s:link_fragment(target) abort
+  return matchstr(a:target, '#\zs.*')
+endfunction
+
+" ノートの見出しを {text, slug, level, lnum} で返す（アンカー選択用）。
+" タイトルと同じ H1・システム見出し（Parent/Related/BackLink 等）・
+" コードフェンス内は一覧に出さない。ただしスラッグの重複番号は GitHub と
+" 同じになるよう、一覧に出さない見出しも含めてファイル順で数える。
+function! s:file_heading_items(path) abort
+  if !filereadable(a:path)
+    return []
+  endif
+  let l:title = s:get_yaml_title(a:path)
+  if empty(l:title)
+    let l:title = fnamemodify(a:path, ':t:r')
+  endif
+  let l:items = []
+  let l:seen = {}
+  let l:in_fence = 0
+  let l:lnum = 0
+  for l:line in readfile(a:path)
+    let l:lnum += 1
+    if l:line =~# '^\s*```'
+      let l:in_fence = !l:in_fence
+      continue
+    endif
+    if l:in_fence || l:line !~# '^\s*#\+\s\+'
+      continue
+    endif
+    let l:level = strlen(matchstr(l:line, '^#\+'))
+    let l:text = trim(substitute(l:line, '^\s*#\+\s\+', '', ''))
+    if empty(l:text)
+      continue
+    endif
+    let l:slug = s:slugger_unique(l:seen, s:gh_slug(l:text))
+    if l:level == 1 && l:text ==# l:title
+      continue
+    endif
+    if s:is_known_section_header_text(l:text)
+      continue
+    endif
+    call add(l:items, {'text': l:text, 'slug': l:slug, 'level': l:level, 'lnum': l:lnum})
+  endfor
+  return l:items
+endfunction
+
+" fragment（スラッグ or 生見出し or HTML アンカー）の行へジャンプ。
+" 見つかれば 1、無ければ 0（カーソル位置は元へ戻す）。
+function! s:jump_to_fragment(frag) abort
+  if empty(a:frag)
+    return 1
+  endif
+  let l:save = winsaveview()
+  let l:target = tolower(a:frag)
+  let l:seen = {}
+  let l:found = 0
+  call cursor(1, 1)
+  let l:lnum = search('^\s*#\+\s\+', 'cW')
+  while l:lnum > 0
+    let l:in_fence = s:line_in_fence(l:lnum)
+    call cursor(l:lnum, 1)
+    if !l:in_fence
+      let l:text = trim(substitute(getline(l:lnum), '^\s*#\+\s\+', '', ''))
+      if s:slugger_unique(l:seen, s:gh_slug(l:text)) ==# l:target
+        let l:found = l:lnum
+        break
+      endif
+    endif
+    let l:lnum = search('^\s*#\+\s\+', 'W')
+  endwhile
+  " 生の見出しテキスト一致（手書きの #見出し 用）
+  if l:found <= 0
+    call cursor(1, 1)
+    let l:found = search('\c^#\+\s\+\V' . escape(a:frag, '\') . '\m\s*$', 'cW')
+  endif
+  " HTML アンカー（expand の <a id="note-N"> など）
+  if l:found <= 0
+    call cursor(1, 1)
+    let l:found = search('<\a\+[^>]*id="\V' . escape(a:frag, '\') . '\m"', 'cW')
+  endif
+  if l:found > 0
+    call cursor(l:found, 1)
+    normal! zv
+    return 1
+  endif
+  call winrestview(l:save)
+  return 0
+endfunction
+
 function! s:outline_editor_lines(items) abort
   let l:lines = []
   call add(l:lines, '# OutlineEdit: 見出しを編集して :write で反映')
@@ -573,6 +695,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `zt` / `zT` … タイトル変更（空から / 現在を残して編集）',
         \ '- `zl` / `zL` … リンク表示名の変更（空から / 現在を残して編集）',
+        \ '- `zo` … カーソル下の .md リンク先の見出し（アウトライン）を選び、リンク先に `#スラッグ` を付ける（先頭の「（見出しなし）」で解除。タイトルと Parent/Related/BackLink は一覧に出ない）',
         \ '- `zy` / `zY` … **今開いているノート**の**よみ**を変更（`zy`=空欄から / `zY`=現在のよみを残して。`zY` で全部消して Enter は削除。Esc で中止）。`yomi:` に表示名が複数あるときは番号で表示名を選ぶ',
         \ '- `zd` … 子リンクの表示名をリンク先タイトルに更新',
         \ '- `mp` … YAML `filetype` を変更 ・ `yn` … 今のファイル名をヤンク',
@@ -2902,7 +3025,14 @@ function! s:rlp_open_path(path, ...) abort
   endif
   call simple_yurii_note#push_history()
   silent! execute 'hide edit ' . fnameescape(a:path)
-  if !empty(l:it) && get(l:it, 'kind', '') ==# 'link'
+  let l:frag = (!empty(l:it) && get(l:it, 'kind', '') ==# 'link')
+        \ ? s:link_fragment(get(l:it, 'target', '')) : ''
+  if !empty(l:frag)
+    " 見出しアンカー付きリンク → その見出し行へ
+    if !s:jump_to_fragment(l:frag)
+      echohl WarningMsg | echo '見出しが見つかりません: ' . l:frag | echohl None
+    endif
+  elseif !empty(l:it) && get(l:it, 'kind', '') ==# 'link'
         \ && (l:it.side ==# 'up' || l:it.side ==# 'down')
     let l:rp = s:find_reciprocal_link_pos(a:path, fnamemodify(s:rlp_path, ':t'))
     if get(l:rp, 0, 0) > 0
@@ -3373,6 +3503,11 @@ function! s:resolve_existing_link_target(target, ...) abort
   if empty(l:target) || l:target =~# '\v^\w+://'
     return ''
   endif
+  " アンカー（#見出し）はファイル解決には使わない
+  let l:target = matchstr(l:target, '^[^#]*')
+  if empty(l:target)
+    return ''
+  endif
   if s:is_absolute_path(l:target)
     let l:absolute = fnamemodify(l:target, ':p')
     return filereadable(l:absolute) ? l:absolute : ''
@@ -3424,6 +3559,8 @@ function! simple_yurii_note#resolve_link(target, ...) abort
     return l:existing
   endif
   let l:target = s:expand_user_path(a:target)
+  " アンカー（#見出し）はファイル解決には使わない
+  let l:target = matchstr(l:target, '^[^#]*')
   if s:is_absolute_path(l:target)
     return fnamemodify(l:target, ':p')
   endif
@@ -3434,6 +3571,11 @@ function! s:resolve_link_for_navigation(target, ...) abort
   let l:base = a:0 ? a:1 : expand('%:p:h')
   let l:target = s:expand_user_path(a:target)
   if empty(l:target) || l:target =~# '\v^\w+://'
+    return ''
+  endif
+  " アンカー（#見出し）はファイル解決には使わない
+  let l:target = matchstr(l:target, '^[^#]*')
+  if empty(l:target)
     return ''
   endif
   if s:is_absolute_path(l:target)
@@ -4152,7 +4294,19 @@ function! simple_yurii_note#open_link_under_cursor() abort
     echo 'No link under cursor'
     return
   endif
-  let l:path = s:resolve_link_for_navigation(l:link.target)
+  let l:frag = s:link_fragment(l:link.target)
+  let l:base = s:link_base(l:link.target)
+  if empty(l:base)
+    " 同一ファイル内アンカー（#見出し / expand の #note-N）
+    if !empty(l:frag)
+      call simple_yurii_note#push_history()
+      if !s:jump_to_fragment(l:frag)
+        echohl WarningMsg | echo '見出しが見つかりません: ' . l:frag | echohl None
+      endif
+    endif
+    return
+  endif
+  let l:path = s:resolve_link_for_navigation(l:base)
   if !filereadable(l:path) && !isdirectory(l:path)
     echo 'Link target not found: ' . l:path
     return
@@ -4167,7 +4321,12 @@ function! simple_yurii_note#open_link_under_cursor() abort
   endif
   call simple_yurii_note#push_history()
   silent! execute 'hide edit ' . fnameescape(l:path)
-  if l:from_back || l:from_up
+  if !empty(l:frag)
+    " 見出しアンカー付きリンク → その見出し行へ
+    if !s:jump_to_fragment(l:frag)
+      echohl WarningMsg | echo '見出しが見つかりません: ' . l:frag | echohl None
+    endif
+  elseif l:from_back || l:from_up
     let l:pos = s:find_reciprocal_link_pos(l:path, l:source_name)
     if get(l:pos, 0, 0) > 0
       call cursor(l:pos[0], l:pos[1])
@@ -5885,6 +6044,121 @@ function! simple_yurii_note#rename_link_text(args) abort
   endif
   let l:default = a:args ==# '' ? l:link.text : a:args
   call simple_yurii_note#rename_link_text_with_default(l:default)
+endfunction
+
+" ---------------------------------------------------------------------------
+" link_to_outline (zo): カーソル下の .md リンク先ノートの見出しを選んで
+"   リンク先に #スラッグ（GitHub 互換）を付ける。先頭の「（見出しなし）」で解除。
+"   タイトルと同じ H1・システム見出し（Parent/Related/BackLink）は出さない。
+"   BackLink は同期が行を作り直すため fragment が消える → 対象外。
+" ---------------------------------------------------------------------------
+
+function! s:link_to_outline_apply(frag) abort
+  if !exists('s:link_to_outline_ctx')
+    return
+  endif
+  let l:ctx = s:link_to_outline_ctx
+  let s:link_to_outline_ctx = {}
+  if empty(l:ctx) || !bufexists(l:ctx.buf)
+    return
+  endif
+  let l:lk = l:ctx.link
+  let l:new_target = l:ctx.base
+  if !empty(a:frag)
+    let l:new_target .= '#' . a:frag
+  endif
+  let l:new_raw = '[' . l:lk.text . '](' . l:new_target . ')'
+  execute 'buffer ' . l:ctx.buf
+  call setline(l:ctx.lnum, strpart(getline(l:ctx.lnum), 0, l:lk.startcol - 1)
+        \ . l:new_raw . strpart(getline(l:ctx.lnum), l:lk.endcol))
+  call cursor(l:ctx.lnum, 1)
+  if empty(a:frag)
+    echo 'simple_yurii_note: 見出しアンカーを外しました'
+  else
+    echo 'simple_yurii_note: → #' . a:frag
+  endif
+endfunction
+
+function! s:link_to_outline_sink(line) abort
+  if a:line ==# '（見出しなし）'
+    call s:link_to_outline_apply('')
+  else
+    call s:link_to_outline_apply(get(split(a:line, "\t", 1), 1, ''))
+  endif
+endfunction
+
+" fzf が無いときは inputlist で選ぶ（同じ apply を使う）。
+function! s:link_to_outline_fallback(items) abort
+  let l:choices = ['0: （見出しなし）']
+  let l:i = 1
+  for l:it in a:items
+    call add(l:choices, l:i . ': ' . repeat('#', l:it.level) . ' ' . l:it.text)
+    let l:i += 1
+  endfor
+  let l:sel = inputlist(l:choices)
+  if l:sel <= 0
+    let s:link_to_outline_ctx = {}
+    return
+  endif
+  if l:sel == 1
+    call s:link_to_outline_apply('')
+  else
+    call s:link_to_outline_apply(a:items[l:sel - 2].slug)
+  endif
+endfunction
+
+function! simple_yurii_note#link_to_outline(...) abort
+  let l:lk = simple_yurii_note#get_link_under_cursor()
+  if empty(l:lk) || empty(l:lk.target) || l:lk.target !~? '\.md\(#.*\)\?$'
+    echo 'simple_yurii_note: カーソル下に .md リンクがありません'
+    return
+  endif
+  if s:in_back_section(line('.'))
+    echohl WarningMsg
+    echo 'simple_yurii_note: BackLink は同期で作り直されるため見出しリンクにできません'
+    echohl None
+    return
+  endif
+  let l:path = s:resolve_link_for_navigation(s:link_base(l:lk.target))
+  if !filereadable(l:path)
+    echohl WarningMsg | echo '見つかりません: ' . l:path | echohl None
+    return
+  endif
+  let s:link_to_outline_ctx = {
+        \ 'buf': bufnr('%'),
+        \ 'lnum': line('.'),
+        \ 'link': l:lk,
+        \ 'base': s:link_base(l:lk.target),
+        \ }
+  if a:0 > 0
+    " 非対話版（テスト・自動化用）: 引数のスラッグをそのまま付ける（空で解除）
+    call s:link_to_outline_apply(a:1)
+    return
+  endif
+  let l:items = s:file_heading_items(l:path)
+  if empty(l:items)
+    let s:link_to_outline_ctx = {}
+    echo 'simple_yurii_note: 見出しがありません: ' . fnamemodify(l:path, ':t')
+    return
+  endif
+  if !exists('*fzf#run')
+    call s:link_to_outline_fallback(l:items)
+    return
+  endif
+  let l:source = ['（見出しなし）']
+  for l:it in l:items
+    " 表示（検索対象）は見出しだけ。後ろのフィールドは sink と preview 用。
+    call add(l:source, repeat('#', l:it.level) . ' ' . l:it.text
+          \ . "\t" . l:it.slug . "\t" . l:path . "\t" . l:it.lnum)
+  endfor
+  call fzf#run(fzf#wrap({
+        \ 'source': l:source,
+        \ 'sink': function('s:link_to_outline_sink'),
+        \ 'options': '--delimiter="\t" --with-nth=1 --no-multi'
+        \   . ' --prompt=' . shellescape('見出し> ')
+        \   . ' --preview "tail -n +{4} {3} 2>/dev/null | head -40"'
+        \   . ' --preview-window=right:50%',
+        \ }))
 endfunction
 
 " ---------------------------------------------------------------------------
