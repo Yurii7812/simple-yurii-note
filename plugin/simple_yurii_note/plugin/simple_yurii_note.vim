@@ -567,8 +567,14 @@ function! s:setup_conceal() abort
   silent! syntax clear yuriiCheckboxBracket
   silent! syntax clear yuriiCheckedBracket
 
-  " リンク全体は region で保持し、見える本文だけを水色にする
-  syntax region yuriiLinkRegion start=/\[\ze[^\] \n][^\]\n]*\](\([^)\n]\{1,300}\))/ end=/\](\([^)\n]\{1,300}\))/ keepend oneline contains=yuriiLinkText,yuriiConcealOpen,yuriiConcealClose
+  " リンク全体は region で保持し、見える本文だけを水色にする。
+  " containedin=... が要る: 日本語の直後の `_` は Vim の markdown 斜体
+  " （markdownItalic は `\w\@<!_\S\@=` で、非 ASCII の前では開始してしまう）に
+  " 飲み込まれ、閉じ `_` が無いと行をまたいで本文全体が斜体扱いになる。その中は
+  " トップレベルの構文が効かず、リンクの conceal が丸ごと無効になっていた。
+  " リンクは斜体/太字の中でもリンクとして見せる（この環境の日本語名は
+  " `_00001` を含むため実質必須）。
+  syntax region yuriiLinkRegion start=/\[\ze[^\] \n][^\]\n]*\](\([^)\n]\{1,300}\))/ end=/\](\([^)\n]\{1,300}\))/ keepend oneline contains=yuriiLinkText,yuriiConcealOpen,yuriiConcealClose containedin=markdownItalic,markdownBold,markdownBoldItalic
   syntax match yuriiLinkText /\%(\[\)\@<=[^\] \n][^\]\n]*\ze\](\([^)\n]\{1,300}\))/ contained
   let l:link_color_gui = get(g:, 'simple_yurii_note_link_color_gui', '#66CCFF')
   let l:link_color_cterm = get(g:, 'simple_yurii_note_link_color_cterm', '81')
