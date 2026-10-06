@@ -184,7 +184,7 @@ Windows版Vimでも既定ブラウザをWindowsのファイル関連付け経由
 | `g:simple_yurii_note_sync_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に同期まで実行するか（移動を軽くするため既定OFF） |
 | `g:simple_yurii_note_save_before_link_navigation` | `0` | `<CR>` / `<BS>` のリンク移動直前に保存するか（Enter移動を軽くするため既定OFF。未保存バッファは hidden で保持） |
 | `g:simple_yurii_note_global_bare_link_navigation` | `0` | ファイル名だけのリンクをEnter移動時にPKMルート全体から一意検索するか（再帰検索を避けるため既定OFF） |
-| `g:simple_yurii_note_markdown_conceal_links` | `1` | Markdownリンクを本文だけ表示する conceal を有効にするか（大きい/長い行のファイルでは自動抑制） |
+| `g:simple_yurii_note_markdown_conceal_links` | `1` | Markdownリンクを本文だけ表示する conceal を有効にするか（`..._max_lines` 20000 / `..._max_line_length` 1000 を超えるファイルでは自動抑制。`..._max_lines` は 0 で無制限） |
 | `g:simple_yurii_note_history_max` | `200` | 履歴の最大件数 |
 | `g:simple_yurii_note_persistent_undo` | `1` | Persistent undo を有効にするか |
 | `g:simple_yurii_note_link_color_gui` | `#66CCFF` | リンクテキストの色（GUI） |

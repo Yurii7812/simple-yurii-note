@@ -56,6 +56,7 @@ CLI:
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import os
 import re
@@ -114,6 +115,11 @@ LINK_LINE_RE = re.compile(r"^\s*\[([^\]]*)\]\(([^)]+)\)\s*(?:—\s*(.*\S))?\s*$"
 ANY_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 # 旧 v1 の構造見出し
 LEGACY_HDR_RE = re.compile(r"^(Parent|Child|Branch|BackLink|Back)\s*:\s*(.*)$", re.I)
+# グループノートの判定（front matter の attribute / 属性）。simple_sync で
+# ノートごとに再計算すると O(N²) になるため、コンパイル済みを使い回す。
+_GROUP_ATTR_RE = re.compile(
+    r"^\s*(?:attribute|属性)\s*:\s*"
+    r"(?:group|グループ|小グループ|カテゴリー|キーワード)\s*$", re.M)
 
 _EXTRA = "_extra"
 _RESERVED = {_EXTRA, BACKLINK}
@@ -709,6 +715,11 @@ Rel = tuple[str, str, str]  # (src_id, type, tgt_id)  id = root からの相対 
 
 
 def _nid(path: Path, root: Path) -> str | None:
+    # pathlib の relative_to は 1 万ノートで秒単位になり得るため、まず文字列
+    # 演算（relpath）で済ませる。root 内で解決済みならこれで足りる。
+    rel = os.path.relpath(str(path), str(root))
+    if not rel.startswith(".."):
+        return rel.replace(os.sep, "/")
     try:
         return path.resolve().relative_to(root).as_posix()
     except ValueError:
@@ -1212,8 +1223,15 @@ def _prune_yomi_maps(notes: dict, used: set[str]) -> int:
     return changed
 
 
+def _content_hash(text: str) -> str:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=8).hexdigest()
+
+
 def _simple_parse(path: Path) -> dict:
-    text = path.read_text(encoding="utf-8")
+    return _simple_parse_text(path, path.read_text(encoding="utf-8"))
+
+
+def _simple_parse_text(path: Path, text: str) -> dict:
     fm, rest = _split_front_matter(text.split("\n"))
     title = _fm_title(fm) or path.stem
     body: list[str] = []
@@ -1239,7 +1257,37 @@ def _simple_parse(path: Path) -> dict:
             else back
         ).append(ln)
     return {"fm": fm, "title": title, "body": body, "parent": parent,
-            "related": related, "back": back}
+            "related": related, "back": back, "hash": _content_hash(text)}
+
+
+# パース結果の差分キャッシュ。`update` は保存のたびに vault 全体を走査するので、
+# 内容が変わっていないファイルは前回のパース結果を使い回す。鮮度は mtime では
+# なく内容ハッシュ（blake2b 8byte）で判定する。mtime+size だと、粗い時刻刻みの
+# ファイルシステムや同サイズの編集（OldTitle→NewTitle 等）を取りこぼすため。
+# 壊れていても例外を握って全件パースに落ちるだけ。
+_PARSE_CACHE_FILE = ".pkm_parse_cache_v2.json"
+
+
+def _load_parse_cache(root: Path) -> dict:
+    fp = root / _PARSE_CACHE_FILE
+    if not fp.exists():
+        return {}
+    try:
+        data = json.loads(fp.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_parse_cache(root: Path, cache: dict) -> None:
+    fp = root / _PARSE_CACHE_FILE
+    try:
+        tmp = fp.with_name(fp.name + ".tmp")
+        tmp.write_text(json.dumps(cache, ensure_ascii=False, separators=(",", ":")),
+                       encoding="utf-8")
+        os.replace(tmp, fp)
+    except OSError:
+        pass
 
 
 def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict,
@@ -1254,20 +1302,22 @@ def _update_body_link_names(body: list[str], path: Path, resolver, titles: dict,
     リンクを手書き名と誤判定して更新しない（simple_sync の retitle 不具合）。
     """
     prev_titles = prev_titles or {}
+    base_dir = path.parent
+
+    def repl(m):
+        disp, tg = m.group(1), m.group(2)
+        base = tg.split("#", 1)[0].strip()
+        if not base.lower().endswith(".md"):
+            return m.group(0)
+        rp = resolver(base, base_dir)
+        if rp is None or rp not in titles:
+            return m.group(0)
+        now = titles[rp]
+        if disp == now or disp == prev_titles.get(rp) or disp == Path(base).stem:
+            return f"[{now}]({tg})"
+        return m.group(0)
     out: list[str] = []
     for ln in body:
-        def repl(m, _path=path):
-            disp, tg = m.group(1), m.group(2)
-            base = tg.split("#", 1)[0].strip()
-            if not base.lower().endswith(".md"):
-                return m.group(0)
-            rp = resolver(base, _path.parent)
-            if rp is None or rp not in titles:
-                return m.group(0)
-            now = titles[rp]
-            if disp == now or disp == prev_titles.get(rp) or disp == Path(base).stem:
-                return f"[{now}]({tg})"
-            return m.group(0)
         out.append(_SIMPLE_INLINE_LINK.sub(repl, ln))
     return out
 
@@ -1276,11 +1326,12 @@ def _preserve_parent(existing: list[str], path: Path, resolver, titles: dict) ->
     """Parent は書いてあるそのまま。リンク行は表示名だけ現在のタイトルに更新し、
     行の追加・削除（＝ユーザーの編集）はしない。"""
     out: list[str] = []
+    base_dir = path.parent
     for ln in existing:
         m = _SIMPLE_INLINE_LINK.search(ln)
         if m:
             tg = m.group(2).split("#", 1)[0].strip()
-            rp = resolver(tg, path.parent)
+            rp = resolver(tg, base_dir)
             if rp is not None and rp in titles:
                 out.append(f"[{titles[rp]}]({m.group(2)})")  # 表示名だけ更新
             else:
@@ -1298,18 +1349,19 @@ def _prune_dangling(lines: list[str], path: Path, resolver) -> list[str]:
       （文章を消さない）。`![alt](pic.png)` 等の .md 以外は触らない。
     """
     out: list[str] = []
+    base_dir = path.parent
     for ln in lines:
         if _SIMPLE_LINK_LINE_RE.match(ln):
             tg = _link_target(ln)
-            if tg.lower().endswith(".md") and resolver(tg, path.parent) is None:
+            if tg.lower().endswith(".md") and resolver(tg, base_dir) is None:
                 continue
             out.append(ln)
             continue
 
-        def repl(m, _path=path):
+        def repl(m):
             disp, tg = m.group(1), m.group(2)
             base = tg.split("#", 1)[0].strip()
-            if base.lower().endswith(".md") and resolver(base, _path.parent) is None:
+            if base.lower().endswith(".md") and resolver(base, base_dir) is None:
                 return disp
             return m.group(0)
 
@@ -1326,8 +1378,10 @@ def _prune_one_sided_related(lines: list[str], path: Path, resolver,
     行の扱いは `_prune_dangling` と同じ（リンク単独行は行ごと、
     文中リンクは表示名の文字だけ残す）。
     """
+    base_dir = path.parent
+
     def one_sided(tg: str) -> bool:
-        rp = resolver(tg, path.parent)
+        rp = resolver(tg, base_dir)
         return rp is None or rp == path or path not in related_t.get(rp, set())
 
     out: list[str] = []
@@ -1383,7 +1437,30 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
 # =============================================================================
 def simple_sync(root) -> int:
     root = Path(root).resolve()
-    notes: dict[Path, dict] = {p.resolve(): _simple_parse(p) for p in _iter_md(root)}
+    # 内容が前回と同じファイルは、読み込んだテキストのハッシュ照合でパースを省く。
+    # 読み込み自体は全ファイル分行う（mtime は信用しない。上記コメント参照）。
+    cache = _load_parse_cache(root)
+    notes: dict[Path, dict] = {}
+    keys: dict[Path, str] = {}
+    parsed_any = False
+    for p in _iter_md(root):
+        rp = p.resolve()
+        key = _nid(rp, root)
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        h = _content_hash(text)
+        ent = cache.get(key) if key is not None else None
+        if isinstance(ent, list) and len(ent) == 7 and ent[0] == h:
+            notes[rp] = {"fm": ent[1], "title": ent[2], "body": ent[3],
+                         "parent": ent[4], "related": ent[5], "back": ent[6],
+                         "hash": h}
+        else:
+            notes[rp] = _simple_parse_text(p, text)
+            parsed_any = True
+        if key is not None:
+            keys[rp] = key
     titles = {p: n["title"] for p, n in notes.items()}
 
     # 前回 sync 時点のタイトル。本文リンクの表示名を「追従／手書きを残す」の
@@ -1392,19 +1469,37 @@ def simple_sync(root) -> int:
     prev_state = _load_title_state(root)
     prev_titles: dict[Path, str] = {}
     for p in notes:
-        pid = _nid(p, root)
+        pid = keys.get(p)
         if pid is not None and pid in prev_state:
             prev_titles[p] = prev_state[pid]
 
-    def res(tg: str, base: Path) -> Path | None:
-        tp = Path(tg).resolve() if tg.startswith("/") else (base / tg).resolve()
+    # リンク先の解決。Path.resolve() は 1 リンクごとに実パス解決（lstat 連鎖）を
+    # して重いので、正規化した文字列で辞書を引く（vault 内は symlink 無しが前提。
+    # 見つからないときだけ従来の resolve にフォールバックする）。
+    notes_by_norm = {os.path.normpath(str(k)): k for k in notes}
+    dirs: dict[Path, str] = {p: str(p.parent) for p in notes}
+
+    def res(tg: str, base) -> Path | None:
+        base_s = base if isinstance(base, str) else str(base)
+        if tg.startswith("/"):
+            cand = os.path.normpath(tg)
+        else:
+            cand = os.path.normpath(os.path.join(base_s, tg))
+        rp = notes_by_norm.get(cand)
+        if rp is not None:
+            return rp
+        base_p = Path(base_s)
+        try:
+            tp = Path(tg).resolve() if tg.startswith("/") else (base_p / tg).resolve()
+        except OSError:
+            return None
         return tp if tp in notes else None
 
     body_t: dict[Path, list[Path]] = {}
     for p, n in notes.items():
         ts: list[Path] = []
         for _d, tg in _links_from(n["body"]):
-            rp = res(tg, p.parent)
+            rp = res(tg, dirs[p])
             if rp is not None and rp != p:
                 ts.append(rp)
         body_t[p] = ts
@@ -1440,12 +1535,19 @@ def simple_sync(root) -> int:
     for p, n in notes.items():
         ts: set[Path] = set()
         for _d, tg in _links_from(n["related"]):
-            rp = res(tg, p.parent)
+            rp = res(tg, dirs[p])
             if rp is not None and rp != p:
                 ts.add(rp)
         related_t[p] = ts
     for p, n in notes.items():
         n["related"] = _prune_one_sided_related(n["related"], p, res, related_t)
+
+    # グループ（attribute: group / index.md）の集合。ノートごとに全ノート分を
+    # 再計算していたため O(N²) になっていた（1,000 ノートで re.search 100 万回）。
+    # 1 回だけ作って使い回す。
+    group_set = {q for q, nn in notes.items()
+                 if q.name == "index.md"
+                 or (nn["fm"] and _GROUP_ATTR_RE.search("\n".join(nn["fm"])))}
 
     changed = 0
     for p, n in notes.items():
@@ -1459,7 +1561,7 @@ def simple_sync(root) -> int:
         parent_lines = _prune_dangling(parent_lines, p, res)
         parent_set: set[Path] = set()
         for _d, tg in _links_from(n["parent"]):
-            rp = res(tg, p.parent)
+            rp = res(tg, dirs[p])
             if rp is not None:
                 parent_set.add(rp)
         # index.md 側のリンク = 親。
@@ -1476,7 +1578,7 @@ def simple_sync(root) -> int:
             keep: list[str] = []
             for ln in parent_lines:
                 tgt = _link_target(ln)
-                rp = res(tgt, p.parent) if tgt else None
+                rp = res(tgt, dirs[p]) if tgt else None
                 if rp is not None and rp.name == "index.md":
                     drop.add(rp)
                 else:
@@ -1489,11 +1591,6 @@ def simple_sync(root) -> int:
         #     「グループ → 子供」という containership なので Parent に入る。
         #   - それ以外は BackLink（incoming − Parent − 自分）。
         # 既存の並びを保ち、新しく増えた分は末尾に追加する。
-        group_set = {q for q, nn in notes.items()
-                     if q.name == "index.md"
-                     or (nn["fm"] and re.search(r"^\s*(?:attribute|属性)\s*:\s*"
-                                                r"(?:group|グループ|小グループ|カテゴリー|キーワード)\s*$",
-                                                "\n".join(nn["fm"]), re.M))}
         auto_parent: list[Path] = []
         desired: list[Path] = []
         dseen: set[Path] = set()
@@ -1502,7 +1599,7 @@ def simple_sync(root) -> int:
         # 両側に Related があるペアは BackLink には現れない。
         out_set = set(body_t.get(p, []))
         for _d, tg in _links_from(n["related"]):
-            rp = res(tg, p.parent)
+            rp = res(tg, dirs[p])
             if rp is not None and rp != p:
                 out_set.add(rp)
         for s in incoming.get(p, []):
@@ -1523,20 +1620,33 @@ def simple_sync(root) -> int:
             parent_lines.append(f"[{titles[s]}]({_rel(p.parent, s)})")
         existing_back: list[Path] = []
         for _d, tg in _links_from(n["back"]):
-            rp = res(tg, p.parent)
+            rp = res(tg, dirs[p])
             if rp is not None and rp not in existing_back:
                 existing_back.append(rp)
         dset = set(desired)
         back = [t for t in existing_back if t in dset]
         back += [t for t in desired if t not in set(back)]
         new_text = _simple_render(p.name, n, p, parent_lines, back, titles)
-        old = p.read_text(encoding="utf-8")
-        if new_text != old:
+        new_hash = _content_hash(new_text)
+        if new_hash != n["hash"]:
             p.write_text(new_text, encoding="utf-8")
             changed += 1
+            n["hash"] = new_hash
+    # 次回の判定のため、今回のパース結果と最終ハッシュを保存する。全件が
+    # キャッシュヒットで何も書き換えていないなら、内容は前回と同一なので
+    # 数 MB の JSON を書き直さない（保存のたびに走るため無駄が大きい）。
+    if parsed_any or changed:
+        out_cache: dict[str, list] = {}
+        for p, n in notes.items():
+            key = keys.get(p)
+            if key is None:
+                continue
+            out_cache[key] = [n["hash"], n["fm"], n["title"], n["body"],
+                              n["parent"], n["related"], n["back"]]
+        _save_parse_cache(root, out_cache)
     # 次回の追従判定のため、今回のタイトルを記録する（変化が無ければ書かない）。
     cur_state = {pid: titles[p] for p in notes
-                 for pid in [_nid(p, root)] if pid is not None}
+                 for pid in [keys.get(p)] if pid is not None}
     if cur_state != prev_state:
         _save_title_state(root, cur_state)
     return changed

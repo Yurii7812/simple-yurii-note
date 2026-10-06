@@ -1140,20 +1140,56 @@ function! s:find_section_index_in_lines(lines, name) abort
   return l:found
 endfunction
 
-" Return line number (1-based) of section header, or 0
-function! s:find_section_line(name) abort
-  let l:found = 0
+" `is_section_header_text` 相当（bare 名が aliases のどれか）を search() で
+" 引くためのパターン。`#` の個数・`:` の有無は問わない。
+function! s:section_search_pat(name) abort
+  let l:words = s:section_aliases(a:name)
+  if empty(l:words) | return '' | endif
+  return '\c^\s*#*\s*\%(' . join(l:words, '\|') . '\):\?\s*$'
+endfunction
+
+" a:lnum がコードフェンス（`^````）の内側か。フェンス行を C 実装の search() で
+" 数えるだけ（Vimscript の全行ループをやめる）。
+function! s:line_in_fence(lnum) abort
+  let l:start = 1
   let l:in_fence = 0
-  for l:i in range(1, line('$'))
-    let l:s = trim(getline(l:i))
-    if l:s =~# '^```'
-      let l:in_fence = !l:in_fence
+  while 1
+    call cursor(l:start, 1)
+    let l:f = search('^\s*```', 'cW', a:lnum)
+    if l:f <= 0
+      break
     endif
-    if !l:in_fence && s:is_section_header_text(l:s, a:name)
-      let l:found = l:i
-    endif
-  endfor
-  return l:found
+    let l:in_fence = !l:in_fence
+    let l:start = l:f + 1
+  endwhile
+  return l:in_fence
+endfunction
+
+" Return line number (1-based) of section header, or 0
+" 旧実装は全行を Vimscript ループで trim 比較しており、1 万行の index.md では
+" リンクを開くたび（in_up_section / in_back_section）に数百 ms かかっていた。
+" 後方 search() で「最後に一致した行」を探し、フェンス内なら手前を再探索する。
+function! s:find_section_line(name) abort
+  let l:pat = s:section_search_pat(a:name)
+  if empty(l:pat) | return 0 | endif
+  let l:save = winsaveview()
+  try
+    let l:lnum = line('$')
+    while l:lnum > 0
+      call cursor(l:lnum, 1)
+      let l:found = search(l:pat, 'bcW')
+      if l:found <= 0
+        return 0
+      endif
+      if !s:line_in_fence(l:found)
+        return l:found
+      endif
+      let l:lnum = l:found - 1
+    endwhile
+  finally
+    call winrestview(l:save)
+  endtry
+  return 0
 endfunction
 
 " Ensure the buffer has a Child: section, placed after Parent: and before BackLink:.
@@ -1894,21 +1930,34 @@ function! simple_yurii_note#jump_last_link_before_up() abort
 endfunction
 
 " --- v2: 文中リンク / 関係リンクの位置一覧 --------------------------------
+" 旧実装は 1 行ずつ getline + matchstrpos の Vimscript ループで、1 万行で
+" 数百 ms かかっていた。searchpos()（C 実装）で行範囲を走査する。
 function! s:link_positions_in_range(lo, hi) abort
+  return s:link_positions_in_range_limited(a:lo, a:hi, 0)
+endfunction
+
+" a:max > 0 なら a:max 本見つけた時点で打ち切る（0 は無制限）。
+function! s:link_positions_in_range_limited(lo, hi, max) abort
   let l:pos = []
-  let l:lo = max([a:lo, 1])
+  if a:max == 0
+    let l:unlimited = 1
+  else
+    let l:unlimited = 0
+  endif
   let l:hi = min([a:hi, line('$')])
-  if l:lo > l:hi | return l:pos | endif
-  for l:lnum in range(l:lo, l:hi)
-    let l:line = getline(l:lnum)
-    let l:start = 0
-    while 1
-      let l:m = matchstrpos(l:line, s:link_pat, l:start)
-      if len(l:m) < 3 || l:m[1] < 0 | break | endif
-      call add(l:pos, {'lnum': l:lnum, 'col': l:m[1] + 1})
-      let l:start = l:m[2]
+  if a:lo > l:hi || (!l:unlimited && a:max <= 0) | return l:pos | endif
+  let l:save = winsaveview()
+  try
+    call cursor(a:lo, 1)
+    let l:m = searchpos(s:link_pat, 'cW', l:hi)
+    while l:m[0] > 0 && l:m[0] <= l:hi
+      call add(l:pos, {'lnum': l:m[0], 'col': l:m[1]})
+      if !l:unlimited && len(l:pos) >= a:max | break | endif
+      let l:m = searchpos(s:link_pat, 'W', l:hi)
     endwhile
-  endfor
+  finally
+    call winrestview(l:save)
+  endtry
   return l:pos
 endfunction
 
@@ -3032,8 +3081,21 @@ function! s:hint_label(idx) abort
 endfunction
 
 " 現在バッファの候補位置（本文 → Parent/Child の順、digit_key と同じ並び）。
+" ラベルは s:hint_label() が最大 80 本までしか振らない（7 文字 × 10 + 数字 10）ので、
+" 80 本集めた時点で走査を打ち切る。巨大な index.md（1 万リンク）では先頭付近で
+" 止まるため、全行走査しない。
 function! s:hint_positions() abort
-  return s:v2_body_link_positions() + s:v2_relation_link_positions()
+  let l:max = 80
+  let [l:up_m, l:dn_m] = s:v2_boundaries()
+  if l:up_m > 0
+    let l:pos = s:link_positions_in_range_limited(1, l:up_m - 1, l:max)
+    if len(l:pos) < l:max
+      let l:pos += s:link_positions_in_range_limited(
+            \ l:up_m + 1, line('$'), l:max - len(l:pos))
+    endif
+    return l:pos
+  endif
+  return s:link_positions_in_range_limited(1, line('$'), l:max)
 endfunction
 
 " ラベル→位置の対応表を作る。割り当て切れの位置は含めない。
@@ -4466,16 +4528,29 @@ let s:v2_down_mark = '### BackLink'
 let s:v2_up_marks_legacy   = ['Parent', '<!-- こっちにとって -->', '<!-- している -->']
 let s:v2_down_marks_legacy = ['Child', '<!-- そっちにとって -->', '<!-- されている -->']
 
+" v2_boundaries_in_lines と同じ判定を、バッファ上では search()（C 実装）で行う。
+" 旧: 全行を Vimscript ループで trim 比較しており、1 万行の index.md では
+" ヒント更新・数字ジャンプのたびに 200ms 超かかっていた。後方検索 1 回ずつで
+" 「最後に一致した行」という同じ意味になる（複数あれば最後が返る）。
+let s:v2_up_pat = '\C^\s*\%(### Parent\|Parent\|<!-- こっちにとって -->\|<!-- している -->\)\s*$'
+let s:v2_down_pat = '\C^\s*\%(### BackLink\|Child\|<!-- そっちにとって -->\|<!-- されている -->\)\s*$'
+
+function! s:v2_last_mark(pat) abort
+  let l:save = winsaveview()
+  try
+    call cursor(line('$'), 1)
+    return search(a:pat, 'bcW')
+  finally
+    call winrestview(l:save)
+  endtry
+endfunction
+
 " Parent / Child の見張り行の行番号を返す。
 " 見張りはノート作成時（テンプレート）にだけ入る。無ければ [0, 0] を返し、
 " 呼び出し側が処理を中止する（後から見張りを追加することは決してしない）。
 function! s:v2_boundaries() abort
-  let l:up_m = 0 | let l:dn_m = 0
-  for l:i in range(1, line('$'))
-    let l:s = trim(getline(l:i))
-    if l:s ==# s:v2_up_mark || index(s:v2_up_marks_legacy, l:s) >= 0     | let l:up_m = l:i | endif
-    if l:s ==# s:v2_down_mark || index(s:v2_down_marks_legacy, l:s) >= 0 | let l:dn_m = l:i | endif
-  endfor
+  let l:up_m = s:v2_last_mark(s:v2_up_pat)
+  let l:dn_m = s:v2_last_mark(s:v2_down_pat)
   if l:up_m > 0 && l:dn_m > l:up_m
     return [l:up_m, l:dn_m]
   endif
@@ -7585,6 +7660,9 @@ function! s:sort_lines_by_yomi(first, last) abort
   let l:report = tempname()
   let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(expand('%:p:h'))
         \ . ' --report-file ' . shellescape(l:report)
+  " 1 万行の Index では数秒かかる。無反応に見えないよう先に表示する。
+  echo printf('simple_yurii_note: %d 行をよみ順に並べ替え中…', len(l:lines))
+  redraw
   let l:out = system(l:cmd, join(l:lines, "\n") . "\n")
   if v:shell_error != 0
     call delete(l:report)

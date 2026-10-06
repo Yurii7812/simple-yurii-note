@@ -81,10 +81,22 @@ def reset_reader() -> None:
     _READER = None
 
 
+# 変換不要（変換しても同じ）文字だけの文字列。かな・英数・記号。
+# 登録済みの `yomi:` はひらがななので、\S の再ソートで pykakasi を
+# 1 万回呼び直さないための近道（1 回の変換は速いが 1 万回で数秒になる）。
+_NO_CONVERT_RE = re.compile(
+    r"^[ぁ-ゖァ-ヺー・"
+    r"A-Za-z0-9０-９"
+    r"!\"#$%&'()*+,\-./:;<=>?@\[\\\]^_`{|}~ \t\r\n]*$"
+)
+
+
 def reading_for(text: str) -> str:
     """text のよみを返す。pykakasi 未導入なら text をそのまま返す。"""
     if _READER is not None:
         return _READER(text)
+    if _NO_CONVERT_RE.match(text):
+        return text
     kks = _load_pykakasi()
     if kks is None:
         return text
@@ -195,24 +207,47 @@ def split_front_matter(lines: list[str]) -> tuple[list[str], list[str]]:
     return [], list(lines)
 
 
+# 1 プロセス（= 1 回の sort/set 実行）内で front matter を 1 回だけ読む。
+# \S は「未登録よみの書き込み」と「ソート」で同じ 1 万ノートを 2 周参照する。
+# 読み直しをやめると 1 万行 Index で数秒変わる。書き込んだらメモも更新する。
+_NOTE_MEMO: dict[str, "dict | None"] = {}
+_RESOLVE_MEMO: dict[tuple[str, str], "Path | None"] = {}
+
+
+def clear_memos() -> None:
+    _NOTE_MEMO.clear()
+    _RESOLVE_MEMO.clear()
+
+
+def _note_entry(path) -> "dict | None":
+    p = Path(path)
+    key = os.path.abspath(str(p))
+    if key in _NOTE_MEMO:
+        return _NOTE_MEMO[key]
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        _NOTE_MEMO[key] = None
+        return None
+    lines = text.split("\n")
+    if text.endswith("\n") and lines and lines[-1] == "":
+        lines.pop()
+    fm, rest = split_front_matter(lines)
+    ent = {"path": p, "fm": fm, "rest": rest, "map": parse_yomi_map(fm)}
+    _NOTE_MEMO[key] = ent
+    return ent
+
+
 def get_yomi(path, name: str) -> str:
     """ノートの front matter の yomi マップから表示名 name のよみを返す。"""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    fm, _rest = split_front_matter(text.split("\n"))
-    return parse_yomi_map(fm).get(name, "")
+    ent = _note_entry(path)
+    return ent["map"].get(name, "") if ent else ""
 
 
 def list_yomi_names(path) -> list[str]:
     """ノートの front matter の yomi マップの表示名を登録順に返す。"""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return []
-    fm, _rest = split_front_matter(text.split("\n"))
-    return list(parse_yomi_map(fm))
+    ent = _note_entry(path)
+    return list(ent["map"]) if ent else []
 
 
 def set_yomi(path, name: str, reading: str) -> bool:
@@ -220,16 +255,12 @@ def set_yomi(path, name: str, reading: str) -> bool:
 
     変更したら True。
     """
-    p = Path(path)
-    text = p.read_text(encoding="utf-8")
-    trailing_nl = text.endswith("\n")
-    lines = text.split("\n")
-    if trailing_nl and lines and lines[-1] == "":
-        lines.pop()
-    fm, rest = split_front_matter(lines)
-    if not fm:
-        fm = ["---", "title: " + p.stem, "---"]
-    mapping = parse_yomi_map(fm)
+    ent = _note_entry(path)
+    if ent is None:
+        return False
+    p = ent["path"]
+    fm = ent["fm"] or ["---", "title: " + p.stem, "---"]
+    mapping = dict(ent["map"])
     if reading:
         if mapping.get(name) == reading:
             return False
@@ -239,8 +270,9 @@ def set_yomi(path, name: str, reading: str) -> bool:
             return False
         del mapping[name]
     new_fm = set_yomi_map(fm, mapping)
-    out = new_fm + rest
-    p.write_text("\n".join(out) + "\n", encoding="utf-8")
+    p.write_text("\n".join(new_fm + ent["rest"]) + "\n", encoding="utf-8")
+    ent["fm"] = new_fm
+    ent["map"] = mapping
     return True
 
 
@@ -267,7 +299,12 @@ def resolve_note(base_dir, target: str) -> Path | None:
     t = t.split("#", 1)[0]
     if not t.lower().endswith(".md"):
         return None
-    return Path(t) if os.path.isabs(t) else Path(base_dir) / t
+    key = (os.path.abspath(str(base_dir)), t)
+    if key in _RESOLVE_MEMO:
+        return _RESOLVE_MEMO[key]
+    p = Path(t) if os.path.isabs(t) else Path(base_dir) / t
+    _RESOLVE_MEMO[key] = p
+    return p
 
 
 def line_reading(line: str, base_dir) -> str:

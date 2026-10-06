@@ -79,8 +79,11 @@ let g:simple_yurii_note_realtime_link_sync_max_lines = 2000
 " 本文リンクから BackLink をリアルタイム同期する重い処理（既定: 0 / 保存時に同期）
 let g:simple_yurii_note_realtime_backlink_sync = 0
 
-" 長い PDF リンクなどで conceal が重い場合の自動抑止しきい値
-let g:simple_yurii_note_markdown_conceal_max_lines = 2000
+" リンクを表示名だけにする conceal の自動抑止しきい値。
+" 既定 20000 行（1 万行の Index でも表示名だけになる。0 で無制限）。
+" 1 万行の描画は conceal 有無で差が出ないことを実測済み。
+let g:simple_yurii_note_markdown_conceal_max_lines = 20000
+" 長い PDF リンクなど、1 行がこれより長いファイルでは抑止する
 let g:simple_yurii_note_markdown_conceal_max_line_length = 1000
 
 " コマンド実行前に自動保存（既定: 1）

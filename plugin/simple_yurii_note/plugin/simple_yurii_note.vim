@@ -83,7 +83,9 @@ if !exists('g:simple_yurii_note_markdown_conceal_links')
   let g:simple_yurii_note_markdown_conceal_links = 1
 endif
 if !exists('g:simple_yurii_note_markdown_conceal_max_lines')
-  let g:simple_yurii_note_markdown_conceal_max_lines = 2000
+  " 1 万行の Index でもリンクをたたんで表示名だけ見せる（0 で無制限）。
+  " 実測で 1 万行の描画は conceal 有無で差が出ないため既定を引き上げた。
+  let g:simple_yurii_note_markdown_conceal_max_lines = 20000
 endif
 if !exists('g:simple_yurii_note_markdown_conceal_max_line_length')
   let g:simple_yurii_note_markdown_conceal_max_line_length = 1000
@@ -524,7 +526,8 @@ endfunction
 " ---------------------------------------------------------------------------
 " Markdown リンクの concealment
 "   [テキスト](url)  →  テキスト  のみ表示
-"   concealcursor=n で、カーソルがある行だけ展開表示
+"   concealcursor=n … ノーマルモードではカーソル行も含めて隠す
+"   （挿入モードでは展開される）
 " ---------------------------------------------------------------------------
 
 augroup simple_yurii_note_conceal
@@ -538,8 +541,10 @@ function! s:setup_conceal() abort
     return
   endif
 
-  let l:too_large_for_conceal = line('$') > get(g:, 'simple_yurii_note_markdown_conceal_max_lines', 2000)
-        \ || max(map(getline(1, min([line('$'), 200])), 'strlen(v:val)')) > get(g:, 'simple_yurii_note_markdown_conceal_max_line_length', 1000)
+  let l:max_lines = get(g:, 'simple_yurii_note_markdown_conceal_max_lines', 20000)
+  let l:too_large_for_conceal = (l:max_lines > 0 && line('$') > l:max_lines)
+        \ || max(map(getline(1, min([line('$'), 200])), 'strlen(v:val)'))
+        \    > get(g:, 'simple_yurii_note_markdown_conceal_max_line_length', 1000)
 
   if get(g:, 'simple_yurii_note_markdown_conceal_links', 0) && !l:too_large_for_conceal
     setlocal conceallevel=2
