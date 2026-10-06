@@ -78,9 +78,10 @@ def test_directions_parent_child_backlink_related() -> None:
         d_a = ex._directions(a_p, notes[a_p], root, by_name, ids)
         check(d_a["parent"] == {ids[(root / "G.md").resolve()]}, "A の親は ### Parent の G")
         check(d_a["child"] == {ids[(root / "B.md").resolve()]}, "A の子は本文リンクの B")
-        check(d_a["related"] == {ids[(root / "R.md").resolve()]}, "A の関連は ### Related の R")
-        check(d_a["backlink"] == {ids[(root / "D.md").resolve()], ids[(root / "R.md").resolve()]},
-              "A の文中は BackLink の D + Related の R（BackLink を子扱いしない）")
+        check(d_a["backlink"] == {ids[(root / "D.md").resolve()]},
+              "A の文中（### BackLink）は D だけ（Related を混ぜない）")
+        check(d_a["related"] == {ids[(root / "R.md").resolve()]},
+              "A の関連（### Related）は R（独立した方向）")
 
 
 def test_simple_mode_depth1() -> None:
@@ -92,7 +93,7 @@ def test_simple_mode_depth1() -> None:
         start_id = ids[(root / "A.md").resolve()]
         order, _po = ex.collect_simple(start_id, _dir_of(root, by_name, notes, ids, id_to_path), 1)
         titles = {notes[id_to_path[i]]["title"] for i in order}
-        check(titles == {"A", "G", "B", "D", "R"}, "深さ1で親G・子B・文中D+Rが全部入る")
+        check(titles == {"A", "G", "B", "D", "R"}, "深さ1で親G・子B・文中D・関連Rが全部入る")
 
 
 def test_simple_mode_depth0_only_start() -> None:
@@ -108,7 +109,7 @@ def test_simple_mode_depth0_only_start() -> None:
 
 
 def test_detailed_mode_independent_budgets() -> None:
-    print("detailed: 種類ごとに独立した深さで絞り込める")
+    print("detailed: 種類ごとに独立した深さで絞り込める（子/親/文中/関連）")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         _fixture(root)
@@ -116,17 +117,21 @@ def test_detailed_mode_independent_budgets() -> None:
         start_id = ids[(root / "A.md").resolve()]
         dir_of = _dir_of(root, by_name, notes, ids, id_to_path)
 
-        order, _po = ex.collect_detailed(start_id, dir_of, child_depth=1, parent_depth=0, backlink_depth=0)
+        order, _po = ex.collect_detailed(start_id, dir_of, 1, 0, 0, 0)
         titles = {notes[id_to_path[i]]["title"] for i in order}
-        check(titles == {"A", "B"}, "子だけ許可（親・文中は0）だと A と B だけ")
+        check(titles == {"A", "B"}, "子だけ許可だと A と B だけ")
 
-        order2, _po2 = ex.collect_detailed(start_id, dir_of, child_depth=0, parent_depth=1, backlink_depth=0)
+        order2, _po2 = ex.collect_detailed(start_id, dir_of, 0, 1, 0, 0)
         titles2 = {notes[id_to_path[i]]["title"] for i in order2}
         check(titles2 == {"A", "G"}, "親だけ許可だと A と G だけ")
 
-        order3, _po3 = ex.collect_detailed(start_id, dir_of, child_depth=0, parent_depth=0, backlink_depth=1)
+        order3, _po3 = ex.collect_detailed(start_id, dir_of, 0, 0, 1, 0)
         titles3 = {notes[id_to_path[i]]["title"] for i in order3}
-        check(titles3 == {"A", "D", "R"}, "文中だけ許可だと A と D・R だけ")
+        check(titles3 == {"A", "D"}, "文中だけ許可だと A と D だけ（関連の R は入らない）")
+
+        order4, _po4 = ex.collect_detailed(start_id, dir_of, 0, 0, 0, 1)
+        titles4 = {notes[id_to_path[i]]["title"] for i in order4}
+        check(titles4 == {"A", "R"}, "関連だけ許可だと A と R だけ（文中の D は入らない）")
 
 
 def test_detailed_mode_parent_does_not_leak_siblings() -> None:
@@ -151,23 +156,24 @@ def test_detailed_mode_parent_does_not_leak_siblings() -> None:
         # 含まれるが、G のもう一つの子 H やその子 HC は含まれない。
         order, _po = ex.collect_detailed(
             start_id, _dir_of(root, by_name, notes, ids, id_to_path),
-            child_depth=3, parent_depth=1, backlink_depth=0)
+            child_depth=3, parent_depth=1, backlink_depth=0, related_depth=0)
         titles = {notes[id_to_path[i]]["title"] for i in order}
         check(titles == {"A", "C1", "C2", "G"},
               "親を1回辿った先(G)がハブでも、G の他の子(H)やその子(HC)までは展開しない")
 
 
 def test_detailed_mode_each_child_chain_node_gets_own_parent_and_backlink() -> None:
-    print("detailed: 子チェーン上の各ノードそれぞれが、自分自身の親・文中を独立に持ってくる")
+    print("detailed: 子チェーン上の各ノードそれぞれが、自分自身の親・文中・関連を独立に持ってくる")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         # A(起点) の親は G。A の子 C1 の親は別の note P（A の親ではない）。
-        # C1 は本文で自分に言及している D1 を BackLink に持つ（C1 自身の文中）。
+        # C1 は本文で自分に言及している D1 を BackLink に、R1 を Related に持つ。
         note(root / "G.md", "G", body="[A](A.md)", attr="group")
         note(root / "P.md", "P", body="Pの本文。参照: [C1](C1.md)")
         note(root / "A.md", "A", body="[C1](C1.md)")
-        note(root / "C1.md", "C1", parent="[P](P.md)")
+        note(root / "C1.md", "C1", parent="[P](P.md)", related="[R1](R1.md)")
         note(root / "D1.md", "D1", body="D1の本文。言及: [C1](C1.md)")
+        note(root / "R1.md", "R1", related="[C1](C1.md)")
         v2.simple_sync(root)
 
         by_name, notes, ids, id_to_path = ex._build_index(root)
@@ -175,10 +181,10 @@ def test_detailed_mode_each_child_chain_node_gets_own_parent_and_backlink() -> N
 
         order, _po = ex.collect_detailed(
             start_id, _dir_of(root, by_name, notes, ids, id_to_path),
-            child_depth=1, parent_depth=1, backlink_depth=1)
+            child_depth=1, parent_depth=1, backlink_depth=1, related_depth=1)
         titles = {notes[id_to_path[i]]["title"] for i in order}
-        check(titles == {"A", "C1", "G", "P", "D1"},
-              "起点(A)の親G・子C1に加えて、C1自身の親P・C1自身の文中D1も独立に含まれる")
+        check(titles == {"A", "C1", "G", "P", "D1", "R1"},
+              "起点(A)の親G・子C1に加えて、C1自身の親P・文中D1・関連R1も独立に含まれる")
 
 
 def test_relation_links_shown_even_for_terminal_nodes() -> None:
@@ -195,7 +201,7 @@ def test_relation_links_shown_even_for_terminal_nodes() -> None:
         v2.simple_sync(root)
 
         out_path = ex._run(root, root / "A.md",
-                            lambda sid, dir_of: ex.collect_detailed(sid, dir_of, 0, 1, 0))
+                            lambda sid, dir_of: ex.collect_detailed(sid, dir_of, 0, 1, 0, 0))
         text = out_path.read_text(encoding="utf-8")
         check("## Index" in text, "Index 自体は展開結果に含まれる（終端として）")
         check("## 日記" not in text and "## simple_yurii_note" not in text,
@@ -283,10 +289,22 @@ def test_prefs_roundtrip() -> None:
         _fixture(root)
         check(ex._load_prefs(root) is None, "初回は前回設定なし")
         ex._run(root, root / "A.md",
-                lambda sid, dir_of: ex.collect_detailed(sid, dir_of, 2, 1, 0))
-        ex._save_prefs(root, 2, 1, 0)
+                lambda sid, dir_of: ex.collect_detailed(sid, dir_of, 2, 1, 0, 1))
+        ex._save_prefs(root, 2, 1, 0, 1)
         prefs = ex._load_prefs(root)
-        check(prefs == {"child": 2, "parent": 1, "backlink": 0}, "保存した数値がそのまま読み出せる")
+        check(prefs == {"child": 2, "parent": 1, "backlink": 0, "related": 1},
+              "保存した数値がそのまま読み出せる")
+
+
+def test_prefs_old_format_defaults_related_zero() -> None:
+    print("prefs: 関連が無い旧形式の保存値は related=0 として読める")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / ex._PREFS_FILE).write_text(
+            '{"child": 1, "parent": 2, "backlink": 3}', encoding="utf-8")
+        prefs = ex._load_prefs(root)
+        check(prefs == {"child": 1, "parent": 2, "backlink": 3, "related": 0},
+              "旧 prefs（related 無し）は 0 で補完される")
 
 
 def main() -> int:

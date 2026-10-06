@@ -2,34 +2,34 @@
 """ノート形式 v2 用の「展開」機能。
 
 現在のノートを起点に、親（`### Parent`）/ 子（本文リンク）/ 文中
-（`### BackLink` と `### Related`）方向へノートを辿り、集めたノートの
-本文を 1 つの使い捨て md ファイルへ集約する。front matter や見張り
-コメントは含めない。
+（`### BackLink`）/ 関連（`### Related`）方向へノートを辿り、集めた
+ノートの本文を 1 つの使い捨て md ファイルへ集約する。front matter や
+見張りコメントは含めない。
 
 方向は現行形式（`note_format_v2._simple_parse`）の意味に合わせる:
 
     - 親   … `### Parent` のリンク（Index・グループなど、自分を子に持つ側）
     - 子   … 本文のリンク（自分が親として持つ側）
-    - 文中 … `### BackLink`（本文で自分に言及している側）と `### Related`
-             （対称。展開では文中と同じ向きに辿る）
+    - 文中 … `### BackLink` のリンク（本文で自分に言及している側）
+    - 関連 … `### Related` のリンク（対称。独立した方向）
 
 出力先は ROOT/_tmp/T_<タイムスタンプ>.md（sync は _tmp を一切見ない。
 note_format_v2.EXPAND_TMP_DIR 参照）。編集しても元ノートへは反映されない
 一方向のスナップショット。
 
 モード:
-    simple   … 親/子/文中を区別せず、全リンクを平等に扱って深さ N まで
+    simple   … 親/子/文中/関連を区別せず、全リンクを平等に扱って深さ N まで
                 BFS で辿る（1 つの共有カウンタ）。
-    detailed … 親・子・文中それぞれ独立の深さ（何回その種類の辺を辿れるか）
-                を指定する。他の種類の辺を挟んでも、その種類自身の残り
-                回数だけが減る。
+    detailed … 親・子・文中・関連それぞれ独立の深さ（何回その種類の辺を
+                辿れるか）を指定する。他の種類の辺を挟んでも、その種類自身の
+                残り回数だけが減る。
 
 detailed で使った深さは ROOT/.pkm_expand_prefs.json に記録し、次回
 「保存済み設定」として呼び出せる。
 
 CLI:
     expand_v2.py simple    ROOT START_FILE DEPTH
-    expand_v2.py detailed  ROOT START_FILE CHILD_DEPTH PARENT_DEPTH BACKLINK_DEPTH
+    expand_v2.py detailed  ROOT START_FILE CHILD_DEPTH PARENT_DEPTH BACKLINK_DEPTH RELATED_DEPTH
     expand_v2.py get_prefs ROOT
 """
 from __future__ import annotations
@@ -76,8 +76,7 @@ def _directions(note_path: Path, n: dict, root: Path, by_name,
     - 親   = `### Parent` のリンク先（自分を子として持つ側）。
     - 子   = 本文のリンク先（自分が親として持つ側）。
     - 文中 = `### BackLink` のリンク先（本文で自分に言及している相手）。
-             展開では `### Related`（対称の関係）も同じ向きに含める。
-    - 関連 = `### Related` のリンク先（表示用。文中と重複してよい）。
+    - 関連 = `### Related` のリンク先（対称。独立した方向として扱う）。
     """
     self_id = ids.get(note_path)
 
@@ -92,12 +91,11 @@ def _directions(note_path: Path, n: dict, root: Path, by_name,
                 out.add(i)
         return out
 
-    related = targets(n["related"])
     return {
         "parent": targets(n["parent"]),
         "child": targets(n["body"]),
-        "backlink": targets(n["back"]) | related,
-        "related": related,
+        "backlink": targets(n["back"]),
+        "related": targets(n["related"]),
     }
 
 
@@ -115,7 +113,7 @@ Collected = tuple[list[str], dict]
 
 
 def collect_simple(start_id: str, dir_of, depth: int) -> Collected:
-    """親/子/文中を区別せず、共有の深さ N まで辿る。順番は発見順。"""
+    """親/子/文中/関連を区別せず、共有の深さ N まで辿る。順番は発見順。"""
     visited = {start_id}
     order = [start_id]
     parent_of: dict = {start_id: None}
@@ -124,7 +122,7 @@ def collect_simple(start_id: str, dir_of, depth: int) -> Collected:
         nxt: list[str] = []
         for nid in frontier:
             d = dir_of(nid)
-            for neighbor in d["parent"] | d["child"] | d["backlink"]:
+            for neighbor in d["parent"] | d["child"] | d["backlink"] | d["related"]:
                 if neighbor not in visited:
                     visited.add(neighbor)
                     order.append(neighbor)
@@ -159,18 +157,18 @@ def _collect_pure_chain(start_id: str, dir_of, depth: int, kind: str) -> Collect
 
 
 def collect_detailed(start_id: str, dir_of, child_depth: int, parent_depth: int,
-                      backlink_depth: int) -> Collected:
+                      backlink_depth: int, related_depth: int) -> Collected:
     """子方向を主軸に再帰展開し、その経路上の各ノート（起点含む）それぞれから
-    独立に親・文中を指定の深さだけ辿って付け加える。
+    独立に親・文中・関連を指定の深さだけ辿って付け加える。
 
     - 子: 起点から純粋な子チェーンを depth=child_depth まで再帰的に展開する
       （各ノードの本文を全部見せる。「掘り下げる」方向）。
-    - 親・文中: 上の子チェーンに含まれる**各ノードそれぞれ**について、その
-      ノートを起点とした純粋な親チェーン（depth=parent_depth）・純粋な
-      文中チェーン（depth=backlink_depth）を独立に辿って加える。ここでも
-      種類は切り替わらない（親を辿った先でさらに子や文中には進まない）ので、
-      例えば親の先がハブ的なノート（Index 等）でも、そのハブの他の子まで
-      展開されることはない。
+    - 親・文中・関連: 上の子チェーンに含まれる**各ノードそれぞれ**について、
+      そのノートを起点とした純粋な親チェーン（depth=parent_depth）・純粋な
+      文中チェーン（depth=backlink_depth）・純粋な関連チェーン
+      （depth=related_depth）を独立に辿って加える。ここでも種類は切り替わらない
+      （親を辿った先でさらに子や文中には進まない）ので、例えば親の先がハブ的な
+      ノート（Index 等）でも、そのハブの他の子まで展開されることはない。
     - 全体を通して同じノートは 1 回だけ（重複除去）。
     """
     order = [start_id]
@@ -185,7 +183,8 @@ def collect_detailed(start_id: str, dir_of, child_depth: int, parent_depth: int,
             parent_of[nid] = child_parent_of[nid]
 
     for anchor in child_chain:
-        for kind, depth in (("parent", parent_depth), ("backlink", backlink_depth)):
+        for kind, depth in (("parent", parent_depth), ("backlink", backlink_depth),
+                            ("related", related_depth)):
             if depth <= 0:
                 continue
             sub_chain, sub_parent_of = _collect_pure_chain(anchor, dir_of, depth, kind)
@@ -320,15 +319,22 @@ def _load_prefs(root: Path) -> dict[str, int] | None:
         return None
     try:
         d = json.loads(fp.read_text(encoding="utf-8"))
-        return {"child": int(d["child"]), "parent": int(d["parent"]), "backlink": int(d["backlink"])}
+        return {
+            "child": int(d["child"]),
+            "parent": int(d["parent"]),
+            "backlink": int(d["backlink"]),
+            # 旧形式（関連が無い時代）の保存値は 0 として読む。
+            "related": int(d.get("related", 0)),
+        }
     except Exception:  # noqa: BLE001
         return None
 
 
-def _save_prefs(root: Path, child: int, parent: int, backlink: int) -> None:
+def _save_prefs(root: Path, child: int, parent: int, backlink: int, related: int) -> None:
     fp = root / _PREFS_FILE
     fp.write_text(
-        json.dumps({"child": child, "parent": parent, "backlink": backlink}, ensure_ascii=False),
+        json.dumps({"child": child, "parent": parent, "backlink": backlink,
+                    "related": related}, ensure_ascii=False),
         encoding="utf-8",
     )
 
@@ -372,7 +378,7 @@ def main(argv: list[str]) -> int:
     if mode == "get_prefs":
         prefs = _load_prefs(root)
         if prefs:
-            print(f"{prefs['child']} {prefs['parent']} {prefs['backlink']}")
+            print(f"{prefs['child']} {prefs['parent']} {prefs['backlink']} {prefs['related']}")
         return 0
 
     if len(argv) < 4:
@@ -388,13 +394,15 @@ def main(argv: list[str]) -> int:
         out_path = _run(root, start_file, lambda sid, dir_of: collect_simple(sid, dir_of, depth))
     elif mode == "detailed":
         if len(argv) < 7:
-            print("usage: expand_v2.py detailed ROOT START_FILE CHILD PARENT BACKLINK",
+            print("usage: expand_v2.py detailed ROOT START_FILE CHILD PARENT BACKLINK [RELATED]",
                   file=sys.stderr)
             return 2
         cd, pd, bd = int(argv[4]), int(argv[5]), int(argv[6])
+        # 旧呼び出し（関連が無い時代）は related=0 として扱う。
+        rd = int(argv[7]) if len(argv) > 7 else 0
         out_path = _run(root, start_file,
-                         lambda sid, dir_of: collect_detailed(sid, dir_of, cd, pd, bd))
-        _save_prefs(root, cd, pd, bd)
+                         lambda sid, dir_of: collect_detailed(sid, dir_of, cd, pd, bd, rd))
+        _save_prefs(root, cd, pd, bd, rd)
     else:
         print(f"unknown mode: {mode}", file=sys.stderr)
         return 2

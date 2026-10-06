@@ -4851,9 +4851,9 @@ function! simple_yurii_note#v2_new_attr() abort
   call s:v2_new_interactive('group')
 endfunction
 
-" pe: 現ノートを起点に 親/子/文中 を辿って 1 つの展開ファイルへ集約する。
-" シンプル（深さを 1 つだけ指定、親/子/文中を区別せず平等に辿る）と
-" 詳細（親・子・文中それぞれ独立の深さ。前回の詳細設定は
+" pe: 現ノートを起点に 親/子/文中/関連 を辿って 1 つの展開ファイルへ集約する。
+" シンプル（深さを 1 つだけ指定、親/子/文中/関連を区別せず平等に辿る）と
+" 詳細（親・子・文中・関連それぞれ独立の深さ。前回の詳細設定は
 " ROOT/.pkm_expand_prefs.json に記録され、次回「保存済み設定を使う」で
 " 再利用できる）を選ぶ。出力は ROOT/_tmp/T_<timestamp>.md（sync 管理外、
 " 編集しても元ノートへは反映されない使い捨てスナップショット）。
@@ -4886,7 +4886,7 @@ function! simple_yurii_note#v2_expand() abort
     let l:use_saved = 0
     if !empty(l:prefs)
       let l:pm = s:v2_pick('詳細設定', [
-            \ '保存済み(子' . l:prefs.child . ' 親' . l:prefs.parent . ' 文中' . l:prefs.backlink . ')を使う',
+            \ '保存済み(子' . l:prefs.child . ' 親' . l:prefs.parent . ' 文中' . l:prefs.backlink . ' 関連' . l:prefs.related . ')を使う',
             \ '新しく設定する'])
       if l:pm ==# '' | echo 'simple_yurii_note: キャンセル' | return | endif
       let l:use_saved = (l:pm =~# '^保存済み')
@@ -4895,15 +4895,17 @@ function! simple_yurii_note#v2_expand() abort
       let l:cd = l:prefs.child
       let l:pd = l:prefs.parent
       let l:bd = l:prefs.backlink
+      let l:rd = l:prefs.related
     else
       let l:cd = input('子の深さ: ', '1')
       let l:pd = input('親の深さ: ', '1')
       let l:bd = input('文中の深さ: ', '0')
-      if l:cd !~# '^\d\+$' || l:pd !~# '^\d\+$' || l:bd !~# '^\d\+$'
+      let l:rd = input('関連の深さ: ', '0')
+      if l:cd !~# '^\d\+$' || l:pd !~# '^\d\+$' || l:bd !~# '^\d\+$' || l:rd !~# '^\d\+$'
         echo 'simple_yurii_note: キャンセル' | return
       endif
     endif
-    let l:args = [s:python_cmd(), l:py, 'detailed', l:root, l:cur, l:cd, l:pd, l:bd]
+    let l:args = [s:python_cmd(), l:py, 'detailed', l:root, l:cur, l:cd, l:pd, l:bd, l:rd]
   endif
 
   let l:out = systemlist(join(map(copy(l:args), 'shellescape(v:val)'), ' '))
@@ -4927,8 +4929,8 @@ function! s:v2_expand_prefs(root, py) abort
     return {}
   endif
   let l:parts = split(trim(l:out[0]))
-  if len(l:parts) != 3 | return {} | endif
-  return {'child': l:parts[0], 'parent': l:parts[1], 'backlink': l:parts[2]}
+  if len(l:parts) != 4 | return {} | endif
+  return {'child': l:parts[0], 'parent': l:parts[1], 'backlink': l:parts[2], 'related': l:parts[3]}
 endfunction
 
 " カーソル直下ノート（zh）: 新ノートを作り、そのリンクをカーソル行の直下（本文）に置く。
