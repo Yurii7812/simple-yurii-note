@@ -258,28 +258,33 @@ def test_render_strips_own_h1_and_frontmatter() -> None:
         check("Aの本文。参照:" in text, "本文の中身は保持される")
 
 
-def test_run_creates_file_under_tmp_dir() -> None:
-    print("run: 出力先は ROOT/_tmp/T_<timestamp>.md")
+def test_run_creates_file_under_trash_dir() -> None:
+    print("run: 出力先は ROOT/.trash/T_<timestamp>.md")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         _fixture(root)
         out_path = ex._run(root, root / "A.md",
                             lambda sid, dir_of: ex.collect_simple(sid, dir_of, 0))
-        check(out_path.parent == root / v2.EXPAND_TMP_DIR, "_tmp ディレクトリの下に作られる")
+        check(out_path.parent == root / ex.TRASH_DIR, ".trash ディレクトリの下に作られる")
         check(out_path.name.startswith("T_") and out_path.suffix == ".md",
               "ファイル名は T_ + タイムスタンプ")
 
 
-def test_tmp_dir_excluded_from_sync_scan() -> None:
-    print("sync: _tmp 配下のファイルは vault スキャンから除外される")
+def test_trash_output_excluded_from_sync_scan() -> None:
+    print("sync: .trash の展開出力と旧 _tmp 配下は vault スキャンから除外される")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         _fixture(root)
         out_path = ex._run(root, root / "A.md",
                             lambda sid, dir_of: ex.collect_simple(sid, dir_of, 1))
         check(out_path.exists(), "展開ファイル自体は作られている")
-        found = [p for p in v2._iter_md(root) if v2.EXPAND_TMP_DIR in p.relative_to(root).parts]
-        check(found == [], "_iter_md は _tmp 配下を無視する")
+        # 2026-10-06 以前の出力（_tmp）が残っていても sync に見えないこと。
+        (root / v2.EXPAND_TMP_DIR).mkdir(exist_ok=True)
+        (root / v2.EXPAND_TMP_DIR / "old.md").write_text("# old\n", encoding="utf-8")
+        found = [p for p in v2._iter_md(root)
+                 if ex.TRASH_DIR in p.relative_to(root).parts
+                 or v2.EXPAND_TMP_DIR in p.relative_to(root).parts]
+        check(found == [], "_iter_md は .trash / _tmp 配下を無視する")
 
 
 def test_prefs_roundtrip() -> None:

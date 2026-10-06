@@ -591,8 +591,8 @@ function! s:guide_template() abort
         \ '',
         \ '## 展開・画像・その他',
         \ '',
-        \ '- `\e` … 現ノート周辺を 1 つの md に展開（`_tmp/T_*.md`）',
-        \ '- `\se` … S ノートを A ノートに展開（`expand_s.py` を呼ぶ。`_tmp` ではなく `.trash/T_*.md` に出る）',
+        \ '- `\e` … 現ノート周辺を 1 つの md に展開（`.trash/T_*.md`）',
+        \ '- `\se` … S ノートを A ノートに展開（`expand_s.py` を呼ぶ。出力は `.trash/T_*.md`）',
         \ '- `\gi` … 画像ギャラリー（画像リンクがあればそれ、無ければ Index 以下の全画像をブラウザで）',
         \ '- `\oe` … 見出しを別バッファで編集（`:write` で元ノートへ反映）',
         \ '- `\sc` … CopyStack（`y` で行 / 選択を積み、もう一度 `:CopyStack` でクリップボードに確定）',
@@ -4855,7 +4855,7 @@ endfunction
 " シンプル（深さを 1 つだけ指定、親/子/文中/関連を区別せず平等に辿る）と
 " 詳細（親・子・文中・関連それぞれ独立の深さ。前回の詳細設定は
 " ROOT/.pkm_expand_prefs.json に記録され、次回「保存済み設定を使う」で
-" 再利用できる）を選ぶ。出力は ROOT/_tmp/T_<timestamp>.md（sync 管理外、
+" 再利用できる）を選ぶ。出力は ROOT/.trash/T_<timestamp>.md（sync・検索の対象外、
 " 編集しても元ノートへは反映されない使い捨てスナップショット）。
 function! simple_yurii_note#v2_expand() abort
   let l:cur = expand('%:p')

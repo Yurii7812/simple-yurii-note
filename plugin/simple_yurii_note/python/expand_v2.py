@@ -13,9 +13,9 @@
     - 文中 … `### BackLink` のリンク（本文で自分に言及している側）
     - 関連 … `### Related` のリンク（対称。独立した方向）
 
-出力先は ROOT/_tmp/T_<タイムスタンプ>.md（sync は _tmp を一切見ない。
-note_format_v2.EXPAND_TMP_DIR 参照）。編集しても元ノートへは反映されない
-一方向のスナップショット。
+出力先は ROOT/.trash/T_<タイムスタンプ>.md（expand_s.py の展開出力と同じ場所。
+`.trash` はドット始まりなので sync・検索・一覧に出ない）。編集しても
+元ノートへは反映されない一方向のスナップショット。
 
 モード:
     simple   … 親/子/文中/関連を区別せず、全リンクを平等に扱って深さ N まで
@@ -43,6 +43,9 @@ from pathlib import Path
 import note_format_v2 as v2
 
 _PREFS_FILE = ".pkm_expand_prefs.json"
+# \e / \se の使い捨て展開出力先（vault のゴミ箱と同じ場所。ドット始まりなので
+# sync・検索・一覧・アプリの対象外）。
+TRASH_DIR = ".trash"
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +240,7 @@ def _relation_lines(note_path: Path, n: dict, root: Path, by_name, tmp_dir: Path
     """このノートの関係リンクを現行形式のセクション単位（親 / 関連 / 子（本文）/
     バックリンク）で書き出す。展開先に含まれていないものも含めてそのまま
     リンクとして書き出す（そこから先は展開しない ── あくまで「このノートは
-    他に何にリンクしているか」を見せるだけ）。リンク先は展開ファイル（_tmp
+    他に何にリンクしているか」を見せるだけ）。リンク先は展開ファイル（.trash
     配下）から見た相対パスに直す。"""
     lines: list[str] = []
     for key, label in _REL_SECTIONS:
@@ -360,7 +363,7 @@ def _run(root: Path, start_file: Path, order_fn) -> Path:
     order, parent_of = order_fn(start_id, dir_of)
     notes_by_id = {i: notes[id_to_path[i]] for i in order}
 
-    tmp_dir = root / v2.EXPAND_TMP_DIR
+    tmp_dir = root / TRASH_DIR
     tmp_dir.mkdir(parents=True, exist_ok=True)
     text = _render(order, parent_of, notes_by_id, root, by_name, id_to_path, tmp_dir)
     out_path = tmp_dir / _make_filename()

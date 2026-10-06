@@ -372,8 +372,8 @@ nnoremap <nowait> <silent> za  <Cmd>call simple_yurii_note#add_clipboard_before_
 " zA: za と同じだが、追加前に「表示名」を入力する（既定は za が使う表示名。
 "     空 Enter / Esc で中止）。Vim 標準の折りたたみ zA は上書きされる。
 nnoremap <nowait> <silent> zA  <Cmd>call simple_yurii_note#add_clipboard_before_up_note_named()<CR>
-" \e（旧 pe）: 現ノートを起点に親/子/文中を辿って 1 つの md へ展開（v2 専用、_tmp/T_<timestamp>.md）。
-" シンプル（深さ1つ）/ 詳細（親・子・文中を別々の深さ、前回設定を再利用可）を選ぶ。
+" \e（旧 pe）: 現ノートを起点に親/子/文中/関連を辿って 1 つの md へ展開（v2 専用、.trash/T_<timestamp>.md）。
+" シンプル（深さ1つ）/ 詳細（親・子・文中・関連を別々の深さ、前回設定を再利用可）を選ぶ。
 " 「p」は素の貼り付けと1文字目が被り、素の p が timeoutlen 待ちになるため \ 側へ移した。
 nnoremap <nowait> <silent> \e  <Cmd>call simple_yurii_note#v2_expand()<CR>
 " cu: クリップボードのリンクを Parent: セクションへ追加

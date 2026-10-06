@@ -653,7 +653,7 @@ def render_note(note: Note) -> str:
 # resolution helpers
 # ---------------------------------------------------------------------------
 
-EXPAND_TMP_DIR = "_tmp"  # 展開（pe）の使い捨て出力先。sync は一切関知しない。
+EXPAND_TMP_DIR = "_tmp"  # 旧 \e 出力（2026-10-06 以前）。今は \e/\se とも .trash。_iter_md が念のため除外。
 
 
 def _iter_md(root: Path):
