@@ -559,7 +559,7 @@ function! s:guide_template() abort
         \ '- `\l`（ノーマル）… カーソル下のファイル名を Markdown リンク化',
         \ '- `\l`（ビジュアル）… 選択範囲をタイトルにした新ノートを作成し、選択をそのリンクに置換（Parent=元ノート、確認なし）',
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
-        \ '- `\p`（ビジュアル）… クリップボードのファイル名を選択範囲のリンクに（無ければ何もしない）',
+        \ '- `\p`（ビジュアル）… クリップボードのファイル名/URL を選択範囲のリンクに（無ければ何もしない）',
         \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `p`=Parent末尾 / `r`=Related）',
         \ '- `zA` … `za` と同じだが、追加前に**表示名**を入力する（空 Enter / Esc で中止）',
         \ '- `zp` … `za` と同じ追加＋今のノートを相手の Parent に書く',
@@ -3549,10 +3549,14 @@ function! s:is_filename_target(target) abort
   if empty(l:t)
     return 0
   endif
-  if l:t =~# '\v^\w+://'
+  if s:is_url_target(l:t)
     return 0
   endif
   return l:t =~# '\v(^|[\\/])[^\\/]+\.[A-Za-z0-9_-]+$'
+endfunction
+
+function! s:is_url_target(target) abort
+  return trim(a:target) =~# '\v^\w+://'
 endfunction
 
 function! s:existing_title_for_target(target) abort
@@ -7360,6 +7364,7 @@ function! simple_yurii_note#linkify_selection_from_clipboard() abort range
     return
   endif
 
+  " ファイル名を優先。無ければ URL（http 等）もリンク先に使える。
   let l:target = ''
   for l:item in l:targets
     if s:is_filename_target(l:item)
@@ -7367,6 +7372,14 @@ function! simple_yurii_note#linkify_selection_from_clipboard() abort range
       break
     endif
   endfor
+  if empty(l:target)
+    for l:item in l:targets
+      if s:is_url_target(l:item)
+        let l:target = l:item
+        break
+      endif
+    endfor
+  endif
   if empty(l:target)
     return
   endif
