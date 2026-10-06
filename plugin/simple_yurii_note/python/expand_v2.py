@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """ノート形式 v2 用の「展開」機能。
 
-現在のノートを起点に、親（こっちにとって）/ 子（そっちにとって）/ 文中
-（バックリンク）方向へノートを辿り、集めたノートの本文を 1 つの使い捨て
-md ファイルへ集約する。front matter や見張りコメントは含めない。
+現在のノートを起点に、親（`### Parent`）/ 子（本文リンク）/ 文中
+（`### BackLink` と `### Related`）方向へノートを辿り、集めたノートの
+本文を 1 つの使い捨て md ファイルへ集約する。front matter や見張り
+コメントは含めない。
+
+方向は現行形式（`note_format_v2._simple_parse`）の意味に合わせる:
+
+    - 親   … `### Parent` のリンク（Index・グループなど、自分を子に持つ側）
+    - 子   … 本文のリンク（自分が親として持つ側）
+    - 文中 … `### BackLink`（本文で自分に言及している側）と `### Related`
+             （対称。展開では文中と同じ向きに辿る）
 
 出力先は ROOT/_tmp/T_<タイムスタンプ>.md（sync は _tmp を一切見ない。
 note_format_v2.EXPAND_TMP_DIR 参照）。編集しても元ノートへは反映されない
@@ -43,10 +51,10 @@ _PREFS_FILE = ".pkm_expand_prefs.json"
 
 def _build_index(root: Path):
     by_name = v2._index(root)
-    notes: dict[Path, v2.Note] = {}
+    notes: dict[Path, dict] = {}
     for p in v2._iter_md(root):
         try:
-            notes[p.resolve()] = v2.parse_note(p)
+            notes[p.resolve()] = v2._simple_parse(p)
         except Exception:  # noqa: BLE001
             continue
     ids: dict[Path, str] = {}
@@ -59,46 +67,38 @@ def _build_index(root: Path):
     return by_name, notes, ids, id_to_path
 
 
-def _directions(n: v2.Note, root: Path, by_name, ids: dict[Path, str]) -> dict[str, set[str]]:
-    """このノートから見た (親, 子, 文中) の id 集合。
+def _directions(note_path: Path, n: dict, root: Path, by_name,
+                ids: dict[Path, str]) -> dict[str, set[str]]:
+    """このノートから見た (親, 子, 文中, 関連) の id 集合。
 
-    親 = こっちにとって側の全リンク先。
-    子 = そっちにとって側の全リンク先（バックリンクを除く）。
-    文中 = 双方向: このノートの そっちにとって バックリンク: セクションの
-           リンク先（＝自分を本文で言及している相手）と、このノート自身の
-           本文が言及している相手（型付きの関係が無い、素の本文リンク）の
-           どちらも含む。
+    現行形式（`simple_sync` / `_simple_parse`）の意味に合わせる:
+
+    - 親   = `### Parent` のリンク先（自分を子として持つ側）。
+    - 子   = 本文のリンク先（自分が親として持つ側）。
+    - 文中 = `### BackLink` のリンク先（本文で自分に言及している相手）。
+             展開では `### Related`（対称の関係）も同じ向きに含める。
+    - 関連 = `### Related` のリンク先（表示用。文中と重複してよい）。
     """
-    def rid(target: str) -> str | None:
-        tp = v2._resolve(target, n.path.parent, root, by_name)
-        return ids.get(tp.resolve()) if tp is not None else None
+    self_id = ids.get(note_path)
 
-    parents: set[str] = set()
-    for t, entries in n.up.items():
-        if t == v2._EXTRA:
-            continue
-        for _ti, tg, _ann in entries:
-            i = rid(tg)
-            if i:
-                parents.add(i)
-
-    children: set[str] = set()
-    backlinks: set[str] = set()
-    for t, entries in n.down.items():
-        if t == v2._EXTRA:
-            continue
-        for _ti, tg, _ann in entries:
-            i = rid(tg)
-            if i is None:
+    def targets(lines: list[str]) -> set[str]:
+        out: set[str] = set()
+        for _disp, tg in v2._links_from(lines):
+            tp = v2._resolve(tg, note_path.parent, root, by_name)
+            if tp is None:
                 continue
-            (backlinks if t == v2.BACKLINK else children).add(i)
+            i = ids.get(tp.resolve())
+            if i and i != self_id:
+                out.add(i)
+        return out
 
-    for tg in v2._links_in(n.body):
-        i = rid(tg)
-        if i:
-            backlinks.add(i)
-
-    return {"parent": parents, "child": children, "backlink": backlinks}
+    related = targets(n["related"])
+    return {
+        "parent": targets(n["parent"]),
+        "child": targets(n["body"]),
+        "backlink": targets(n["back"]) | related,
+        "related": related,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +109,8 @@ Collected = tuple[list[str], dict]
 """(発見順の id リスト, {id: 発見元の id（起点は None）})。
 
 `parent_of` は展開結果の木構造（目次のネストに使う）であって、ノート形式の
-「親（こっちにとって）」とは無関係 ── ここでの「親」は単に「どのノートを
-辿ってこの id にたどり着いたか」を指す。
+`### Parent` とは無関係 ── ここでの「親」は単に「どのノートを辿って
+この id にたどり着いたか」を指す。
 """
 
 
@@ -209,16 +209,16 @@ def _anchor(index: int) -> str:
 _H1_RE = re.compile(r"^#\s+(.+?)\s*$")
 
 
-def _body_without_own_h1(n: v2.Note) -> list[str]:
+def _body_without_own_h1(n: dict) -> list[str]:
     """本文の先頭が自分のタイトルと同じ H1 なら、見出しの二重表示を避けて
     その行（と直後の空行）を取り除く（展開側で `## タイトル` を別途出すため）。"""
-    body = list(n.body)
+    body = list(n["body"])
     idx = 0
     while idx < len(body) and body[idx].strip() == "":
         idx += 1
     if idx < len(body):
         m = _H1_RE.match(body[idx].strip())
-        if m and m.group(1) == n.title:
+        if m and m.group(1) == n["title"]:
             idx += 1
             while idx < len(body) and body[idx].strip() == "":
                 idx += 1
@@ -226,27 +226,33 @@ def _body_without_own_h1(n: v2.Note) -> list[str]:
     return body
 
 
-def _relation_lines(n: v2.Note, root: Path, by_name, tmp_dir: Path) -> list[str]:
-    """このノートの関係リンク（こっちにとって・そっちにとって）を、展開先には
-    含まれていないものも含めてそのままリンクとして書き出す（そこから先は
-    展開しない ── あくまで「このノートは他に何にリンクしているか」を見せる
-    だけ）。リンク先は展開ファイル（_tmp 配下）から見た相対パスに直す。"""
+_REL_SECTIONS = (
+    ("parent", "親"),
+    ("related", "関連"),
+    ("body", "子（本文）"),
+    ("back", "バックリンク"),
+)
+
+
+def _relation_lines(note_path: Path, n: dict, root: Path, by_name, tmp_dir: Path) -> list[str]:
+    """このノートの関係リンクを現行形式のセクション単位（親 / 関連 / 子（本文）/
+    バックリンク）で書き出す。展開先に含まれていないものも含めてそのまま
+    リンクとして書き出す（そこから先は展開しない ── あくまで「このノートは
+    他に何にリンクしているか」を見せるだけ）。リンク先は展開ファイル（_tmp
+    配下）から見た相対パスに直す。"""
     lines: list[str] = []
-    for side in (n.up, n.down):
-        for label, entries in side.items():
-            if label == v2._EXTRA:
-                continue
-            links: list[str] = []
-            for title, tg, _ann in entries:
-                tp = v2._resolve(tg, n.path.parent, root, by_name)
-                rel = v2._rel(tmp_dir, tp) if tp is not None else tg
-                links.append(f"[{title}]({rel})")
-            if links:
-                lines.append(f"- {label}: " + "、".join(links))
+    for key, label in _REL_SECTIONS:
+        links: list[str] = []
+        for disp, tg in v2._links_from(n[key]):
+            tp = v2._resolve(tg, note_path.parent, root, by_name)
+            rel = v2._rel(tmp_dir, tp) if tp is not None else tg
+            links.append(f"[{disp}]({rel})")
+        if links:
+            lines.append(f"- {label}: " + "、".join(links))
     return lines
 
 
-def _toc_lines(start_id: str, order: list[str], parent_of: dict, notes_by_id: dict[str, v2.Note],
+def _toc_lines(start_id: str, order: list[str], parent_of: dict, notes_by_id: dict[str, dict],
                anchors: dict[str, str]) -> list[str]:
     """`parent_of`（＝どのノートを辿ってこの id に着いたか）に沿って、
     段落（インデント）で経路が分かる目次を作る。"""
@@ -260,7 +266,7 @@ def _toc_lines(start_id: str, order: list[str], parent_of: dict, notes_by_id: di
 
     def walk(nid: str, depth: int) -> None:
         indent = "  " * depth
-        lines.append(f"{indent}- [{notes_by_id[nid].title}](#{anchors[nid]})")
+        lines.append(f"{indent}- [{notes_by_id[nid]['title']}](#{anchors[nid]})")
         for c in children.get(nid, []):
             walk(c, depth + 1)
 
@@ -268,11 +274,11 @@ def _toc_lines(start_id: str, order: list[str], parent_of: dict, notes_by_id: di
     return lines
 
 
-def _render(order: list[str], parent_of: dict, notes_by_id: dict[str, v2.Note],
-            root: Path, by_name, tmp_dir: Path) -> str:
+def _render(order: list[str], parent_of: dict, notes_by_id: dict[str, dict],
+            root: Path, by_name, id_to_path: dict[str, Path], tmp_dir: Path) -> str:
     anchors = {i: _anchor(idx) for idx, i in enumerate(order)}
     start_id = order[0]
-    start_title = notes_by_id[start_id].title
+    start_title = notes_by_id[start_id]["title"]
 
     out = [f"# 展開: {start_title}", "", "## 目次", ""]
     out.extend(_toc_lines(start_id, order, parent_of, notes_by_id, anchors))
@@ -283,10 +289,10 @@ def _render(order: list[str], parent_of: dict, notes_by_id: dict[str, v2.Note],
         n = notes_by_id[i]
         out.append("")
         out.append(f'<a id="{anchors[i]}"></a>')
-        out.append(f"## {n.title}")
+        out.append(f"## {n['title']}")
         out.append("")
         out.extend(_body_without_own_h1(n))
-        rel_lines = _relation_lines(n, root, by_name, tmp_dir)
+        rel_lines = _relation_lines(id_to_path[i], n, root, by_name, tmp_dir)
         if rel_lines:
             out.append("")
             out.append("**関係リンク:**")
@@ -341,7 +347,8 @@ def _run(root: Path, start_file: Path, order_fn) -> Path:
 
     def dir_of(nid: str) -> dict[str, set[str]]:
         if nid not in dir_cache:
-            dir_cache[nid] = _directions(notes[id_to_path[nid]], root, by_name, ids)
+            p = id_to_path[nid]
+            dir_cache[nid] = _directions(p, notes[p], root, by_name, ids)
         return dir_cache[nid]
 
     order, parent_of = order_fn(start_id, dir_of)
@@ -349,7 +356,7 @@ def _run(root: Path, start_file: Path, order_fn) -> Path:
 
     tmp_dir = root / v2.EXPAND_TMP_DIR
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    text = _render(order, parent_of, notes_by_id, root, by_name, tmp_dir)
+    text = _render(order, parent_of, notes_by_id, root, by_name, id_to_path, tmp_dir)
     out_path = tmp_dir / _make_filename()
     out_path.write_text(text, encoding="utf-8")
     return out_path

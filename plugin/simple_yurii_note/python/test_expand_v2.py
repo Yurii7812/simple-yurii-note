@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """expand_v2 の自己完結テスト（pytest 非依存）。
 
+現行のノート形式（`### Parent` / `### Related` / `### BackLink`。子 = 本文リンク）と
+現役エンジン `simple_sync` で動かす。
+
     python3 test_expand_v2.py
 """
 from __future__ import annotations
@@ -24,49 +27,60 @@ def check(cond: bool, msg: str) -> None:
 
 
 UP_MARK = v2.UP_MARK
+RELATED_MARK = v2.RELATED_MARK
 DOWN_MARK = v2.DOWN_MARK
 
 
-def note(path: Path, title: str, body: str = "", up: str = "", down: str = "") -> None:
+def note(path: Path, title: str, body: str = "", parent: str = "",
+         related: str = "", back: str = "", attr: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    txt = f"---\ntime: 2026-01-01 00:00:00\ntitle: {title}\n---\n\n# {title}\n\n"
+    txt = f"---\ntime: 2026-01-01 00:00:00\ntitle: {title}\n"
+    if attr:
+        txt += f"attribute: {attr}\n"
+    txt += "---\n\n# " + title + "\n\n"
     if body:
         txt += body.strip("\n") + "\n\n"
     txt += f"{UP_MARK}\n"
-    if up:
-        txt += up.strip("\n") + "\n"
-    txt += DOWN_MARK + "\n"
-    if down:
-        txt += down.strip("\n") + "\n"
+    if parent:
+        txt += parent.strip("\n") + "\n"
+    if related:
+        txt += f"{RELATED_MARK}\n" + related.strip("\n") + "\n"
+    txt += f"{DOWN_MARK}\n"
+    if back:
+        txt += back.strip("\n") + "\n"
     path.write_text(txt, encoding="utf-8")
 
 
 def _fixture(root: Path) -> None:
-    """G(グループ) <-索引- A -資料-> C ; A の本文が B を素のリンクで言及。"""
-    note(root / "G.md", "G", up="", down="索引:\n[A](A.md)")
-    note(root / "A.md", "A", body="Aの本文。参照: [B](B.md)",
-         up="グループ:\n[G](G.md)", down="資料:\n[C](C.md)")
+    """G(グループ) の子が A。A の本文は B。D が本文で A に言及。A と R は Related。"""
+    note(root / "G.md", "G", body="[A](A.md)", attr="group")
+    note(root / "A.md", "A", body="Aの本文。参照: [B](B.md)", related="[R](R.md)")
     note(root / "B.md", "B")
-    note(root / "C.md", "C")
-    v2.sync_vault(root)
+    note(root / "D.md", "D", body="Dの本文。言及: [A](A.md)")
+    note(root / "R.md", "R", related="[A](A.md)")
+    v2.simple_sync(root)
 
 
-def test_directions_parent_child_backlink() -> None:
-    print("directions: 親/子/文中バックリンクを正しく拾う")
+def _dir_of(root: Path, by_name, notes, ids, id_to_path):
+    def dir_of(nid: str):
+        p = id_to_path[nid]
+        return ex._directions(p, notes[p], root, by_name, ids)
+    return dir_of
+
+
+def test_directions_parent_child_backlink_related() -> None:
+    print("directions: 現行形式の 親(Parent)/子(本文)/文中(BackLink+Related)")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         _fixture(root)
         by_name, notes, ids, id_to_path = ex._build_index(root)
-        a = notes[(root / "A.md").resolve()]
-        d_a = ex._directions(a, root, by_name, ids)
-        a_id = ids[(root / "A.md").resolve()]
-        g_id = ids[(root / "G.md").resolve()]
-        c_id = ids[(root / "C.md").resolve()]
-        b_id = ids[(root / "B.md").resolve()]
-        check(d_a["parent"] == {g_id}, "A の親は G")
-        check(d_a["child"] == {c_id}, "A の子は C")
-        check(d_a["backlink"] == {b_id}, "A の文中は本文で素リンクした B")
-        del a_id  # 未使用警告よけ
+        a_p = (root / "A.md").resolve()
+        d_a = ex._directions(a_p, notes[a_p], root, by_name, ids)
+        check(d_a["parent"] == {ids[(root / "G.md").resolve()]}, "A の親は ### Parent の G")
+        check(d_a["child"] == {ids[(root / "B.md").resolve()]}, "A の子は本文リンクの B")
+        check(d_a["related"] == {ids[(root / "R.md").resolve()]}, "A の関連は ### Related の R")
+        check(d_a["backlink"] == {ids[(root / "D.md").resolve()], ids[(root / "R.md").resolve()]},
+              "A の文中は BackLink の D + Related の R（BackLink を子扱いしない）")
 
 
 def test_simple_mode_depth1() -> None:
@@ -76,16 +90,9 @@ def test_simple_mode_depth1() -> None:
         _fixture(root)
         by_name, notes, ids, id_to_path = ex._build_index(root)
         start_id = ids[(root / "A.md").resolve()]
-
-        dir_cache: dict = {}
-        def dir_of(nid):
-            if nid not in dir_cache:
-                dir_cache[nid] = ex._directions(notes[id_to_path[nid]], root, by_name, ids)
-            return dir_cache[nid]
-
-        order, _po = ex.collect_simple(start_id, dir_of, 1)
-        titles = {notes[id_to_path[i]].title for i in order}
-        check(titles == {"A", "G", "C", "B"}, "深さ1で親G・子C・文中Bが全部入る")
+        order, _po = ex.collect_simple(start_id, _dir_of(root, by_name, notes, ids, id_to_path), 1)
+        titles = {notes[id_to_path[i]]["title"] for i in order}
+        check(titles == {"A", "G", "B", "D", "R"}, "深さ1で親G・子B・文中D+Rが全部入る")
 
 
 def test_simple_mode_depth0_only_start() -> None:
@@ -95,8 +102,8 @@ def test_simple_mode_depth0_only_start() -> None:
         _fixture(root)
         by_name, notes, ids, id_to_path = ex._build_index(root)
         start_id = ids[(root / "A.md").resolve()]
-        order, _po = ex.collect_simple(start_id, lambda nid: ex._directions(
-            notes[id_to_path[nid]], root, by_name, ids), 0)
+        order, _po = ex.collect_simple(
+            start_id, _dir_of(root, by_name, notes, ids, id_to_path), 0)
         check(order == [start_id], "深さ0は起点ノートのみ")
 
 
@@ -107,21 +114,19 @@ def test_detailed_mode_independent_budgets() -> None:
         _fixture(root)
         by_name, notes, ids, id_to_path = ex._build_index(root)
         start_id = ids[(root / "A.md").resolve()]
-
-        def dir_of(nid):
-            return ex._directions(notes[id_to_path[nid]], root, by_name, ids)
+        dir_of = _dir_of(root, by_name, notes, ids, id_to_path)
 
         order, _po = ex.collect_detailed(start_id, dir_of, child_depth=1, parent_depth=0, backlink_depth=0)
-        titles = {notes[id_to_path[i]].title for i in order}
-        check(titles == {"A", "C"}, "子だけ許可（親・文中は0）だと A と C だけ")
+        titles = {notes[id_to_path[i]]["title"] for i in order}
+        check(titles == {"A", "B"}, "子だけ許可（親・文中は0）だと A と B だけ")
 
         order2, _po2 = ex.collect_detailed(start_id, dir_of, child_depth=0, parent_depth=1, backlink_depth=0)
-        titles2 = {notes[id_to_path[i]].title for i in order2}
+        titles2 = {notes[id_to_path[i]]["title"] for i in order2}
         check(titles2 == {"A", "G"}, "親だけ許可だと A と G だけ")
 
         order3, _po3 = ex.collect_detailed(start_id, dir_of, child_depth=0, parent_depth=0, backlink_depth=1)
-        titles3 = {notes[id_to_path[i]].title for i in order3}
-        check(titles3 == {"A", "B"}, "文中だけ許可だと A と B だけ")
+        titles3 = {notes[id_to_path[i]]["title"] for i in order3}
+        check(titles3 == {"A", "D", "R"}, "文中だけ許可だと A と D・R だけ")
 
 
 def test_detailed_mode_parent_does_not_leak_siblings() -> None:
@@ -131,24 +136,23 @@ def test_detailed_mode_parent_does_not_leak_siblings() -> None:
         # G(グループ) の子は A と H。A は深い子チェーン A->C1->C2 を持つ。
         # G の別の子 H やその子 HC は、A から見た展開には一切出てはいけない
         # （親チェーンは「純粋に親だけ」を辿り、途中のノードの子は展開しない）。
-        note(root / "G.md", "G", down="索引:\n[A](A.md)\n[H](H.md)")
-        note(root / "A.md", "A", up="グループ:\n[G](G.md)", down="資料:\n[C1](C1.md)")
-        note(root / "C1.md", "C1", up="資料:\n[A](A.md)", down="資料:\n[C2](C2.md)")
-        note(root / "C2.md", "C2", up="資料:\n[C1](C1.md)")
-        note(root / "H.md", "H", up="グループ:\n[G](G.md)", down="資料:\n[HC](HC.md)")
-        note(root / "HC.md", "HC", up="資料:\n[H](H.md)")
-        v2.sync_vault(root)
+        note(root / "G.md", "G", body="[A](A.md)\n[H](H.md)", attr="group")
+        note(root / "A.md", "A", body="[C1](C1.md)")
+        note(root / "C1.md", "C1", parent="[A](A.md)", body="[C2](C2.md)")
+        note(root / "C2.md", "C2", parent="[C1](C1.md)")
+        note(root / "H.md", "H", body="[HC](HC.md)")
+        note(root / "HC.md", "HC", parent="[H](H.md)")
+        v2.simple_sync(root)
 
         by_name, notes, ids, id_to_path = ex._build_index(root)
         start_id = ids[(root / "A.md").resolve()]
 
-        def dir_of(nid):
-            return ex._directions(notes[id_to_path[nid]], root, by_name, ids)
-
         # 子を深く(3)・親は浅く(1)。子チェーン A->C1->C2 と、A 自身の親 G は
         # 含まれるが、G のもう一つの子 H やその子 HC は含まれない。
-        order, _po = ex.collect_detailed(start_id, dir_of, child_depth=3, parent_depth=1, backlink_depth=0)
-        titles = {notes[id_to_path[i]].title for i in order}
+        order, _po = ex.collect_detailed(
+            start_id, _dir_of(root, by_name, notes, ids, id_to_path),
+            child_depth=3, parent_depth=1, backlink_depth=0)
+        titles = {notes[id_to_path[i]]["title"] for i in order}
         check(titles == {"A", "C1", "C2", "G"},
               "親を1回辿った先(G)がハブでも、G の他の子(H)やその子(HC)までは展開しない")
 
@@ -158,38 +162,37 @@ def test_detailed_mode_each_child_chain_node_gets_own_parent_and_backlink() -> N
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         # A(起点) の親は G。A の子 C1 の親は別の note P（A の親ではない）。
-        # C1 の本文は Y を素リンクで言及（C1 自身の文中）。
-        note(root / "G.md", "G", down="索引:\n[A](A.md)")
-        note(root / "P.md", "P", down="きっかけ:\n[C1](C1.md)")
-        note(root / "A.md", "A", up="グループ:\n[G](G.md)", down="資料:\n[C1](C1.md)")
-        note(root / "C1.md", "C1", body="言及: [Y](Y.md)",
-             up="資料:\n[A](A.md)\nきっかけ:\n[P](P.md)")
-        note(root / "Y.md", "Y")
-        v2.sync_vault(root)
+        # C1 は本文で自分に言及している D1 を BackLink に持つ（C1 自身の文中）。
+        note(root / "G.md", "G", body="[A](A.md)", attr="group")
+        note(root / "P.md", "P", body="Pの本文。参照: [C1](C1.md)")
+        note(root / "A.md", "A", body="[C1](C1.md)")
+        note(root / "C1.md", "C1", parent="[P](P.md)")
+        note(root / "D1.md", "D1", body="D1の本文。言及: [C1](C1.md)")
+        v2.simple_sync(root)
 
         by_name, notes, ids, id_to_path = ex._build_index(root)
         start_id = ids[(root / "A.md").resolve()]
 
-        def dir_of(nid):
-            return ex._directions(notes[id_to_path[nid]], root, by_name, ids)
-
-        order, _po = ex.collect_detailed(start_id, dir_of, child_depth=1, parent_depth=1, backlink_depth=1)
-        titles = {notes[id_to_path[i]].title for i in order}
-        check(titles == {"A", "C1", "G", "P", "Y"},
-              "起点(A)の親G・子C1に加えて、C1自身の親P・C1自身の文中Yも独立に含まれる")
+        order, _po = ex.collect_detailed(
+            start_id, _dir_of(root, by_name, notes, ids, id_to_path),
+            child_depth=1, parent_depth=1, backlink_depth=1)
+        titles = {notes[id_to_path[i]]["title"] for i in order}
+        check(titles == {"A", "C1", "G", "P", "D1"},
+              "起点(A)の親G・子C1に加えて、C1自身の親P・C1自身の文中D1も独立に含まれる")
 
 
 def test_relation_links_shown_even_for_terminal_nodes() -> None:
     print("render: 展開されなかったノート（終端）でも、そのノートの関係リンクは表示する")
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
-        # Index はグループ。日記・simple_yurii_note を子に持つが、この展開では
+        # Index は子（本文リンク）に 日記・simple_yurii_note を持つが、この展開では
         # 深さの都合で Index 自体は含まれても、その子は展開されない。
-        note(root / "index.md", "Index", down="索引:\n[日記](diary.md)\n[simple_yurii_note](pkm.md)")
-        note(root / "diary.md", "日記", up="グループ:\n[Index](index.md)")
-        note(root / "pkm.md", "simple_yurii_note", up="グループ:\n[Index](index.md)")
-        note(root / "A.md", "A", up="グループ:\n[Index](index.md)")
-        v2.sync_vault(root)
+        note(root / "index.md", "Index",
+             body="[日記](diary.md)\n[simple_yurii_note](pkm.md)\n[A](A.md)")
+        note(root / "diary.md", "日記", parent="[Index](index.md)")
+        note(root / "pkm.md", "simple_yurii_note", parent="[Index](index.md)")
+        note(root / "A.md", "A", parent="[Index](index.md)")
+        v2.simple_sync(root)
 
         out_path = ex._run(root, root / "A.md",
                             lambda sid, dir_of: ex.collect_detailed(sid, dir_of, 0, 1, 0))
@@ -199,6 +202,21 @@ def test_relation_links_shown_even_for_terminal_nodes() -> None:
               "Index の子（日記・simple_yurii_note）はこの深さでは展開されない")
         check("[日記](" in text and "[simple_yurii_note](" in text,
               "それでも Index の関係リンクとして 日記・simple_yurii_note へのリンクは表示される")
+        check("- 子（本文）: [日記](" in text, "関係リンクは現行セクション名（子（本文））で出る")
+
+
+def test_relation_links_show_all_sections() -> None:
+    print("render: 関係リンクは 親/関連/子（本文）/バックリンク を区別して表示する")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        _fixture(root)
+        out_path = ex._run(root, root / "A.md",
+                            lambda sid, dir_of: ex.collect_simple(sid, dir_of, 1))
+        text = out_path.read_text(encoding="utf-8")
+        check("- 親: [G](" in text, "親セクションが出る")
+        check("- 関連: [R](" in text, "関連セクションが出る（ノートに混ざらない）")
+        check("- 子（本文）: [B](" in text, "子（本文）セクションが出る")
+        check("- バックリンク: [D](" in text, "バックリンクセクションが出る")
 
 
 def test_toc_is_nested_by_discovery_path() -> None:
@@ -225,10 +243,11 @@ def test_render_strips_own_h1_and_frontmatter() -> None:
                             lambda sid, dir_of: ex.collect_simple(sid, dir_of, 1))
         text = out_path.read_text(encoding="utf-8")
         check("attribute:" not in text, "front matter は含まれない")
-        check(UP_MARK not in text and DOWN_MARK not in text, "見張りコメントは含まれない")
+        check(UP_MARK not in text and DOWN_MARK not in text and RELATED_MARK not in text,
+              "見張り（### Parent / ### Related / ### BackLink）は含まれない")
         lines = text.split("\n")
         check("# A" not in lines, "本文側の重複 H1 (# A) は除去される（## A だけが残る）")
-        check("## A" in text and "## G" in text and "## C" in text and "## B" in text,
+        check("## A" in text and "## G" in text and "## B" in text and "## D" in text,
               "各ノートが見出しとして出る")
         check("Aの本文。参照:" in text, "本文の中身は保持される")
 
