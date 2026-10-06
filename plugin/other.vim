@@ -41,16 +41,19 @@ set shiftwidth=2
 " =========================================================
 " クリップボード
 " =========================================================
-if has('clipboard')
-  if !has('wsl') || get(g:, 'yurii_wsl_use_system_clipboard', 0)
-    set clipboard=unnamedplus
-  endif
+" Vim の +/* レジスタ（XWayland 側）は使わない。大きなヤンクを XWayland の
+" クリップボードブリッジに通すと KWin / Klipper ごと固まることがあるため。
+" システムクリップボードとの受け渡しは wl-copy / wl-paste（SYN 連携）で行う。
+if exists('g:yurii_wsl_use_system_clipboard') && g:yurii_wsl_use_system_clipboard
+  set clipboard=unnamedplus
+else
+  set clipboard=
 endif
 
-inoremap <C-v> <C-r>+
-vnoremap <C-v> "_d"+P
-nnoremap <C-v> "+p
-vnoremap <C-c> "+y
+inoremap <C-v> <C-r><C-o>=simple_yurii_note#clipboard_paste()<CR>
+vnoremap <C-v> "_d<Cmd>call simple_yurii_note#paste_clipboard('P')<CR>
+nnoremap <C-v> <Cmd>call simple_yurii_note#paste_clipboard('p')<CR>
+vnoremap <C-c> y
 
 
 " =========================================================

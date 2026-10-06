@@ -648,9 +648,11 @@ function! s:autosave_now(...) abort
   if !g:simple_yurii_note_autosave
     return
   endif
-  " 操作待ち（d の途中）・コマンドライン中はもう一度待つ。挿入・置換中でも
-  " 「書くだけ」は安全なので保存する（未保存の窓を小さくするため）。
-  if index(['o', 'c'], mode(1)) >= 0
+  " 操作待ち（d の途中）・コマンドライン中・ビジュアル/セレクト選択中はもう一度
+  " 待つ。選択中に書くと（保存に続く同期や再読込で）選択が解除されてしまう。
+  " 挿入・置換中でも「書くだけ」は安全なので保存する（未保存の窓を小さくするため）。
+  let l:mode = mode(1)
+  if index(['o', 'c', 'v', 'V', "\<C-v>", 's', 'S', "\<C-s>"], l:mode) >= 0
     call s:schedule_autosave()
     return
   endif
@@ -799,35 +801,22 @@ augroup END
 " ---------------------------------------------------------------------------
 " Wayland クリップボード橋渡し（Vim → PC 方向）
 " ---------------------------------------------------------------------------
-" vim-gtk3 は +clipboard を XWayland 側で扱うため、PC（Wayland）でコピーした内容と
-" ずれやすい。読み込み側は autoload の clipboard 読み取りが wl-paste を先に読む。
-" ここでは書き込み側を補う: `"+y` / `"*y` と、`clipboard=unnamedplus` のときの
-" 無名レジスタ（`yy` / `x` / `ciw` など。regname が空）、autoselect のビジュアル yank を
-" wl-copy にも流す。これで Vim でヤンクした内容を `\v` でも PC 側アプリでも貼れる。
-if !has('nvim') && !empty($WAYLAND_DISPLAY) && executable('wl-copy')
-      \ && has('job') && has('channel')
+" Vim（vim.gtk3）の +/* レジスタは XWayland 側のクリップボードを見るため、
+" 大きなヤンクを XWayland のブリッジに通すと KWin / Klipper ごと固まることがある。
+" そこで X11 側は使わず（other.vim で clipboard= に固定）、`yy` / `x` / `ciw` などの
+" 無名レジスタと `"+y` / `"*y` を wl-copy（Wayland ネイティブ）へ流す。
+" これで Vim でヤンクした内容を `\v` でも PC 側アプリでも貼れる。
+if !has('nvim')
   function! s:wayland_clipboard_yank() abort
     let l:reg = get(v:event, 'regname', '')
-    let l:auto = get(v:event, 'visual', 0) && &clipboard =~# 'autoselect'
-    let l:unnamedplus = l:reg ==# '' && &clipboard =~# 'unnamedplus'
-    if l:reg !=# '+' && l:reg !=# '*' && !l:auto && !l:unnamedplus
+    if l:reg !=# '' && l:reg !=# '+' && l:reg !=# '*'
       return
     endif
     let l:lines = get(v:event, 'regcontents', [])
     if empty(l:lines)
       return
     endif
-    try
-      let l:job = job_start(['wl-copy'], {
-            \ 'in_io': 'pipe', 'out_io': 'null', 'err_io': 'null',
-            \ 'stoponexit': '',
-            \ })
-      call ch_sendraw(l:job, join(l:lines, "\n"))
-      call ch_close(l:job)
-      " 次で置き換わるまで参照を保持して、確実に回収させる
-      let s:wayland_clip_job = l:job
-    catch
-    endtry
+    call simple_yurii_note#clipboard_copy(join(l:lines, "\n"))
   endfunction
 
   augroup simple_yurii_note_wayland_clipboard

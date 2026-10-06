@@ -90,4 +90,26 @@ else
   echo "skip: script / mkfifo が無いため挿入中デバウンスの確認を省略"
 fi
 
+# 9) ビジュアル選択中にオートセーブのタイマーが来ても選択が解除されない（pty）
+if command -v script >/dev/null 2>&1 && command -v mkfifo >/dev/null 2>&1; then
+  printf 'orig\n' > "$VAULT/vis.md"
+  FIFO2="$WORK/fifo2"
+  mkfifo "$FIFO2"
+  (sleep 8 > "$FIFO2" 2>/dev/null) &
+  HOLDER2=$!
+  AUTOSAVE_WORK="$WORK" timeout 15 script -qec \
+    "vim -u '$WORK/pty_vimrc' -N -S '$REPO/test/autosave_visual_check.vim'" \
+    /dev/null < "$FIFO2" >/dev/null 2>&1 || true
+  kill "$HOLDER2" 2>/dev/null || true
+  wait "$HOLDER2" 2>/dev/null || true
+  rm -f "$FIFO2"
+  VIS_OUT=$(cat "$WORK/out_visual.txt" 2>/dev/null || true)
+  case "$VIS_OUT" in
+    mode=V\ modified=1\ line=orig) ;;
+    *) fail "ビジュアル中のオートセーブで選択が解除/保存された: ${VIS_OUT:-no-output}";;
+  esac
+else
+  echo "skip: script / mkfifo が無いためビジュアル中デバウンスの確認を省略"
+fi
+
 echo "autosave OK"

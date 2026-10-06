@@ -18,6 +18,8 @@ simple_yurii_note#check_missing_prefix_in_current_dir_once
 simple_yurii_note#choose_index_root
 simple_yurii_note#cleanup_stale_locks
 simple_yurii_note#clear_title_cache
+simple_yurii_note#clipboard_copy
+simple_yurii_note#clipboard_paste
 simple_yurii_note#create_atomic
 simple_yurii_note#create_note
 simple_yurii_note#csv_new

@@ -743,7 +743,7 @@ function! s:guide_template() abort
         \ '',
         \ '- `\w` … 全バッファを保存（`:wa`） ・ `gm` … 今のノートを既定アプリで開く',
         \ '- 編集は約1.5秒無操作で自動保存（挿入中も。Esc でも即保存。vault の .md / .csv 対象。バッファを離れるときも即保存。`g:simple_yurii_note_autosave=0` で無効）。`gm` / `\A` / `\tD` / 同期の前は必ず保存してから実行。vault は git で自動バックアップ（2分ごと）。swap は作らない（`.swp` は残らない）',
-        \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー',
+        \ '- `<C-v>` … システムクリップボードを貼る ・ `<C-c>`（ビジュアル）… システムクリップボードへコピー（wl-paste / wl-copy 経由。Vim の + レジスタは使わない）',
         \ '- `j` / `k` / `<Up>` / `<Down>` … 表示行で上下（挿入モードは `<C-g><Up>` / `<C-g><Down>` で IME を維持）',
         \ '',
         \ '## ラベル記法（関係の接尾辞）',
@@ -3059,7 +3059,7 @@ function! s:rlp_done(winid, result) abort
     if empty(l:links) | echo 'simple_yurii_note: 対象なし' | return | endif
     let l:txt = join(l:links, "\n")
     let @" = l:txt
-    if has('clipboard') | let @+ = l:txt | endif
+    call simple_yurii_note#clipboard_copy(l:txt)
     let s:rlp_marks = {}
     echo 'simple_yurii_note: ヤンク ' . len(l:links) . ' 件'
     return
@@ -3665,6 +3665,34 @@ function! s:run_clip_cmd(cmd) abort
   catch
     return ''
   endtry
+endfunction
+
+" システムクリップボードへ書き込む。Wayland では wl-copy（ネイティブ）へ非同期で
+" 流し、Vim の +/* レジスタ（XWayland 側）は使わない。大きなヤンクを XWayland の
+" クリップボードブリッジに通すと KWin / Klipper ごと固まることがあるため。
+" wl-copy が使えない環境だけ + レジスタへフォールバックする（@" は呼び側で設定）。
+function! simple_yurii_note#clipboard_copy(text) abort
+  if !has('nvim') && !empty($WAYLAND_DISPLAY) && executable('wl-copy')
+        \ && has('job') && has('channel')
+    try
+      let s:clip_job = job_start(['wl-copy'], {
+            \ 'in_io': 'pipe', 'out_io': 'null', 'err_io': 'null',
+            \ 'stoponexit': '',
+            \ })
+      call ch_sendraw(s:clip_job, a:text)
+      call ch_close(s:clip_job)
+    catch
+    endtry
+    return
+  endif
+  if has('clipboard')
+    let @+ = a:text
+  endif
+endfunction
+
+" システムクリップボードを読む（wl-paste 優先）。挿入モードの <C-v> などで使う。
+function! simple_yurii_note#clipboard_paste() abort
+  return s:clipboard_text()
 endfunction
 
 function! s:extract_markdown_link(raw) abort
@@ -7759,8 +7787,8 @@ endfunction
 
 function! simple_yurii_note#yank_name() abort
   let l:name = expand('%:t')
-  let @+ = l:name
   let @" = l:name
+  call simple_yurii_note#clipboard_copy(l:name)
   echo 'Yanked: ' . l:name
 endfunction
 
@@ -7779,7 +7807,6 @@ function! simple_yurii_note#paste_clipboard(mode, ...) abort
     return
   endif
   let @" = l:text
-  let @+ = l:text  " clipboard=unnamedplus でも同じ内容を貼れるように
   let l:cnt = a:0 > 0 && a:1 =~# '^\d\+$' && a:1 > 0 ? a:1 : 1
   execute 'normal! ' . l:cnt . a:mode
 endfunction
@@ -9485,9 +9512,8 @@ endfunction
 function! s:stack_copy_finish(copy_to_clipboard) abort
   if a:copy_to_clipboard && !empty(s:stack_copy_lines)
     let l:text = join(s:stack_copy_lines, "\n")
-    let @+ = l:text
     let @" = l:text
-    
+    call simple_yurii_note#clipboard_copy(l:text)
   else
     
   endif
