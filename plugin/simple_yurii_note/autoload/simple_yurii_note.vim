@@ -4233,6 +4233,7 @@ function! simple_yurii_note#hub_open() abort
   silent! execute 'hide edit ' . fnameescape(l:file)
   setlocal bufhidden=hide
   setlocal noundofile
+  redraw
 endfunction
 
 function! simple_yurii_note#hub_set(...) abort
