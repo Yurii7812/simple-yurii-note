@@ -334,12 +334,7 @@ augroup simple_yurii_note_link_hints
   " 数字ジャンプ等は s:hint_positions を直接見るので機能は遅れない。
   autocmd BufEnter,BufWinEnter *.md call simple_yurii_note#refresh_link_hints()
   autocmd TextChanged,InsertLeave *.md call s:schedule_refresh_link_hints()
-  " ラベルは画面先頭（w0）を起点にするので、スクロール・リサイズでも振り直す。
-  " debounce 経由なので連続スクロールでも最後の 1 回だけ（可視範囲だけの計算で軽い）。
-  if exists('##WinScrolled')
-    autocmd WinScrolled * call s:schedule_refresh_link_hints()
-  endif
-  autocmd VimResized * call s:schedule_refresh_link_hints()
+  " ラベルはドキュメント順で固定なのでスクロールでの振り直しは不要。
 augroup END
 
 " 連続する TextChanged をまとめて、最後の 1 回だけヒントを更新する。

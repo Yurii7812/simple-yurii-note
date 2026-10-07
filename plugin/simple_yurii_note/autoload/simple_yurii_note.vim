@@ -849,7 +849,7 @@ function! s:guide_template() abort
         \ '',
         \ '### この環境での Vim 標準との違い',
         \ '- `j`/`k` は表示行移動（折り返した行も1行ずつ。ネイティブの `gj`/`gk` と同じ）。論理行は `+` / `-` や `{数}G` を使う',
-        \ '- `1`〜`9` `0` はリンクの番号ジャンプ。番号は画面先頭のリンクを `1` とし、末尾で先頭へ回り込む（大量リンクでも尽きない。該当が無ければ数字はカウントとして素通り）',
+        \ '- `1`〜`9` `0` はリンクの番号ジャンプ。番号はドキュメント順に連続（ラベル 40 個で一周・回り込み）。押すと画面に見えている側を開く（該当が無ければ数字はカウントとして素通り）',
         \ '- `p` / `P` は Vim 標準。PC の内容を貼るのは `\v` / `\V`',
         \ '- `_` は直前ノートと往復。`,`（f/t リピート）は標準のまま',
         \ '- プラグインの 2 文字コマンドは `z` / `g` / `\` 接頭辞（素のキーを待たせないため）',
@@ -3305,14 +3305,15 @@ function! simple_yurii_note#note_navigator(scope) abort
 endfunction
 
 " ---------------------------------------------------------------------------
-" リンクへのラベルジャンプ（画面先頭を起点にした通し番号、最大 40 本）
+" リンクへのラベルジャンプ（ドキュメント順の通し番号、40 個で一周）
 "   1-9,0    … その番号のリンクを直接開く（生の数字キー、0は10番目）
 "   g1..g0   … 11〜20番目、z1..z0 … 21〜30番目、t1..t0 … 31〜40番目（2打、1→0順）
 "   頭文字は「1打で完結しない」g・z・t だけ。p1/b1 等は paste・単語移動を壊すので廃止。
-" ラベルは**今の画面先頭（w0）**のリンクを 1 とし、下へ振って末尾まで行ったら
-" 先頭へ回り込む。だからリンクが大量でも常に「今見えている所の近く」が 1-9,0 に
-" 入り、番号が尽きない（巨大な index.md でも数字だけで全部たどれる）。画面を
-" スクロールすると振り直す（WinScrolled＋debounce。可視範囲だけの計算なので軽い）。
+" 番号はファイル先頭のリンクを 1 として**ドキュメント順に連続**で振る。41 個目の
+" リンクからはまた `1` に回り込む（ラベルは 40 個で一周）。だから巨大な index を
+" スクロールすると、番号が 1-0 → g ゾーン → z ゾーン → t ゾーン → 1-0 … と進む。
+" 同じラベルが複数あるときは、押すと**今の画面に見えている側**（画面先頭から下方向で
+" 最初のもの。無ければ画面より上の最寄り）を開く。
 " 実際に見えている番号・ラベルがリンクの手前に仮想テキストで表示されるので、
 " 数えなくても押すキーが分かる（g:simple_yurii_note_link_hints=0 で無効化）。
 " g/z は単発では完結しない生キー（次の1打を待つ）なので、数字を後ろに続けても
@@ -3323,9 +3324,10 @@ endfunction
 let s:hint_prop_type = 'yuriiLinkHint'
 let s:hint_label_letters = 'gzt'
 
-" 通し番号(1始まり)からラベル文字列を作る。1-9,0 はそのまま（0は10番目）。
-" 11番目以降はラベル無し（2文字ラベル z1 等は廃止 — p/b など生キーと
-" 衝突して paste・移動を壊すため。画面外のリンクはスクロールすれば届く）。
+" 通し番号(1始まり)からラベル文字列を作る。1-9,0 はそのまま（0は10番目）、
+" 以降は g+数字 → z+数字 → t+数字（g1 … g0, z1 … z0, t1 … t0、1→0順で 10個ずつ）。
+" それ以上は空文字。生の 0 キーは vim 標準の「行頭へ移動」を上書きするが、
+" 該当リンクが無ければ digit_key() 側で通常の 0 に素通しされる。
 function! s:hint_label(idx) abort
   if a:idx <= 9 | return string(a:idx) | endif
   if a:idx == 10 | return '0' | endif
@@ -3337,32 +3339,48 @@ function! s:hint_label(idx) abort
   return s:hint_label_letters[l:letter_i] . l:digit
 endfunction
 
-" 現在バッファの候補位置（画面先頭を起点に、末尾で先頭へ回り込む）。
-" ラベルは s:hint_label() が最大 40 本までしか振らない（3 文字 × 10 + 数字 10）ので、
-" 40 本集めた時点で走査を打ち切る。巨大な index.md（1 万リンク）でも可視範囲から
-" 数十本だけ拾うので軽い。digit_key / ラベル表示の両方がこの並びを使う。
+" 現在バッファの候補位置（ドキュメント順：本文 → Parent/Child。ラベルは 40 個で
+" 一周するので、回り込みを正しくするには全リンクが要る。上限 400 本で打ち切り）。
+" digit_key / ラベル表示の両方がこの並びを使う。
 function! s:hint_positions() abort
-  let l:max = 40
-  let l:top = line('w0')
-  let l:after = s:link_positions_in_range_limited(l:top, line('$'), l:max)
-  if len(l:after) >= l:max || l:top <= 1
-    return l:after
+  let l:max = 400
+  let [l:up_m, l:dn_m] = s:v2_boundaries()
+  if l:up_m > 0
+    let l:pos = s:link_positions_in_range_limited(1, l:up_m - 1, l:max)
+    if len(l:pos) < l:max
+      let l:pos += s:link_positions_in_range_limited(
+            \ l:up_m + 1, line('$'), l:max - len(l:pos))
+    endif
+    return l:pos
   endif
-  let l:before = s:link_positions_in_range_limited(1, l:top - 1, l:max - len(l:after))
-  return l:after + l:before
+  return s:link_positions_in_range_limited(1, line('$'), l:max)
 endfunction
 
-" ラベル→位置の対応表を作る。割り当て切れの位置は含めない。
+" ラベル→位置の対応表を作る。番号はドキュメント順で 40 個周期で回り込む
+" （41 個目のリンクはまた `1`）。同じラベルが複数回出るときは位置のリストを持つ。
 function! s:hint_build_map() abort
+  let l:pos = s:hint_positions()
+  let l:n = 10 + 10 * strlen(s:hint_label_letters)
   let l:map = {}
-  let l:idx = 0
-  for l:p in s:hint_positions()
-    let l:idx += 1
-    let l:label = s:hint_label(l:idx)
-    if empty(l:label) | break | endif
-    let l:map[l:label] = l:p
+  for l:i in range(len(l:pos))
+    let l:label = s:hint_label((l:i % l:n) + 1)
+    if has_key(l:map, l:label)
+      call add(l:map[l:label], l:pos[l:i])
+    else
+      let l:map[l:label] = [l:pos[l:i]]
+    endif
   endfor
   return l:map
+endfunction
+
+" 同じラベルを持つリンクが複数あるとき、開く側を決める。
+" 画面先頭（w0）以降で最初のもの。画面の下に無ければ画面より上の最寄り。
+function! s:hint_pick(cands) abort
+  let l:top = line('w0')
+  for l:p in a:cands
+    if l:p.lnum >= l:top | return l:p | endif
+  endfor
+  return a:cands[-1]
 endfunction
 function! s:hint_ensure_prop_type() abort
   if !has('textprop') | return 0 | endif
@@ -3405,39 +3423,42 @@ endfunction
 function! simple_yurii_note#refresh_link_hints() abort
   if !get(g:, 'simple_yurii_note_link_hints', 1) || !has('textprop') | return | endif
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki' | return | endif
-  " 同じ内容（changedtick）かつ同じ画面先頭（w0）で既に作り終えていれば作り直さない。
-  " BufEnter と BufWinEnter の重複、変更なしの再計算（InsertLeave など）、
-  " スクロールで w0 が変わらない再描画を丸ごと省く。1 万行 Index では 1 回 35ms 級。
+  " 同じ内容（changedtick）で既に作り終えていれば作り直さない。
+  " BufEnter と BufWinEnter が続けて発火する重複と、変更なしの再計算
+  " （InsertLeave など）を丸ごと省く。ラベルはドキュメント固定なので
+  " スクロールでは作り直す必要がない。
   if get(b:, 'yurii_hint_built_tick', -1) ==# b:changedtick
-        \ && get(b:, 'yurii_hint_built_top', -1) ==# line('w0')
     return
   endif
   if !s:hint_ensure_prop_type() | return | endif
   call prop_remove({'type': s:hint_prop_type, 'all': v:true})
   let b:yurii_hint_map = s:hint_build_map()
   let b:yurii_hint_built_tick = b:changedtick
-  let b:yurii_hint_built_top = line('w0')
   if empty(b:yurii_hint_map)
     call s:hint_sync_full_maps([])
     return
   endif
   let l:full_labels = []
-  " 1〜0（1文字）と z1 等（2文字）が混ざるときは、1文字側に半角スペースを足して
+  " 1〜0（1文字）と g1 等（2文字）が混ざるときは、1文字側に半角スペースを足して
   " リンク本文の開始位置を揃える（ラベルは最大2文字なので幅は最大2）。
   let l:width = 1
   for l:label in keys(b:yurii_hint_map)
     let l:width = max([l:width, strdisplaywidth(l:label)])
   endfor
-  for [l:label, l:pos] in items(b:yurii_hint_map)
-    let l:text = l:label . repeat(' ', l:width - strdisplaywidth(l:label))
-    call prop_add(l:pos.lnum, l:pos.col, {'type': s:hint_prop_type, 'text': l:text})
+  for [l:label, l:cands] in items(b:yurii_hint_map)
+    " 表示はラベルごとに 1 回。同じラベルの複数位置は全部に出す（押したときに
+    " 画面に見えている側が開くので、複数表示があっても矛盾しない）。
+    for l:pos in l:cands
+      let l:text = l:label . repeat(' ', l:width - strdisplaywidth(l:label))
+      call prop_add(l:pos.lnum, l:pos.col, {'type': s:hint_prop_type, 'text': l:text})
+    endfor
     if strchars(l:label) > 1 | call add(l:full_labels, l:label) | endif
   endfor
   call s:hint_sync_full_maps(l:full_labels)
 endfunction
 
-" 数字キー（生の 1-9,0）… 画面先頭を 1 とした通し番号の N 番目のリンクを直接開く
-" （0は10番目、末尾まで行ったら先頭へ回り込む）。該当が無ければ通常のカウント/
+" 数字キー（生の 1-9,0）… ドキュメント順の通し番号（40 周期で回り込み）のうち、
+" 今の画面に見えている側のリンクを直接開く。該当が無ければ通常のカウント/
 " 行頭移動として送る。
 " 起動直後など、まだラベルを計算していないバッファでは初回だけ計算し直す。
 " （計算前は候補ゼロ＝素のカウント扱いになり、1打目が「効かない」ように
@@ -3446,19 +3467,20 @@ function! simple_yurii_note#digit_key(idx, key) abort
   if !has_key(b:, 'yurii_hint_map')
     call simple_yurii_note#refresh_link_hints()
   endif
-  let l:pos = s:hint_positions()
-  if !empty(l:pos) && a:idx >= 1 && a:idx <= len(l:pos)
-    call s:hint_go(l:pos[a:idx - 1])
+  let l:label = a:idx == 10 ? '0' : printf('%d', a:idx)
+  let l:cands = get(get(b:, 'yurii_hint_map', {}), l:label, [])
+  if !empty(l:cands)
+    call s:hint_go(s:hint_pick(l:cands))
     return
   endif
   call feedkeys((v:count > 0 ? v:count : '') . a:key, 'n')
 endfunction
 
-" 文字+数字（11番目以降のラベル）… 対応する位置を開く。
+" 文字+数字（g1 等、11番目以降のラベル）… 対応する位置を開く。
 function! simple_yurii_note#hint_goto(label) abort
-  let l:pos = get(b:, 'yurii_hint_map', {})
-  if has_key(l:pos, a:label)
-    call s:hint_go(l:pos[a:label])
+  let l:cands = get(get(b:, 'yurii_hint_map', {}), a:label, [])
+  if !empty(l:cands)
+    call s:hint_go(s:hint_pick(l:cands))
   endif
 endfunction
 
