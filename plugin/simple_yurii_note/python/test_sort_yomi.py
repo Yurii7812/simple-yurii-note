@@ -69,6 +69,22 @@ def test_reading_key_ignores_long_vowel_middot() -> None:
     check(jy.reading_key("ハーブ・薬草") == jy.reading_key("はぶやくそう"), "ハーブ・薬草 == はぶやくそう")
 
 
+def test_reading_key_dakuten_same_rank() -> None:
+    print("reading_key: 濁音・半濁音は清音と同じ扱い（区別しない）")
+    check(jy.reading_key("ぐらふ") < jy.reading_key("こうりつか"), "ぐ < こ（ぐはくと同じ位置）")
+    check(jy.reading_key("じぶん") < jy.reading_key("すじとれ"), "じ < す")
+    check(jy.reading_key("だんみん") < jy.reading_key("ちしき"), "だ < ち")
+    check(jy.reading_key("ぱそこん") < jy.reading_key("ひらがな"), "ぱ < ひ")
+    check(jy.reading_key("かき") == jy.reading_key("がき"), "か = が（同ランク）")
+
+
+def test_reading_key_latin_first_last() -> None:
+    print("reading_key: 英字で始まるよみはかなを含んでも末尾")
+    key = jy.reading_key("simple-yurii-note そうさがいど")
+    check(jy.reading_key("日記") < key, "かな < 英字始まり")
+    check(jy.reading_key("AI") < key < jy.reading_key("Vim"), "AI < simple… < Vim")
+
+
 def test_yomi_map_roundtrip() -> None:
     print("yomi map: parse / set の往復")
     fm = ["---", "time: 1", "title: 筋トレ", "---"]
@@ -150,6 +166,84 @@ def test_sort_lines_stable() -> None:
     with tempfile.TemporaryDirectory() as d:
         out = jy.sort_lines(lines, d)
     check(out == lines, "同よみは不変")
+
+
+def test_sort_lines_ignores_sections() -> None:
+    print("sort_lines: ### Parent / ### BackLink のリンクは動かさない")
+    lines = [
+        "[タルパ](c.md)",
+        "[解剖学](b.md)",
+        "### Parent",
+        "[日記](a.md)",
+        "### BackLink",
+        "[就職](e.md)",
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        out = jy.sort_lines(lines, d)
+    check(out[0:2] == ["[解剖学](b.md)", "[タルパ](c.md)"], "本文リンクは並ぶ")
+    check(out[2:5] == ["### Parent", "[日記](a.md)", "### BackLink"], "Parent はそのまま")
+    check(out[5] == "[就職](e.md)", "BackLink はそのまま")
+
+
+def test_sort_lines_inline_link_untouched() -> None:
+    print("sort_lines: 文章中に埋もれたリンクは動かさない")
+    lines = [
+        "前置きの文。[日記](a.md) を参照。",
+        "[タルパ](c.md)",
+        "[解剖学](b.md)",
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        out = jy.sort_lines(lines, d)
+    check(out[0] == "前置きの文。[日記](a.md) を参照。", "文章行はそのまま")
+    check(out[1:] == ["[解剖学](b.md)", "[タルパ](c.md)"], "リンクだけの行だけ並ぶ")
+
+
+def test_sort_lines_group_with_prose_and_parent() -> None:
+    print("sort_lines: グループ（文章 + Parent つき）の本文だけ並ぶ")
+    yomi = {
+        "移動": "いどう",
+        "紙のPKMのスキャン": "かみのPKMのすきゃん",
+        "効率化": "こうりつか",
+        "グラフビュー": "ぐらふびゅー",
+        "グループ・索引": "ぐるーぷ・さくいん",
+        "simple-yurii-note 操作ガイド": "simple-yurii-note そうさがいど",
+        "プログラミング": "ぷろぐらみんぐ",
+        "知識管理": "ちしきかんり",
+    }
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for i, (name, reading) in enumerate(yomi.items()):
+            (root / f"{i}.md").write_text(
+                f'---\ntitle: {name}\nyomi:\n  "{name}": "{reading}"\n---\n',
+                encoding="utf-8")
+        links = {name: f"[{name}]({i}.md)" for i, name in enumerate(yomi)}
+        lines = [
+            "# グループ",
+            "",
+            "グループの説明文。",
+            links["プログラミング"],
+            links["効率化"],
+            links["移動"],
+            links["simple-yurii-note 操作ガイド"],
+            links["グラフビュー"],
+            links["紙のPKMのスキャン"],
+            links["グループ・索引"],
+            "### Parent",
+            links["知識管理"],
+            "### BackLink",
+        ]
+        out = jy.sort_lines(lines, d)
+    check(out[2] == "グループの説明文。", "文章はそのまま")
+    check(out[3:10] == [
+        links["移動"],
+        links["紙のPKMのスキャン"],
+        links["グラフビュー"],
+        links["グループ・索引"],
+        links["効率化"],
+        links["プログラミング"],
+        links["simple-yurii-note 操作ガイド"],
+    ], "本文は い→か→く→く→こ→英字末尾")
+    check(out[10:] == ["### Parent", links["知識管理"], "### BackLink"], "Parent は動かない")
 
 
 def _keyword_key(line: str):
@@ -253,6 +347,18 @@ def test_persist_readings() -> None:
         jy.set_yomi(root / "a.md", "日記", "ひびき")
         check(jy.persist_readings(["[日記](a.md)"], d) == 0, "既存の手動よみは上書きしない")
         check(jy.get_yomi(root / "a.md", "日記") == "ひびき", "手動よみが残る")
+
+
+def test_persist_readings_skips_sections() -> None:
+    print("persist_readings: Parent 以降と文章内リンクは書き込まない")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "a.md").write_text("---\ntitle: 日記\n---\n", encoding="utf-8")
+        (root / "b.md").write_text("---\ntitle: 解剖学\n---\n", encoding="utf-8")
+        lines = ["文章 [日記](a.md) の話", "### Parent", "[解剖学](b.md)"]
+        check(jy.persist_readings(lines, d) == 0, "対象外は 0 件")
+        check(jy.get_yomi(root / "a.md", "日記") == "", "文章内は未登録のまま")
+        check(jy.get_yomi(root / "b.md", "解剖学") == "", "Parent は未登録のまま")
 
 
 def test_cli() -> None:

@@ -780,9 +780,10 @@ function! s:guide_template() abort
         \ '',
         \ '## よみ順ソート（Index）',
         \ '',
-        \ '- `\S`（ノーマル）… バッファ内の**リンク行**を表示名のよみ順（五十音 → ローマ字は末尾）に並べ替え（未登録のよみは `yomi:` に自動追加）',
-        \ '- `\S`（ビジュアル）… 選択した行のリンク行だけを同じ規則で並べ替え',
+        \ '- `\S`（ノーマル）… バッファ内の**リンクだけの行**を表示名のよみ順（五十音 → ローマ字は末尾）に並べ替え（未登録のよみは `yomi:` に自動追加）',
+        \ '- `\S`（ビジュアル）… 選択した行のリンクだけの行を同じ規則で並べ替え',
         \ '- `:SortYomi` … `\S`（ノーマル）と同じ',
+        \ '- 文章（リンクでない行）と、`### Parent` / `### Related` / `### BackLink` 以降のリンクは動かさない（グループに文章があってもそのまま）',
         \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。未登録は pykakasi で `yomi:` に自動追加',
         \ '- `zy` / `zY` で表示名ごとのよみを手で修正/削除できる（表示名が複数あれば番号で選ぶ）。表示名が Index から消えると同期時に掃除される',
         \ '',
@@ -8192,8 +8193,9 @@ function! s:sort_yomi_script() abort
   return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'sort_yomi.py'
 endfunction
 
-" 指定行範囲のリンク行を表示名のよみ順に並べ替える。
-" リンクでない行（front matter・見出し・空行など）は位置ごと動かさない。
+" 指定行範囲のリンクだけの行を表示名のよみ順に並べ替える。
+" リンクでない行（front matter・見出し・空行・文章など）は位置ごと動かさない。
+" `### Parent` / `### Related` / `### BackLink` 以降のリンクも動かさない（本文だけ）。
 " 未登録の表示名は pykakasi のよみをリンク先の yomi: に書き込む（\S の副作用）。
 function! s:sort_lines_by_yomi(first, last) abort
   if expand('%:t') ==# 'Folgezettel-Index.md'
@@ -8248,7 +8250,8 @@ function! s:sort_lines_by_yomi(first, last) abort
   endif
 endfunction
 
-" \S（ノーマル）/ :SortYomi … バッファ内のリンク行をよみ順にソート（主に index.md）。
+" \S（ノーマル）/ :SortYomi … バッファ内の本文リンク行をよみ順にソート（主に index.md）。
+" ### Parent / ### Related / ### BackLink 以降のリンクは動かさない。
 function! simple_yurii_note#sort_yomi() abort
   call s:sort_lines_by_yomi(1, line('$'))
 endfunction

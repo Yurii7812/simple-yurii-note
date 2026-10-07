@@ -26,7 +26,7 @@ import japanese_yomi as jy  # noqa: E402
 
 
 def _warn_if_missing() -> None:
-    if not jy.has_pykakasi():
+    if not jy.pykakasi_installed():
         print(
             "simple_yurii_note: pykakasi 未導入のため Unicode 順で代用します"
             "（pip install --user pykakasi）",

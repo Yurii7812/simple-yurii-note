@@ -21,28 +21,50 @@ import os
 import re
 from pathlib import Path
 
-# 五十音の並び。濁点・半濁点・小書きは対応する清音の直後。
-# 促音 っ は と の直後、ゔ は う の直後。
+# 五十音の並び。濁点・半濁点は基本区別せず清音と同じランクにする
+# （同ランクは安定ソートで元の順を保つ）。小書きは対応する清音の直後。
+# 促音 っ は と の直後。
 _GOJUON = (
-    "あぁいぃうぅゔえぇおぉ"
-    "かきくけこがぎぐげご"
-    "さしすせそざじずぜぞ"
-    "たちつてとだぢづでどっ"
+    "あぁいぃうぅえぇおぉ"
+    "かきくけこ"
+    "さしすせそ"
+    "たちつてとっ"
     "なにぬねの"
-    "はひふへほばびぶべぼぱぴぷぺぽ"
+    "はひふへほ"
     "まみむめも"
     "やゃゆゅよょ"
     "らりるれろ"
     "わゎをん"
 )
 _RANK = {ch: i for i, ch in enumerate(_GOJUON)}
+# 濁音・半濁音は清音と同じランクに寄せる（が→か・ぱ→は・ゔ→う …）。
+_DAKUTEN_BASE = {
+    "が": "か", "ぎ": "き", "ぐ": "く", "げ": "け", "ご": "こ",
+    "ざ": "さ", "じ": "し", "ず": "す", "ぜ": "せ", "ぞ": "そ",
+    "だ": "た", "ぢ": "ち", "づ": "つ", "で": "て", "ど": "と",
+    "ば": "は", "び": "ひ", "ぶ": "ふ", "べ": "へ", "ぼ": "ほ",
+    "ぱ": "は", "ぴ": "ひ", "ぷ": "ふ", "ぺ": "へ", "ぽ": "ほ",
+    "ゔ": "う",
+}
+
+
 # 並べ替えで無視する文字（長音・中黒・空白・句読点など）
 _IGNORE = set("ー・･ 　\t〜～-－=~.，,、。!！?？「」『』（）()［］[]")
 _MIX_SEP = "\uffff"
 
+
+def _rank_of(ch: str):
+    """かな 1 文字の五十音ランク（濁点・半濁点は清音に寄せる）。無ければ None。"""
+    return _RANK.get(_DAKUTEN_BASE.get(ch, ch))
+
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 _YOMI_HEAD_RE = re.compile(r"^yomi\s*:\s*$")
 _YOMI_PAIR_RE = re.compile(r'^\s+("(?:[^"\\]|\\.)*")\s*:\s*("(?:[^"\\]|\\.)*")\s*$')
+# 並べ替えの対象は「リンクだけの行」（`— 注記` 付きも可）。文章に埋もれた
+# リンク（例: 「〜は [これ](x.md) を参照」）は行ごと動かさない。
+_LINK_LINE_RE = re.compile(r"^\s*\[[^\]]*\]\([^)]+\)\s*(?:—\s*\S+)?\s*$")
+# ここから後ろ（### Parent / ### Related / ### BackLink）は本文ではない。
+_SECTION_HEAD_RE = re.compile(r"^###\s*(?:Parent|Related|BackLink)\s*$")
 
 # --- pykakasi（遅延 import） ------------------------------------------------
 
@@ -65,6 +87,20 @@ def _load_pykakasi():
 
 def has_pykakasi() -> bool:
     return _load_pykakasi() is not None
+
+
+def pykakasi_installed() -> bool:
+    """pykakasi が import 可能かだけを確認する（import はしない＝速い）。
+
+    `\\S` は全よみが登録済みなら pykakasi を一度も使わない。警告のためだけに
+    import して 0.6 秒級のロードを毎回払わないための軽い判定。
+    """
+    from importlib.util import find_spec
+
+    try:
+        return find_spec("pykakasi") is not None
+    except (ImportError, ValueError):
+        return False
 
 
 # テスト用に読み関数を差し替える（None で既定へ戻す）
@@ -118,24 +154,35 @@ def kata2hira(text: str) -> str:
 
 
 def reading_key(text: str) -> tuple:
-    """五十音順のソートキー。かな語 → (0, ...)、ローマ字等 → (1, ...)。"""
+    """五十音順のソートキー。かな語 → (0, ...)、ローマ字等 → (1, ...)。
+
+    英字で始まるよみ（例: "simple-yurii-note そうさがいど"）は、かなを含んで
+    いても英字の側（末尾グループ）に入れる。かなで始まって途中に英字を含む
+    もの（例: "かみのPKMのすきゃん"）はかなの順に置く。
+    """
     hira = kata2hira(reading_for(text))
     ranks: list[str] = []
     others: list[str] = []
+    first_kind: str | None = None
     for ch in hira:
         if ch in _IGNORE or ch.isspace():
             continue
-        r = _RANK.get(ch)
+        r = _rank_of(ch)
         if r is not None:
+            if first_kind is None:
+                first_kind = "kana"
             ranks.append(chr(0x100 + r))
         else:
+            if first_kind is None:
+                first_kind = "other"
             others.append(ch.lower() if ch.isascii() else ch)
-    if ranks and not others:
-        return (0, "".join(ranks), "")
-    if ranks:
+    if first_kind == "other":
+        tail = _MIX_SEP + "".join(ranks) if ranks else ""
+        return (1, "".join(others) + tail, "")
+    if first_kind == "kana":
+        if not others:
+            return (0, "".join(ranks), "")
         return (0, "".join(ranks) + _MIX_SEP + "".join(others), "")
-    if others:
-        return (1, "".join(others), "")
     return (2, "", text.casefold())
 
 
@@ -322,15 +369,20 @@ def line_reading(line: str, base_dir) -> str:
 
 
 def sort_lines(lines: list[str], base_dir, extra_key_fn=None) -> list[str]:
-    """リンク行（＋ extra_key_fn がキーを返す行）をよみ順に安定ソートする。
+    """リンクだけの行（＋ extra_key_fn がキーを返す行）をよみ順に安定ソートする。
 
-    対象外の行は位置ごと動かさない（元の index に残る）。
+    対象外の行は位置ごと動かさない（散文や見出しは元の位置に残る）。
+    `### Parent` / `### Related` / `### BackLink` の見出しが来たらそこで打ち
+    切る（グループの Parent や BackLink のリンクは動かさない。ソート後に
+    本文と入れ替わってしまうのを防ぐ）。文章に埋もれたリンクも動かさない。
     extra_key_fn は行 → ソートキー tuple（対象外は None）。紙PKM の
     Index_write のキーワード行（`バナナ(ばなな): 1,2`）を並べるのに使う。
     """
     slots: list[int] = []
     for i, ln in enumerate(lines):
-        if _LINK_RE.search(ln):
+        if _SECTION_HEAD_RE.match(ln.strip()):
+            break
+        if _LINK_LINE_RE.match(ln):
             slots.append(i)
         elif extra_key_fn is not None and extra_key_fn(ln) is not None:
             slots.append(i)
@@ -349,17 +401,20 @@ def sort_lines(lines: list[str], base_dir, extra_key_fn=None) -> list[str]:
 
 
 def persist_readings(lines: list[str], base_dir) -> int:
-    """リンク行の表示名のよみが未登録なら、pykakasi で作って yomi: に書き込む。
+    """リンクだけの行の表示名のよみが未登録なら、pykakasi で作って yomi: に書き込む。
 
-    `\\S` のソート時に呼ぶ。ローマ字のまま等でよみが変わらない表示名は書かない。
-    書いた件数を返す。
+    `\\S` のソート時に呼ぶ。対象は `sort_lines` と揃える（`### Parent` 以降と
+    文章に埋もれたリンクは書かない）。ローマ字のまま等でよみが変わらない
+    表示名は書かない。書いた件数を返す。
     """
     count = 0
     seen: set[tuple[str, str]] = set()
     for line in lines:
-        m = _LINK_RE.search(line)
-        if not m:
+        if _SECTION_HEAD_RE.match(line.strip()):
+            break
+        if not _LINK_LINE_RE.match(line):
             continue
+        m = _LINK_RE.search(line)
         disp = m.group(1)
         note = resolve_note(base_dir, m.group(2))
         if note is None or not note.is_file():
@@ -373,7 +428,7 @@ def persist_readings(lines: list[str], base_dir) -> int:
         reading = reading_for(disp)
         if not reading or reading == disp:
             continue
-        if not any(_RANK.get(ch) is not None for ch in kata2hira(reading)):
+        if not any(_rank_of(ch) is not None for ch in kata2hira(reading)):
             continue
         if set_yomi(note, disp, reading):
             count += 1
