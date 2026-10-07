@@ -314,9 +314,12 @@ function! s:note_search_run(prompt, with_nth, Sink, ...) abort
         \ '--bind', 'change:reload:' . l:cmd . ' {q}',
         \ ]
   if !empty(l:preview)
+    " スクロールは fzf に任せない（+{3}/2 は wrap の折返しを考慮せず、長い行の
+    " ヒットが下端で切れる）。preview_highlight.py が --line {3} でヒット行の
+    " 少し上から出し、先頭付近に見せる。
     call extend(l:options, [
-          \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
-          \ '--preview-window', 'right:50%:wrap:+{3}/2',
+          \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q} --line {3}',
+          \ '--preview-window', 'right:50%:wrap',
           \ ])
   endif
   call fzf#run(fzf#wrap({
