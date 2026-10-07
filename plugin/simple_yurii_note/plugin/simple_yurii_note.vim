@@ -536,8 +536,8 @@ endfunction
 " ---------------------------------------------------------------------------
 " Markdown リンクの concealment
 "   [テキスト](url)  →  テキスト  のみ表示
-"   concealcursor=n … ノーマルモードではカーソル行も含めて隠す
-"   （挿入モードでは展開される）
+"   concealcursor= （空）… カーソル行だけは展開する。ノーマル/挿入とも
+"   編集している行では [テキスト](url) が見える。
 " ---------------------------------------------------------------------------
 
 augroup simple_yurii_note_conceal
@@ -558,7 +558,11 @@ function! s:setup_conceal() abort
 
   if get(g:, 'simple_yurii_note_markdown_conceal_links', 0) && !l:too_large_for_conceal
     setlocal conceallevel=2
-    setlocal concealcursor=n
+    " カーソル行は展開する（concealcursor に n を入れない）。n を入れると、
+    " 隠れた URL 部分へ ←/→ で入ったとき表示上のカーソルが止まり「左右に
+    " 動けない」ように見える（Vim は隠れた文字の上にカーソルを表示できない。
+    " :h concealcursor の "cursor position is not always where it's displayed"）。
+    setlocal concealcursor=
     " conceal + linebreak の組み合わせで、隠した URL 部分を基準に不自然な折返しが
     " 発生しやすいため、markdown では行折返しを通常の wrap に戻す。
     setlocal nolinebreak
