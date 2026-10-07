@@ -849,7 +849,7 @@ function! s:guide_template() abort
         \ '',
         \ '### この環境での Vim 標準との違い',
         \ '- `j`/`k` は表示行移動（折り返した行も1行ずつ。ネイティブの `gj`/`gk` と同じ）。論理行は `+` / `-` や `{数}G` を使う',
-        \ '- `1`〜`9` `0` はリンクの番号ジャンプ（該当が無ければ数字はカウントとして素通り）',
+        \ '- `1`〜`9` `0` はリンクの番号ジャンプ。番号は画面先頭のリンクを `1` とし、末尾で先頭へ回り込む（大量リンクでも尽きない。該当が無ければ数字はカウントとして素通り）',
         \ '- `p` / `P` は Vim 標準。PC の内容を貼るのは `\v` / `\V`',
         \ '- `_` は直前ノートと往復。`,`（f/t リピート）は標準のまま',
         \ '- プラグインの 2 文字コマンドは `z` / `g` / `\` 接頭辞（素のキーを待たせないため）',
@@ -3305,9 +3305,13 @@ function! simple_yurii_note#note_navigator(scope) abort
 endfunction
 
 " ---------------------------------------------------------------------------
-" リンクへのラベルジャンプ（本文 → Parent/Child の通し番号）
+" リンクへのラベルジャンプ（画面先頭を起点にした通し番号）
 "   1-9,0    … その番号のリンクを直接開く（生の数字キー、0は10番目）
 "   文字+数字 … 11番目以降（z1, z2, …, z9, z0, t1, … の2打、1→0順）
+" ラベルは**今の画面先頭（w0）**のリンクを 1 とし、下へ振って末尾まで行ったら
+" 先頭へ回り込む。だからリンクが大量でも常に「今見えている所の近く」が 1-9,0 に
+" 入り、番号が尽きない（巨大な index.md でも数字だけで全部たどれる）。画面を
+" スクロールすると振り直す（WinScrolled＋debounce。可視範囲だけの計算なので軽い）。
 " 実際に見えている番号・ラベルがリンクの手前に仮想テキストで表示されるので、
 " 数えなくても押すキーが分かる（g:simple_yurii_note_link_hints=0 で無効化）。
 " 11番目以降の文字は、このプラグインがすでに2打コマンドの頭文字として
@@ -3337,22 +3341,19 @@ function! s:hint_label(idx) abort
   return s:hint_label_letters[l:letter_i] . l:digit
 endfunction
 
-" 現在バッファの候補位置（本文 → Parent/Child の順、digit_key と同じ並び）。
+" 現在バッファの候補位置（画面先頭を起点に、末尾で先頭へ回り込む）。
 " ラベルは s:hint_label() が最大 80 本までしか振らない（7 文字 × 10 + 数字 10）ので、
-" 80 本集めた時点で走査を打ち切る。巨大な index.md（1 万リンク）では先頭付近で
-" 止まるため、全行走査しない。
+" 80 本集めた時点で走査を打ち切る。巨大な index.md（1 万リンク）でも可視範囲から
+" 数十本だけ拾うので軽い。digit_key / ラベル表示の両方がこの並びを使う。
 function! s:hint_positions() abort
   let l:max = 80
-  let [l:up_m, l:dn_m] = s:v2_boundaries()
-  if l:up_m > 0
-    let l:pos = s:link_positions_in_range_limited(1, l:up_m - 1, l:max)
-    if len(l:pos) < l:max
-      let l:pos += s:link_positions_in_range_limited(
-            \ l:up_m + 1, line('$'), l:max - len(l:pos))
-    endif
-    return l:pos
+  let l:top = line('w0')
+  let l:after = s:link_positions_in_range_limited(l:top, line('$'), l:max)
+  if len(l:after) >= l:max || l:top <= 1
+    return l:after
   endif
-  return s:link_positions_in_range_limited(1, line('$'), l:max)
+  let l:before = s:link_positions_in_range_limited(1, l:top - 1, l:max - len(l:after))
+  return l:after + l:before
 endfunction
 
 " ラベル→位置の対応表を作る。割り当て切れの位置は含めない。
@@ -3405,20 +3406,22 @@ function! s:hint_sync_full_maps(labels) abort
   let b:yurii_hint_full_labels = a:labels
 endfunction
 
-" 本文・Parent/Child のリンク手前に、ラベル（1-9 / 文字+数字）を仮想テキストで表示する。
+" リンク手前に、ラベル（1-9 / 文字+数字）を画面先頭起点で仮想テキスト表示する。
 function! simple_yurii_note#refresh_link_hints() abort
   if !get(g:, 'simple_yurii_note_link_hints', 1) || !has('textprop') | return | endif
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki' | return | endif
-  " 同じ内容（changedtick）で既に作り終えていれば作り直さない。
-  " BufEnter と BufWinEnter が続けて発火する重複と、変更なしの再計算
-  " （InsertLeave など）を丸ごと省く。1 万行 Index では 1 回 35ms 級。
+  " 同じ内容（changedtick）かつ同じ画面先頭（w0）で既に作り終えていれば作り直さない。
+  " BufEnter と BufWinEnter の重複、変更なしの再計算（InsertLeave など）、
+  " スクロールで w0 が変わらない再描画を丸ごと省く。1 万行 Index では 1 回 35ms 級。
   if get(b:, 'yurii_hint_built_tick', -1) ==# b:changedtick
+        \ && get(b:, 'yurii_hint_built_top', -1) ==# line('w0')
     return
   endif
   if !s:hint_ensure_prop_type() | return | endif
   call prop_remove({'type': s:hint_prop_type, 'all': v:true})
   let b:yurii_hint_map = s:hint_build_map()
   let b:yurii_hint_built_tick = b:changedtick
+  let b:yurii_hint_built_top = line('w0')
   if empty(b:yurii_hint_map)
     call s:hint_sync_full_maps([])
     return
@@ -3438,8 +3441,9 @@ function! simple_yurii_note#refresh_link_hints() abort
   call s:hint_sync_full_maps(l:full_labels)
 endfunction
 
-" 数字キー（生の 1-9,0）… 本文 → Parent/Child の順で通し番号にした N 番目の
-" リンクを直接開く（0は10番目）。該当が無ければ通常のカウント/行頭移動として送る。
+" 数字キー（生の 1-9,0）… 画面先頭を 1 とした通し番号の N 番目のリンクを直接開く
+" （0は10番目、末尾まで行ったら先頭へ回り込む）。該当が無ければ通常のカウント/
+" 行頭移動として送る。
 " 起動直後など、まだラベルを計算していないバッファでは初回だけ計算し直す。
 " （計算前は候補ゼロ＝素のカウント扱いになり、1打目が「効かない」ように
 "  見えるのを防ぐ。ラベル更新は debounce されるが数字ジャンプは常に最新を見る。）
