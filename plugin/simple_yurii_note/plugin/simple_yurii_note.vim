@@ -187,6 +187,9 @@ command!          SimpleIndex call simple_yurii_note#open_index()
 command!          SimpleChooseIndexDir call simple_yurii_note#choose_index_root()
 command!          SimpleGuide call simple_yurii_note#write_guide()
 command!          SimpleChooseIndex call simple_yurii_note#choose_index_root()
+" 紙のPKM（フォルゲゼッテル）: Index 作成/オープンと、スキャン画像の番号付け GUI
+command!          SimplePaperIndex call simple_yurii_note#paper_index()
+command!          SimpleScan call simple_yurii_note#paper_scan()
 
 " 旧名エイリアス（yurii_PKM から移行した習慣用。中身は simple 側）
 command!          YuriiIndex call simple_yurii_note#open_index()
@@ -281,6 +284,11 @@ nnoremap <silent> \tr       <Cmd>call simple_yurii_note#trash_list()<CR>
 nnoremap <silent> \tD       <Cmd>call simple_yurii_note#trash_current()<CR>
 " \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
+" \F … 紙PKM Index（タイムスタンプ名）を作成/オープン（Index_write・Folgezettel-Index も作る）
+" \f … スキャン画像にフォルゲゼッテルIDを付けて vault 直下へ移動（番号付け GUI）
+"       \fs（全文検索）の前置きと被るため \f は最大 timeoutlen 待つ（\F は即時）
+nnoremap <silent> \F       <Cmd>call simple_yurii_note#paper_index()<CR>
+nnoremap <silent> \f       <Cmd>call simple_yurii_note#paper_scan()<CR>
 " \S … リンク行を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート。
 "   ビジュアル=選択範囲 / ノーマル=バッファ全体（主に index.md）。
 "   よみはリンク先ノートの front matter `yomi:`（\zy で登録）、無ければ pykakasi。

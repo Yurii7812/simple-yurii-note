@@ -786,6 +786,14 @@ function! s:guide_template() abort
         \ '- よみはリンク先ノートの front matter `yomi:`（表示名 → よみ）を優先。未登録は pykakasi で `yomi:` に自動追加',
         \ '- `zy` / `zY` で表示名ごとのよみを手で修正/削除できる（表示名が複数あれば番号で選ぶ）。表示名が Index から消えると同期時に掃除される',
         \ '',
+        \ '## 紙のPKM（フォルゲゼッテル）',
+        \ '',
+        \ '- `\F` … 紙PKM Index（タイムスタンプ名）を作成/オープン（`:SimplePaperIndex`）。Index_write と Folgezettel-Index も作られる',
+        \ '- `\f` … スキャン画像に番号を付けて vault 直下へ移動（`:SimpleScan`。番号付け GUI が開く。`\fs`（全文検索）の前置きと被るため最大 0.5 秒待つ）',
+        \ '- `Index_write` … `キーワード(よみ): 1,1a10b,3` の形式で手書き。複数IDのキーワードはグループノート、単一IDは直接リンクとして紙PKM Index に並ぶ（保存で自動再生成）',
+        \ '- `\S` … Index_write ではキーワード行もよみ順に並べる（`(…)` が本体のよみと一致すればそれをよみに、修飾語なら本体のよみで並べる）',
+        \ '- Folgezettel-Index は存在する全IDの一覧（自然順）。生成物なので `\S` しない',
+        \ '',
         \ '## Vim の基本操作（詳細）',
         \ '',
         \ '### モード',
@@ -5938,6 +5946,27 @@ function! simple_yurii_note#autosync_on_save() abort
     return
   endif
 
+  " 紙PKM: Index_write を保存したら Index/グループ/Folgezettel-Index を再生成する。
+  " paper_pkm.py regen は SYN 同期まで行うので、update_one の代わりに走らせる。
+  if fnamemodify(l:file, ':t') ==# 'Index_write.md'
+    let l:paper = s:paper_pkm_script()
+    if filereadable(l:paper)
+      let l:pcmd = s:python_cmd() . ' ' . shellescape(l:paper)
+            \ . ' regen ' . shellescape(l:root)
+      if has('job') && has('channel')
+        call job_start(['/bin/sh', '-c', l:pcmd], {
+              \ 'exit_cb': function('s:autosync_done'),
+              \ 'out_io':  'null',
+              \ 'err_io':  'null',
+              \ })
+      else
+        call system(l:pcmd)
+        checktime
+      endif
+      return
+    endif
+  endif
+
   let l:py   = s:python_cmd()
   let l:args = [l:py, g:simple_yurii_note_python, 'update_one', l:file, l:root]
 
@@ -8010,6 +8039,93 @@ function! simple_yurii_note#open_index() abort
   endif
 endfunction
 
+" ---------------------------------------------------------------------------
+" 紙のPKM（フォルゲゼッテル）
+" ---------------------------------------------------------------------------
+
+function! s:paper_pkm_script() abort
+  return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'paper_pkm.py'
+endfunction
+
+function! s:paper_scan_script() abort
+  return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'folgezettel_scan.py'
+endfunction
+
+" 紙PKM Index（Index・Index_write・Folgezettel-Index）を作成/再利用して開く。
+function! simple_yurii_note#paper_index() abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root)
+    echohl WarningMsg | echo 'simple_yurii_note: PKM root が未設定です' | echohl NONE
+    return
+  endif
+  let l:script = s:paper_pkm_script()
+  if !filereadable(l:script)
+    echohl ErrorMsg | echo 'simple_yurii_note: paper_pkm.py が見つかりません: ' . l:script | echohl NONE
+    return
+  endif
+  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' create ' . shellescape(l:root)
+  let l:out = system(l:cmd)
+  if v:shell_error
+    echohl ErrorMsg | echo substitute(l:out, '\n\+$', '', '') | echohl NONE
+    return
+  endif
+  let l:path = substitute(l:out, '\n.*$', '', '')
+  if empty(l:path) || !filereadable(l:path)
+    echohl ErrorMsg | echo 'simple_yurii_note: 紙PKM Index を作成できませんでした' | echohl NONE
+    return
+  endif
+  execute 'edit ' . fnameescape(l:path)
+  echo 'simple_yurii_note: 紙PKM Index を開きました（Index_write にキーワードを書く）'
+endfunction
+
+" スキャン画像の番号付け GUI を起動する。移動先は今開いているノートのフォルダ。
+function! simple_yurii_note#paper_scan() abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root) || !filereadable(s:index_path(l:root))
+    echohl WarningMsg | echo 'simple_yurii_note: PKM root が未設定です' | echohl NONE
+    return
+  endif
+  let l:dest = expand('%:p:h')
+  if empty(l:dest)
+    echohl WarningMsg | echo 'simple_yurii_note: ノートを開いてから実行してください' | echohl NONE
+    return
+  endif
+  if stridx(fnamemodify(l:dest, ':p'), fnamemodify(l:root, ':p')) != 0
+    echohl WarningMsg | echo 'simple_yurii_note: 今のノートが vault の外です: ' . l:dest | echohl NONE
+    return
+  endif
+  let l:script = s:paper_scan_script()
+  if !filereadable(l:script)
+    echohl ErrorMsg | echo 'simple_yurii_note: folgezettel_scan.py が見つかりません: ' . l:script | echohl NONE
+    return
+  endif
+  " GUI が Index を再生成するので、編集中の内容は先に書き出す。
+  if &modified
+    silent! update
+  endif
+  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script)
+        \ . ' --root ' . shellescape(l:root)
+        \ . ' --dest ' . shellescape(l:dest)
+  if has('job') && has('channel')
+    call job_start(['/bin/sh', '-c', l:cmd], {
+          \ 'exit_cb': function('s:paper_scan_done'),
+          \ 'out_io':  'null',
+          \ 'err_io':  'null',
+          \ })
+  else
+    call system(l:cmd)
+    checktime
+  endif
+  echo 'simple_yurii_note: フォルゲゼッテル番号付けを起動しました（GUI で番号を入力）'
+endfunction
+
+function! s:paper_scan_done(job, status) abort
+  call s:reload_current()
+  if a:status == 0
+    echo 'simple_yurii_note: 番号付けが完了しました（Index を再読み込み）'
+  endif
+endfunction
+
 " sort_yomi.py の場所（:SortYomi / \S / \zy が使う）
 function! s:sort_yomi_script() abort
   return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'sort_yomi.py'
@@ -8019,6 +8135,12 @@ endfunction
 " リンクでない行（front matter・見出し・空行など）は位置ごと動かさない。
 " 未登録の表示名は pykakasi のよみをリンク先の yomi: に書き込む（\S の副作用）。
 function! s:sort_lines_by_yomi(first, last) abort
+  if expand('%:t') ==# 'Folgezettel-Index.md'
+    echohl WarningMsg
+    echo 'simple_yurii_note: Folgezettel-Index は生成物（ID の自然順）なので \S しません'
+    echohl NONE
+    return
+  endif
   let l:script = s:sort_yomi_script()
   if !filereadable(l:script)
     echohl ErrorMsg | echo 'simple_yurii_note: sort_yomi.py が見つかりません: ' . l:script | echohl NONE
@@ -8030,6 +8152,7 @@ function! s:sort_lines_by_yomi(first, last) abort
   endif
   let l:report = tempname()
   let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(expand('%:p:h'))
+        \ . (expand('%:t') ==# 'Index_write.md' ? ' --keyword-lines' : '')
         \ . ' --report-file ' . shellescape(l:report)
   " 1 万行の Index では数秒かかる。無反応に見えないよう先に表示する。
   echo printf('simple_yurii_note: %d 行をよみ順に並べ替え中…', len(l:lines))

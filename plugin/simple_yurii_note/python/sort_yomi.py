@@ -4,6 +4,8 @@
 使い方::
 
     sort_yomi.py sort --base DIR        # stdin の行をソートして stdout へ
+    sort_yomi.py sort --base DIR --keyword-lines
+                                        # 紙PKM の Index_write のキーワード行も並べる
     sort_yomi.py guess NAME             # NAME のよみを表示
     sort_yomi.py get  --note PATH --name NAME
     sort_yomi.py list --note PATH       # yomi の表示名を登録順に一覧
@@ -42,6 +44,11 @@ def main(argv: list[str]) -> int:
         "--dry-run", action="store_true", help="未登録のよみを yomi: に書き込まない"
     )
     p_sort.add_argument(
+        "--keyword-lines",
+        action="store_true",
+        help="紙PKM の Index_write のキーワード行（バナナ(ばなな): 1,2）も並べる",
+    )
+    p_sort.add_argument(
         "--report-file", default=None, help="yomi: に追加した件数を書き出すファイル"
     )
 
@@ -68,12 +75,20 @@ def main(argv: list[str]) -> int:
         if lines and lines[-1] == "":
             lines.pop()
         _warn_if_missing()
+        extra_key_fn = None
+        if args.keyword_lines:
+            import paper_pkm as pp  # 同ディレクトリ。キーワード行のよみ規則を共有
+
+            def extra_key_fn(line: str):
+                reading = pp.keyword_reading(line)
+                return jy.reading_key(reading) if reading else None
+
         added = 0
         if not args.dry_run:
             added = jy.persist_readings(lines, args.base)
         if args.report_file:
             Path(args.report_file).write_text(f"{added}\n", encoding="utf-8")
-        out = jy.sort_lines(lines, args.base)
+        out = jy.sort_lines(lines, args.base, extra_key_fn=extra_key_fn)
         if out:
             sys.stdout.write("\n".join(out) + "\n")
         return 0

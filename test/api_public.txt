@@ -76,6 +76,8 @@ simple_yurii_note#outline_edit
 simple_yurii_note#outline_editor_apply
 simple_yurii_note#outline_shift_current
 simple_yurii_note#outline_shift_visual
+simple_yurii_note#paper_index
+simple_yurii_note#paper_scan
 simple_yurii_note#paste_charwise
 simple_yurii_note#paste_clipboard
 simple_yurii_note#paste_clipboard_link_here

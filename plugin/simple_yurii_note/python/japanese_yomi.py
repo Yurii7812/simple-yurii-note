@@ -321,15 +321,26 @@ def line_reading(line: str, base_dir) -> str:
     return disp
 
 
-def sort_lines(lines: list[str], base_dir) -> list[str]:
-    """リンク行だけを表示名のよみ順に安定ソートする。
+def sort_lines(lines: list[str], base_dir, extra_key_fn=None) -> list[str]:
+    """リンク行（＋ extra_key_fn がキーを返す行）をよみ順に安定ソートする。
 
-    リンクでない行は位置ごと動かさない（元の index に残る）。
+    対象外の行は位置ごと動かさない（元の index に残る）。
+    extra_key_fn は行 → ソートキー tuple（対象外は None）。紙PKM の
+    Index_write のキーワード行（`バナナ(ばなな): 1,2`）を並べるのに使う。
     """
-    slots = [i for i, ln in enumerate(lines) if _LINK_RE.search(ln)]
+    slots: list[int] = []
+    for i, ln in enumerate(lines):
+        if _LINK_RE.search(ln):
+            slots.append(i)
+        elif extra_key_fn is not None and extra_key_fn(ln) is not None:
+            slots.append(i)
     keyed = []
     for i in slots:
-        keyed.append((reading_key(line_reading(lines[i], base_dir)), i, lines[i]))
+        if _LINK_RE.search(lines[i]):
+            key = reading_key(line_reading(lines[i], base_dir))
+        else:
+            key = extra_key_fn(lines[i])
+        keyed.append((key, i, lines[i]))
     keyed.sort(key=lambda t: (t[0], t[1]))
     out = list(lines)
     for slot, (_k, _i, ln) in zip(slots, keyed):

@@ -18,6 +18,7 @@ sys.path.insert(0, str(HERE))
 
 import japanese_yomi as jy  # noqa: E402
 import note_format_v2 as nf  # noqa: E402
+import paper_pkm as pp  # noqa: E402
 import sort_yomi  # noqa: E402
 
 _FAILED: list[str] = []
@@ -149,6 +150,48 @@ def test_sort_lines_stable() -> None:
     with tempfile.TemporaryDirectory() as d:
         out = jy.sort_lines(lines, d)
     check(out == lines, "同よみは不変")
+
+
+def _keyword_key(line: str):
+    reading = pp.keyword_reading(line)
+    return jy.reading_key(reading) if reading else None
+
+
+def test_sort_keyword_lines() -> None:
+    print("sort_lines: --keyword-lines で Index_write のキーワード行も並ぶ")
+    lines = [
+        "# Index_write",
+        "",
+        "バナナ(ばなな): 1,2",
+        "オザーク(ドラマ): 3",
+        "知識管理(ちしきかんり): 4",
+        "ただの文",
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        out = jy.sort_lines(lines, d, extra_key_fn=_keyword_key)
+    check(out[0:2] == ["# Index_write", ""], "見出し・空行は動かない")
+    check(out[2:5] == ["オザーク(ドラマ): 3", "知識管理(ちしきかんり): 4",
+                       "バナナ(ばなな): 1,2"],
+          "おざーく < ちしき < ばなな（修飾語は本体のよみ）")
+    check(out[5] == "ただの文", "キーワード行でない文は動かない")
+    with tempfile.TemporaryDirectory() as d:
+        out2 = jy.sort_lines(lines, d)
+    check(out2 == lines, "フラグ無しならキーワード行は動かない")
+
+
+def test_cli_keyword_lines() -> None:
+    print("sort_yomi CLI: --keyword-lines")
+    data = "バナナ(ばなな): 1,2\nオザーク(ドラマ): 3\n"
+    buf = io.StringIO()
+    old_stdin = sys.stdin
+    sys.stdin = io.StringIO(data)
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = sort_yomi.main(["sort", "--base", ".", "--keyword-lines", "--dry-run"])
+    finally:
+        sys.stdin = old_stdin
+    check(rc == 0 and buf.getvalue() == "オザーク(ドラマ): 3\nバナナ(ばなな): 1,2\n",
+          "CLI がキーワード行をよみ順に")
 
 
 def test_used_and_prune() -> None:
