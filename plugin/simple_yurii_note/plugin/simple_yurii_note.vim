@@ -286,7 +286,6 @@ nnoremap <silent> \tD       <Cmd>call simple_yurii_note#trash_current()<CR>
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
 " \F … 紙PKM Index（タイムスタンプ名）を作成/オープン（Index_write・Folgezettel-Index も作る）
 " \f … スキャン画像にフォルゲゼッテルIDを付けて vault 直下へ移動（番号付け GUI）
-"       \fs（全文検索）の前置きと被るため \f は最大 timeoutlen 待つ（\F は即時）
 nnoremap <silent> \F       <Cmd>call simple_yurii_note#paper_index()<CR>
 nnoremap <silent> \f       <Cmd>call simple_yurii_note#paper_scan()<CR>
 " \S … リンク行を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート。
