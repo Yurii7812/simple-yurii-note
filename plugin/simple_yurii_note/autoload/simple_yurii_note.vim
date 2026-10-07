@@ -3329,7 +3329,12 @@ let s:hint_label_letters = 'gz'
 function! s:hint_label(idx) abort
   if a:idx <= 9 | return string(a:idx) | endif
   if a:idx == 10 | return '0' | endif
-  return ''
+  let l:n = a:idx - 11
+  let l:letter_i = l:n / 10
+  let l:pos_in_group = l:n % 10
+  let l:digit = (l:pos_in_group == 9) ? 0 : l:pos_in_group + 1
+  if l:letter_i >= strlen(s:hint_label_letters) | return '' | endif
+  return s:hint_label_letters[l:letter_i] . l:digit
 endfunction
 
 " 現在バッファの候補位置（画面先頭を起点に、末尾で先頭へ回り込む）。
