@@ -316,7 +316,7 @@ function! s:note_search_run(prompt, with_nth, Sink, ...) abort
   if !empty(l:preview)
     call extend(l:options, [
           \ '--preview', 'python3 ' . shellescape(l:preview) . ' {1} {q}',
-          \ '--preview-window', 'right:50%:+{3}/2',
+          \ '--preview-window', 'right:50%:wrap:+{3}/2',
           \ ])
   endif
   call fzf#run(fzf#wrap({
