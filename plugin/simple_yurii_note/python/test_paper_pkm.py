@@ -63,6 +63,9 @@ def test_parse_keyword_line() -> None:
     check(pp.parse_keyword_line("キーワード: フォルゲゼッテル") is None,
           "ID でない値は行として扱わない")
     check(pp.parse_keyword_line("ただの文章") is None, "普通の文は None")
+    check(pp.parse_keyword_line("time: 2026-01-01 00:00:00") is None,
+          "front matter の time 行は None（誤マッチ回帰）")
+    check(pp.parse_keyword_line("title: Index_write") is None, "title 行は None")
     check(pp.parse_keyword_line("バナナ: 1A10B") is not None, "大文字は正規化して受ける")
 
 

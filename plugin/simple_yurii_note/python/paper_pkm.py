@@ -50,8 +50,10 @@ FOLGE_INDEX = "Folgezettel-Index.md"
 DEFAULT_INDEX_TITLE = "紙のPKM Index"
 
 ID_PATTERN = re.compile(r"^\d+(?:[a-z]+\d+)*[a-z]*$")
+# キーと ID 部に `:` を許さない（`time: 2026-01-01 00:00:00` のような front matter を
+# 後方一致でキーワード行と誤認しないため。`[^:]+?` の後退を防ぐ）。
 KEYWORD_LINE_RE = re.compile(
-    r"^(?P<key>.+?)(?:\((?P<paren>[^()]*)\))?\s*:\s*(?P<ids>[^:]*)$"
+    r"^(?P<key>[^:]+?)(?:\((?P<paren>[^()]*)\))?\s*:\s*(?P<ids>[^:]+)$"
 )
 
 PAPER_START = "<!-- PAPER:START -->"

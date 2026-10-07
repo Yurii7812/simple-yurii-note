@@ -160,6 +160,11 @@ def _keyword_key(line: str):
 def test_sort_keyword_lines() -> None:
     print("sort_lines: --keyword-lines で Index_write のキーワード行も並ぶ")
     lines = [
+        "---",
+        "time: 2026-01-01 00:00:00",
+        "title: Index_write",
+        "---",
+        "",
         "# Index_write",
         "",
         "バナナ(ばなな): 1,2",
@@ -169,11 +174,11 @@ def test_sort_keyword_lines() -> None:
     ]
     with tempfile.TemporaryDirectory() as d:
         out = jy.sort_lines(lines, d, extra_key_fn=_keyword_key)
-    check(out[0:2] == ["# Index_write", ""], "見出し・空行は動かない")
-    check(out[2:5] == ["オザーク(ドラマ): 3", "知識管理(ちしきかんり): 4",
-                       "バナナ(ばなな): 1,2"],
+    check(out[0:7] == lines[0:7], "front matter・見出し・空行は動かない")
+    check(out[7:10] == ["オザーク(ドラマ): 3", "知識管理(ちしきかんり): 4",
+                        "バナナ(ばなな): 1,2"],
           "おざーく < ちしき < ばなな（修飾語は本体のよみ）")
-    check(out[5] == "ただの文", "キーワード行でない文は動かない")
+    check(out[10] == "ただの文", "キーワード行でない文は動かない")
     with tempfile.TemporaryDirectory() as d:
         out2 = jy.sort_lines(lines, d)
     check(out2 == lines, "フラグ無しならキーワード行は動かない")
@@ -181,7 +186,8 @@ def test_sort_keyword_lines() -> None:
 
 def test_cli_keyword_lines() -> None:
     print("sort_yomi CLI: --keyword-lines")
-    data = "バナナ(ばなな): 1,2\nオザーク(ドラマ): 3\n"
+    data = ("---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
+            "バナナ(ばなな): 1,2\nオザーク(ドラマ): 3\n")
     buf = io.StringIO()
     old_stdin = sys.stdin
     sys.stdin = io.StringIO(data)
@@ -190,8 +196,10 @@ def test_cli_keyword_lines() -> None:
             rc = sort_yomi.main(["sort", "--base", ".", "--keyword-lines", "--dry-run"])
     finally:
         sys.stdin = old_stdin
-    check(rc == 0 and buf.getvalue() == "オザーク(ドラマ): 3\nバナナ(ばなな): 1,2\n",
-          "CLI がキーワード行をよみ順に")
+    check(rc == 0 and buf.getvalue() == (
+        "---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
+        "オザーク(ドラマ): 3\nバナナ(ばなな): 1,2\n"
+    ), "CLI がキーワード行だけをよみ順に（front matter は不変）")
 
 
 def test_used_and_prune() -> None:
