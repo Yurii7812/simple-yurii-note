@@ -996,6 +996,23 @@ function! s:timer_redraw_cb(timer) abort
   redraw!
 endfunction
 
+function! s:timer_hub_edit_cb(...) abort
+  let l:path = ''
+  if a:0 >= 1 && type(a:1) == v:t_string
+    let l:path = a:1
+  elseif a:0 >= 2 && type(a:2) == v:t_string
+    let l:path = a:2
+  endif
+  if empty(l:path)
+    return
+  endif
+  call simple_yurii_note#save_current_note()
+  silent! execute 'hide edit ' . fnameescape(l:path)
+  setlocal bufhidden=hide
+  setlocal noundofile
+  redraw!
+endfunction
+
 function! s:open_index_with_delay(index_path) abort
   call simple_yurii_note#push_history()
   call timer_start(0, function('s:timer_edit_file_cb', [a:index_path]))
@@ -4227,13 +4244,13 @@ function! s:hub_link_paths() abort
 endfunction
 
 " \h / \0 … ハブ画面（編集可能な Markdown）を開く。
+" 起動直後の最初の \h が表示されない不具合のため、:edit は open_index と同じ
+" timer 経路で行う（map 内の silent! edit + redraw では再描画が保留される）。
 function! simple_yurii_note#hub_open() abort
   let l:file = s:hub_migrate()
   call simple_yurii_note#push_history()
-  silent! execute 'hide edit ' . fnameescape(l:file)
-  setlocal bufhidden=hide
-  setlocal noundofile
-  redraw
+  call timer_start(0, function('s:timer_hub_edit_cb', [l:file]))
+  call timer_start(50, function('s:timer_redraw_cb'))
 endfunction
 
 function! simple_yurii_note#hub_set(...) abort
