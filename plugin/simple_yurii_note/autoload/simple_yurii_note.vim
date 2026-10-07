@@ -1975,6 +1975,47 @@ function! simple_yurii_note#jump_link(forward) abort
   " search() のマッチ先頭 ([) にそのまま止める
 endfunction
 
+" ←/→ 用の左右移動。conceal で隠れた範囲（[ と ](url)）の上には Vim は
+" カーソルを表示できず（:h concealcursor "cursor position is not always where
+" it's displayed"）、素の l/h では表示カーソルが止まって「動けない」ように
+" 見える。隠れた範囲はまとめて飛び越え、表示されている文字（リンクなら
+" 表示名）の上だけを動く。conceallevel=0（conceal 無効・巨大ファイル等）
+" では素の l/h と同じ。
+function! simple_yurii_note#move_visible(dir) abort
+  if &l:conceallevel == 0
+    execute 'normal! ' . (a:dir > 0 ? 'l' : 'h')
+    return
+  endif
+  let l:lnum = line('.')
+  let l:last = col([l:lnum, '$']) - 1
+  if l:last < 1
+    return
+  endif
+  let l:col = col('.')
+  if a:dir > 0
+    let l:col += 1
+    if l:col > l:last || !synconcealed(l:lnum, l:col)[0]
+      execute 'normal! l'
+      return
+    endif
+    while l:col <= l:last && synconcealed(l:lnum, l:col)[0]
+      let l:col += 1
+    endwhile
+  else
+    let l:col -= 1
+    if l:col < 1 || !synconcealed(l:lnum, l:col)[0]
+      execute 'normal! h'
+      return
+    endif
+    while l:col >= 1 && synconcealed(l:lnum, l:col)[0]
+      let l:col -= 1
+    endwhile
+  endif
+  if l:col >= 1 && l:col <= l:last
+    call cursor(l:lnum, l:col)
+  endif
+endfunction
+
 
 function! s:jump_to_line(lnum) abort
   call cursor(a:lnum, 1)

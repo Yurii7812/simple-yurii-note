@@ -536,8 +536,10 @@ endfunction
 " ---------------------------------------------------------------------------
 " Markdown リンクの concealment
 "   [テキスト](url)  →  テキスト  のみ表示
-"   concealcursor= （空）… カーソル行だけは展開する。ノーマル/挿入とも
-"   編集している行では [テキスト](url) が見える。
+"   ノーマルモードではカーソル行でも中身を隠す（concealcursor=n）。
+"   挿入モード（とビジュアル/選択）ではカーソル行を展開し、中身が見える。
+"   隠れた範囲の上にはカーソルを表示できないため、←/→ は隠れた範囲を
+"   まとめて飛び越える（simple_yurii_note#move_visible）。
 " ---------------------------------------------------------------------------
 
 augroup simple_yurii_note_conceal
@@ -558,17 +560,21 @@ function! s:setup_conceal() abort
 
   if get(g:, 'simple_yurii_note_markdown_conceal_links', 0) && !l:too_large_for_conceal
     setlocal conceallevel=2
-    " カーソル行は展開する（concealcursor に n を入れない）。n を入れると、
-    " 隠れた URL 部分へ ←/→ で入ったとき表示上のカーソルが止まり「左右に
-    " 動けない」ように見える（Vim は隠れた文字の上にカーソルを表示できない。
-    " :h concealcursor の "cursor position is not always where it's displayed"）。
-    setlocal concealcursor=
+    " ノーマルモードではカーソル行も含めて中身を隠す（表示名だけ見せる）。
+    " 挿入モードは concealcursor に i が無いのでカーソル行が展開され、中身が
+    " 見える。隠れた範囲の上では素の ←/→ が止まって見えるため、
+    " move_visible で隠れた範囲をまとめて飛び越える。
+    setlocal concealcursor=n
+    nnoremap <buffer><silent> <Right> <Cmd>call simple_yurii_note#move_visible(1)<CR>
+    nnoremap <buffer><silent> <Left>  <Cmd>call simple_yurii_note#move_visible(0)<CR>
     " conceal + linebreak の組み合わせで、隠した URL 部分を基準に不自然な折返しが
     " 発生しやすいため、markdown では行折返しを通常の wrap に戻す。
     setlocal nolinebreak
   else
     setlocal conceallevel=0
     setlocal concealcursor=
+    silent! nunmap <buffer> <Left>
+    silent! nunmap <buffer> <Right>
     setlocal linebreak
   endif
 
