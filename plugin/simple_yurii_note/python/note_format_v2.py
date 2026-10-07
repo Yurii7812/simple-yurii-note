@@ -1188,15 +1188,14 @@ def _links_from(lines: list[str]) -> list[tuple[str, str]]:
 def _used_display_names(notes: dict, incoming: dict | None = None) -> set[str]:
     """vault 内のリンクが実際に使っている表示名を集める。
 
-    incoming を渡すと、各ノートの title は「そのノートへのリンクがあるとき」だけ
-    使用中とみなす（BackLink に title で出るため）。渡さない場合は従来どおり全 title を
-    使用中とみなす（テスト・単体利用の互換）。
+    対象は本文・Parent・Related のリンクの表示名だけ。自動生成される BackLink の
+    表示名（＝相手の title）は数えない。BackLink 行は `\\S` で動かさないので、その
+    ための yomi は不要で、数えてしまうと存在しない表示名の yomi が残り続ける。
+    `incoming` は互換のため受けるが使わない。
     """
     used: set[str] = set()
-    for p, n in notes.items():
-        if incoming is None or incoming.get(p):
-            used.add(n["title"])
-        for kind in ("body", "parent", "related", "back"):
+    for n in notes.values():
+        for kind in ("body", "parent", "related"):
             for disp, _tg in _links_from(n.get(kind, [])):
                 if disp:
                     used.add(disp)

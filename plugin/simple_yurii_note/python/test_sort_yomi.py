@@ -333,6 +333,28 @@ def test_used_and_prune() -> None:
     check(jy.parse_yomi_map(notes[Path("/tmp/b.md")]["fm"]) == {}, "未使用は消える（title も）")
 
 
+def test_used_display_names_ignores_backlinks() -> None:
+    print("sync 掃除: 自動生成の BackLink 表示名は使用中に数えない")
+    notes = {
+        Path("/tmp/y.md"): {
+            "fm": ["---", "title: 自分でA", "yomi:",
+                   '  "自分でA": "じぶんでえ"', "---"],
+            "title": "自分でA", "body": [], "parent": [], "related": [], "back": [],
+        },
+        Path("/tmp/x.md"): {
+            "fm": ["---", "title: X", "---"],
+            "title": "X", "body": ["[別名](y.md)"], "parent": [], "related": [],
+            "back": ["[自分でA](y.md)"],
+        },
+    }
+    incoming = {Path("/tmp/y.md"): [Path("/tmp/x.md")], Path("/tmp/x.md"): []}
+    used = nf._used_display_names(notes, incoming)
+    check("別名" in used, "本文リンクの表示名は使用中")
+    check("自分でA" not in used, "BackLink の表示名だけでは使用中にしない")
+    check(nf._prune_yomi_maps(notes, used) == 1, "y.md の yomi を掃除")
+    check(jy.parse_yomi_map(notes[Path("/tmp/y.md")]["fm"]) == {}, "存在しないよみが残らない")
+
+
 def test_persist_readings() -> None:
     print("persist_readings: \\S のとき未登録のよみを yomi: に書く")
     with tempfile.TemporaryDirectory() as d:
