@@ -196,11 +196,22 @@ class ScanApp:
         self._build_naming_frame()
         self.show_setup()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.root.bind("<F11>", self.toggle_fullscreen)
         self._refresh_recent_buttons()
 
         last_folder = self.settings.get("last_folder")
         fallback = Path(last_folder) if last_folder and Path(last_folder).is_dir() else None
         self.root.after(120, lambda: self.prompt_initial_folder(fallback))
+
+    def toggle_fullscreen(self, _event=None):
+        self.set_fullscreen(not bool(self.root.attributes("-fullscreen")))
+        return "break"
+
+    def set_fullscreen(self, enabled: bool):
+        try:
+            self.root.attributes("-fullscreen", bool(enabled))
+        except tk.TclError:
+            pass
 
     def prompt_initial_folder(self, fallback: Optional[Path]):
         """起動直後にスキャン画像フォルダの選択を出す（キャンセルで前回を使う）。"""
@@ -481,6 +492,8 @@ class ScanApp:
             self.undo_stack.clear()
         self.refresh_tree()
         self.status_var.set(f"{len(self.items)}枚を読み込みました")
+        # フォルダ選択後は全画面で作業する（F11 で切替）
+        self.set_fullscreen(True)
 
     def project_path(self) -> Optional[Path]:
         return self.folder / PROJECT_FILE if self.folder else None
