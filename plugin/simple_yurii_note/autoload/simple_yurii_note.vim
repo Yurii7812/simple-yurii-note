@@ -1975,12 +1975,22 @@ function! simple_yurii_note#jump_link(forward) abort
   " search() のマッチ先頭 ([) にそのまま止める
 endfunction
 
+" 現在位置の次の文字の先頭バイト位置（マルチバイト対応）。
+function! s:byte_next(line, col) abort
+  return a:col + strlen(matchstr(strpart(a:line, a:col - 1), '^.'))
+endfunction
+
 " ←/→ 用の左右移動。conceal で隠れた範囲（[ と ](url)）の上には Vim は
 " カーソルを表示できず（:h concealcursor "cursor position is not always where
 " it's displayed"）、素の l/h では表示カーソルが止まって「動けない」ように
 " 見える。隠れた範囲はまとめて飛び越え、表示されている文字（リンクなら
 " 表示名）の上だけを動く。conceallevel=0（conceal 無効・巨大ファイル等）
 " では素の l/h と同じ。
+"
+" 隠れた文字の上のカーソルは、その隠れ範囲の直後の可視文字の位置に描かれる。
+" そのため隠れた文字から右へ1文字ぶん動かしても画面は動かない（Tab でリンクに
+" 乗った直後の ←/→ が「1回無反応」に見える原因）。隠れた文字から右へは、
+" 画面で1つ動いて見えるよう可視文字を1つ先まで進める。
 function! simple_yurii_note#move_visible(dir) abort
   if &l:conceallevel == 0
     execute 'normal! ' . (a:dir > 0 ? 'l' : 'h')
@@ -1992,15 +2002,25 @@ function! simple_yurii_note#move_visible(dir) abort
     return
   endif
   let l:col = col('.')
+  let l:on_concealed = synconcealed(l:lnum, l:col)[0]
   if a:dir > 0
     let l:col += 1
     if l:col > l:last || !synconcealed(l:lnum, l:col)[0]
-      execute 'normal! l'
-      return
+      if !l:on_concealed
+        execute 'normal! l'
+        return
+      endif
+    else
+      while l:col <= l:last && synconcealed(l:lnum, l:col)[0]
+        let l:col += 1
+      endwhile
     endif
-    while l:col <= l:last && synconcealed(l:lnum, l:col)[0]
-      let l:col += 1
-    endwhile
+    if l:on_concealed && l:col <= l:last
+      let l:col = s:byte_next(getline(l:lnum), l:col)
+      while l:col <= l:last && synconcealed(l:lnum, l:col)[0]
+        let l:col += 1
+      endwhile
+    endif
   else
     let l:col -= 1
     if l:col < 1 || !synconcealed(l:lnum, l:col)[0]
