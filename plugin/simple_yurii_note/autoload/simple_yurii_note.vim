@@ -3305,40 +3305,31 @@ function! simple_yurii_note#note_navigator(scope) abort
 endfunction
 
 " ---------------------------------------------------------------------------
-" リンクへのラベルジャンプ（画面先頭を起点にした通し番号）
+" リンクへのラベルジャンプ（画面先頭を起点にした通し番号、最大 30 本）
 "   1-9,0    … その番号のリンクを直接開く（生の数字キー、0は10番目）
-"   文字+数字 … 11番目以降（z1, z2, …, z9, z0, t1, … の2打、1→0順）
+"   g1..g0   … 11〜20番目、z1..z0 … 21〜30番目（2打、1→0順）
+"   頭文字は「1打で完結しない」g と z だけ。p1/b1 等は paste・単語移動を壊すので廃止。
 " ラベルは**今の画面先頭（w0）**のリンクを 1 とし、下へ振って末尾まで行ったら
 " 先頭へ回り込む。だからリンクが大量でも常に「今見えている所の近く」が 1-9,0 に
 " 入り、番号が尽きない（巨大な index.md でも数字だけで全部たどれる）。画面を
 " スクロールすると振り直す（WinScrolled＋debounce。可視範囲だけの計算なので軽い）。
 " 実際に見えている番号・ラベルがリンクの手前に仮想テキストで表示されるので、
 " 数えなくても押すキーが分かる（g:simple_yurii_note_link_hints=0 で無効化）。
-" 11番目以降の文字は、このプラグインがすでに2打コマンドの頭文字として
-" 使っている文字だけを使う（z, t, c, b, m, p, y ─ zc/zp/ta/tt/cu/ca/
-" bu/bc/mp/mx/pe/yn 等）。n は検索リピート（n/N）に使うので外してある。
-" これらの生キーはすでに「次の1打を待つ」状態になっているので、数字を
-" 後ろに続けても新たな干渉や体感速度の悪化は発生しない。a, i, o, … など
-" 他の生キーには一切手を出さない。
+" g/z は単発では完結しない生キー（次の1打を待つ）なので、数字を後ろに続けても
+" 新たな干渉や体感速度の悪化は発生しない。2文字目が数字なので既存の
+" z-コマンド（zn/zk/zp 等）・g-コマンド（gs/gc 等）との重複もない。
 " ---------------------------------------------------------------------------
 
 let s:hint_prop_type = 'yuriiLinkHint'
-let s:hint_label_letters = 'ztcbmpy'
+let s:hint_label_letters = 'gz'
 
-" 通し番号(1始まり)からラベル文字列を作る。1-9,0はそのまま（0は10番目）、
-" 以降は文字+数字（z1, z2, …, z9, z0, t1, …、キー配列と同じ 1→0 順で
-" 10個ずつ）。生の 0 キーは vim 標準の「行頭へ移動」を上書きするが、
-" 該当リンクが無ければ digit_key() 側で通常の 0 に素通しされる。
-" 割り当て切れ（7文字×10 を超える）なら空文字。
+" 通し番号(1始まり)からラベル文字列を作る。1-9,0 はそのまま（0は10番目）。
+" 11番目以降はラベル無し（2文字ラベル z1 等は廃止 — p/b など生キーと
+" 衝突して paste・移動を壊すため。画面外のリンクはスクロールすれば届く）。
 function! s:hint_label(idx) abort
   if a:idx <= 9 | return string(a:idx) | endif
   if a:idx == 10 | return '0' | endif
-  let l:n = a:idx - 11
-  let l:letter_i = l:n / 10
-  let l:pos_in_group = l:n % 10
-  let l:digit = (l:pos_in_group == 9) ? 0 : l:pos_in_group + 1
-  if l:letter_i >= strlen(s:hint_label_letters) | return '' | endif
-  return s:hint_label_letters[l:letter_i] . l:digit
+  return ''
 endfunction
 
 " 現在バッファの候補位置（画面先頭を起点に、末尾で先頭へ回り込む）。
@@ -3368,7 +3359,6 @@ function! s:hint_build_map() abort
   endfor
   return l:map
 endfunction
-
 function! s:hint_ensure_prop_type() abort
   if !has('textprop') | return 0 | endif
   highlight default link SimpleLinkHint Special
