@@ -112,6 +112,7 @@ simple_yurii_note#stack_copy_toggle
 simple_yurii_note#stack_copy_yank_line
 simple_yurii_note#stack_copy_yank_visual
 simple_yurii_note#startup_restore_root
+simple_yurii_note#state_dir
 simple_yurii_note#table_add_col
 simple_yurii_note#table_add_row
 simple_yurii_note#table_align_current

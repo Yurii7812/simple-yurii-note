@@ -431,6 +431,10 @@ function! s:state_dir() abort
   return expand('~/.vim/simple_yurii_note')
 endfunction
 
+function! simple_yurii_note#state_dir() abort
+  return s:state_dir()
+endfunction
+
 function! s:root_state_file() abort
   return s:state_dir() . s:sep() . 'root.txt'
 endfunction
@@ -522,13 +526,21 @@ endfunction
 " 自動保存の対象か（vault ルート配下の .md / .csv。同期が走るのは .md だけ）
 function! simple_yurii_note#is_autosave_target(path) abort
   let l:root = s:get_pkm_root()
-  if empty(l:root) || empty(a:path) || !filereadable(a:path)
+  if empty(a:path) || !filereadable(a:path)
     return 0
   endif
   if a:path !~? '\.\(md\|csv\)$'
     return 0
   endif
   let l:path = fnamemodify(a:path, ':p')
+  " ハブ（state dir の hubs/*.md）は root 外だが自動保存対象。
+  let l:hubdir = fnamemodify(s:state_dir() . '/hubs/', ':p')
+  if stridx(l:path, fnamemodify(l:hubdir, ':p')) == 0
+    return 1
+  endif
+  if empty(l:root)
+    return 0
+  endif
   let l:root = fnamemodify(l:root, ':p')
   return stridx(l:path, l:root) == 0
         \ && index(split(l:path, s:sep()), '.undo') < 0

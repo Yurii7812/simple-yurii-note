@@ -731,6 +731,8 @@ augroup END
 " ---------------------------------------------------------------------------
 
 autocmd BufReadPre,BufNewFile *.md if simple_yurii_note#is_vault_path(expand('<afile>:p')) | setlocal noswapfile | endif
+" ハブも swap を作らない（vault 外なので上記が効かず、残骸 .swp から E325 と読専化が出る）。
+execute 'autocmd BufReadPre,BufNewFile ' . escape(printf('%s/hubs/*.md', simple_yurii_note#state_dir()), '\\ ') . ' setlocal noswapfile noundofile'
 
 augroup simple_yurii_note_lock
   autocmd!
