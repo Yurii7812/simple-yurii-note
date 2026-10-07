@@ -572,11 +572,18 @@ function! simple_yurii_note#lock_add(path) abort
   if empty(a:path) || !simple_yurii_note#is_vault_path(a:path)
     return
   endif
+  " 同じバッファで既に自分が書いていれば書き直さない（BufEnter のたびの
+  " 書き込みを避ける。実測 15ms/回）。PID とパスは変わらないので内容は同じ。
+  let l:key = fnamemodify(a:path, ':p') . '#' . getpid()
+  if get(b:, 'yurii_lock_self', '') ==# l:key
+    return
+  endif
   call writefile([
         \ 'pid=' . getpid(),
         \ 'path=' . fnamemodify(a:path, ':p'),
         \ 'time=' . localtime(),
         \ ], s:lock_path(a:path))
+  let b:yurii_lock_self = l:key
 endfunction
 
 function! simple_yurii_note#lock_remove(path) abort
@@ -1871,9 +1878,11 @@ function! s:find_reciprocal_link_pos(target_path, source_name) abort
   " 呼び出し元は対象ファイルを開いた直後なので、現在のバッファを C 実装の
   " search() で走査する。旧実装は readfile + 全行 Vimscript ループで、
   " 1 万行の index.md へ Parent リンクで戻ると 800ms 超かかっていた。
-  let l:cur = expand('%:p')
+  " `\i`（open_index）経由だと root 末尾の `/` でバッファ名が `.../vault//index.md`
+  " になることがあるため、simplify() で `/` の重複を正規化して比較する。
+  let l:cur = simplify(fnamemodify(expand('%:p'), ':p'))
   if !empty(l:cur)
-        \ && fnamemodify(l:cur, ':p') ==# fnamemodify(a:target_path, ':p')
+        \ && l:cur ==# simplify(fnamemodify(a:target_path, ':p'))
     let l:save = winsaveview()
     try
       let l:hi = line('$')
@@ -3330,9 +3339,16 @@ endfunction
 function! simple_yurii_note#refresh_link_hints() abort
   if !get(g:, 'simple_yurii_note_link_hints', 1) || !has('textprop') | return | endif
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki' | return | endif
+  " 同じ内容（changedtick）で既に作り終えていれば作り直さない。
+  " BufEnter と BufWinEnter が続けて発火する重複と、変更なしの再計算
+  " （InsertLeave など）を丸ごと省く。1 万行 Index では 1 回 35ms 級。
+  if get(b:, 'yurii_hint_built_tick', -1) ==# b:changedtick
+    return
+  endif
   if !s:hint_ensure_prop_type() | return | endif
   call prop_remove({'type': s:hint_prop_type, 'all': v:true})
   let b:yurii_hint_map = s:hint_build_map()
+  let b:yurii_hint_built_tick = b:changedtick
   if empty(b:yurii_hint_map)
     call s:hint_sync_full_maps([])
     return
@@ -4784,12 +4800,18 @@ endfunction
 " 見張りはノート作成時（テンプレート）にだけ入る。無ければ [0, 0] を返し、
 " 呼び出し側が処理を中止する（後から見張りを追加することは決してしない）。
 function! s:v2_boundaries() abort
+  " 内容が同じなら前回の結果を使う。全文後方検索 2 回（1 万行で約 20ms）を
+  " ヒント更新のたびに繰り返さないため。b:changedtick で無効化する。
+  let l:tick = b:changedtick
+  if get(b:, 'yurii_v2_bounds_tick', -1) ==# l:tick
+    return b:yurii_v2_bounds
+  endif
   let l:up_m = s:v2_last_mark(s:v2_up_pat)
   let l:dn_m = s:v2_last_mark(s:v2_down_pat)
-  if l:up_m > 0 && l:dn_m > l:up_m
-    return [l:up_m, l:dn_m]
-  endif
-  return [0, 0]
+  let l:res = (l:up_m > 0 && l:dn_m > l:up_m) ? [l:up_m, l:dn_m] : [0, 0]
+  let b:yurii_v2_bounds = l:res
+  let b:yurii_v2_bounds_tick = l:tick
+  return l:res
 endfunction
 
 " a:rel は末尾に `;` を含みうる（例: `きっかけ;` = sync に自動ミラーさせない
