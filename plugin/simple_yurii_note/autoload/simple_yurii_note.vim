@@ -10372,25 +10372,36 @@ function! s:mount_cache_reset() abort
   endif
 endfunction
 
+" vault の暗号状態を1か所で判定して返す。判定が各所に散ると、ある経路で変数が
+" 未定義になる／平文とロックを取り違える（2026-10-08 の E121 の原因）ので、
+" mount/lock/set_password はこれを使う。
+"   layout     : 'note'（A/note 型）| 'flat'（A 直置き型）
+"   cipher     : 暗号箱パス（conf があればそれ、無ければ新規候補）
+"   has_cipher : gocryptfs.conf が読めるか
+"   mounted    : FUSE マウント中か
+"   plain_flat : 直置き型で中身がある（＝平文 vault。旧暗号箱が残っていても暗号扱いしない）
+"   encrypted  : :SimpleSetPassword 用。マウント中 or 暗号箱あり（plain_flat を除く）
+"   locked     : ロック中（暗号箱あり・未マウント・平文再作成でない）
+function! s:vault_status() abort
+  let l:root = s:vault_clean()
+  let l:st = {'root': l:root, 'layout': '', 'cipher': '', 'has_cipher': 0,
+        \ 'mounted': 0, 'plain_flat': 0, 'encrypted': 0, 'locked': 0}
+  if empty(l:root)
+    return l:st
+  endif
+  let l:st.layout = fnamemodify(l:root, ':t') ==# 'note' ? 'note' : 'flat'
+  let l:st.cipher = simple_yurii_note#cipher_dir()
+  let l:st.has_cipher = !empty(l:st.cipher) && filereadable(l:st.cipher . s:sep() . 'gocryptfs.conf')
+  let l:st.mounted = (simple_yurii_note#vault_mounted() == 1)
+  let l:st.plain_flat = (l:st.layout ==# 'flat' && s:dir_has_content(l:root))
+  let l:st.encrypted = l:st.mounted || (l:st.has_cipher && !l:st.plain_flat)
+  let l:st.locked = l:st.has_cipher && !l:st.mounted && !l:st.plain_flat
+  return l:st
+endfunction
+
 " vault が暗号箱持ちでロック中なら 1（暗号箱なし vault はいつも 0）
 function! simple_yurii_note#vault_locked_flag() abort
-  let l:root = s:vault_clean()
-  if empty(l:root)
-    return 0
-  endif
-  let l:cipher = simple_yurii_note#cipher_dir()
-  if empty(l:cipher) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
-    return 0
-  endif
-  if simple_yurii_note#vault_mounted() == 1
-    return 0
-  endif
-  " 直置き型（A 自身が root）で中身がある＝ロックされた mountpoint ではなく
-  " 平文の vault が再作成された状態。同名の旧暗号箱があってもロック扱いにしない。
-  if fnamemodify(l:root, ':t') !=# 'note' && s:dir_has_content(l:root)
-    return 0
-  endif
-  return 1
+  return s:vault_status().locked
 endfunction
 
 " 一時パスワードファイル（0600, すぐ消す）
@@ -10569,22 +10580,11 @@ function! simple_yurii_note#set_password() abort
     echohl NONE
     return
   endif
-  " 判定: 暗号化済み（=パスワード変更）か、未暗号化（=init）か
-  "   ・マウント済み → 変更
-  "   ・root が A/note 型 → A/.crypt に conf があれば変更
-  "   ・root が直置き型（note 無し）→ 中身があれば平文 vault なので init（レイアウト変換）。
-  "     空で旧配置の conf があるときだけ「ロック中の legacy vault」として変更扱い。
-  let l:cipher = simple_yurii_note#cipher_dir()
-  let l:encrypted = (simple_yurii_note#vault_mounted() == 1)
-  if !l:encrypted
-    if fnamemodify(l:root, ':t') ==# 'note'
-      let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
-    elseif s:dir_has_content(l:root)
-      let l:encrypted = 0
-    else
-      let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
-    endif
-  endif
+  " 判定: 暗号化済み（=パスワード変更）か、未暗号化（=init）か。判定は
+  " s:vault_status() に一元化（マウント中／A/note 型で conf あり／直置きで中身あり＝平文）。
+  let l:st = s:vault_status()
+  let l:cipher = l:st.cipher
+  let l:encrypted = l:st.encrypted
   " 未暗号化 vault = 今からノート全体を暗号化して始める（init）
   if !l:encrypted
     return simple_yurii_note#init_encrypted()
@@ -10708,18 +10708,19 @@ function! s:init_encrypted_impl() abort
       throw 'mount 失敗: ' . trim(substitute(l:out, "\n", ' ', 'g'))
     endif
     let l:stage = 'copy'
-    let l:out = system('cp -a ' . shellescape(l:plaindir) . '/. ' . shellescape(l:root) . '/ 2>&1')
+    let l:out = system('cp -a --no-preserve=xattr,context,mode,ownership ' . shellescape(l:plaindir) . '/. ' . shellescape(l:root) . '/ 2>&1')
     if v:shell_error != 0
       throw 'copy 失敗'
     endif
     let l:stage = 'verify'
-    let l:a = trim(system('find ' . shellescape(l:plaindir) . ' -mindepth 1 2>/dev/null | wc -l'))
-    let l:b = trim(system('find ' . shellescape(l:root) . ' -mindepth 1 2>/dev/null | wc -l'))
-    if str2nr(l:a) != str2nr(l:b)
-      throw printf('件数不一致 plain=%s mounted=%s', l:a, l:b)
+    let l:out = system('diff -rq --no-dereference ' . shellescape(l:plaindir)
+          \ . ' ' . shellescape(l:root) . ' 2>&1 | head -20')
+    if v:shell_error != 0
+      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))
     endif
     let l:stage = 'done'
-    " 平文の退避は暗号箱へ移し終えたので消す（残すと平文がディスクに漏れる）
+    " verify 済みだが FUSE 越しで silent corruption の可能性はゼロではない。
+    " 本当の安全を取るなら plaindir を残してユーザーに rm させることも可（重い）。
     call system('rm -rf ' . shellescape(l:plaindir))
     " FUSE 内に .crypt symlink（../<cipher>）を保存しておく
     " （mount後に作ると暗号ファイルとして格納され、再マウント時も表示される）
