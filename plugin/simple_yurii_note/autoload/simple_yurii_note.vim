@@ -3621,14 +3621,17 @@ function! s:hint_sync_full_maps(labels) abort
 endfunction
 
 " リンク手前に、ラベル（1-9 / 文字+数字）を画面先頭起点で仮想テキスト表示する。
-function! simple_yurii_note#refresh_link_hints() abort
+function! simple_yurii_note#refresh_link_hints(...) abort
   if !get(g:, 'simple_yurii_note_link_hints', 1) || !has('textprop') | return | endif
   if &l:filetype !=# 'markdown' && &l:filetype !=# 'vimwiki' | return | endif
-  " 同じ内容（changedtick）で既に作り終えていれば作り直さない。
-  " BufEnter と BufWinEnter が続けて発火する重複と、変更なしの再計算
-  " （InsertLeave など）を丸ごと省く。ラベルはドキュメント固定なので
-  " スクロールでは作り直す必要がない。
   if get(b:, 'yurii_hint_built_tick', -1) ==# b:changedtick
+    return
+  endif
+  " 初回（hint_build_map 未実行）は defer する（a:1=force で同期待機）。
+  " スクロールや変更での再計算（バッファが既に開いている状態）は同期待機のまま。
+  if a:0 == 0 && get(b:, 'yurii_hint_deferred', 0) == 0
+    let b:yurii_hint_deferred = 1
+    call timer_start(300, function('simple_yurii_note#refresh_link_hints', [1]))
     return
   endif
   if !s:hint_ensure_prop_type() | return | endif
@@ -3666,7 +3669,7 @@ endfunction
 "  見えるのを防ぐ。ラベル更新は debounce されるが数字ジャンプは常に最新を見る。）
 function! simple_yurii_note#digit_key(idx, key) abort
   if !has_key(b:, 'yurii_hint_map')
-    call simple_yurii_note#refresh_link_hints()
+    call simple_yurii_note#refresh_link_hints(1)
   endif
   let l:label = a:idx == 10 ? '0' : printf('%d', a:idx)
   let l:cands = get(get(b:, 'yurii_hint_map', {}), l:label, [])
