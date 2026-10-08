@@ -1386,6 +1386,18 @@ endfunction
 
 function! simple_yurii_note#choose_index_root() abort
   let l:current_root = s:get_pkm_root()
+  " 暗号化 vault がマウント中なら、切り替え前にロックする。ロックできなければ
+  " 切り替えを中止する（未ロックのまま異動すると Vim 終了時に mountpoint に
+  " 平文が残る）。
+  if !empty(l:current_root) && simple_yurii_note#vault_mounted(l:current_root) == 1
+    call simple_yurii_note#lock_vault(l:current_root)
+    if simple_yurii_note#vault_mounted(l:current_root) == 1
+      echohl ErrorMsg
+      echom 'simple_yurii_note: vault のロックに失敗したため切り替えを中止'
+      echohl NONE
+      return ''
+    endif
+  endif
   let l:new_root = s:setup_root_and_index(1)
   if empty(l:new_root)
     return ''
