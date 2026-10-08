@@ -1386,18 +1386,14 @@ endfunction
 
 function! simple_yurii_note#choose_index_root() abort
   let l:current_root = s:get_pkm_root()
-  " 暗号化 vault がマウント中ならロックするか確認する
+  " vault 切り替え前に暗号化 vault を自動ロック（fusermount を放置しない）
   if !empty(l:current_root) && simple_yurii_note#vault_mounted(l:current_root) == 1
-    let l:yn = input('vault はマウント中です。ロックしてから切り替えますか？ (y/n): ')
-    if l:yn ==# 'y' || l:yn ==# 'Y'
-      call simple_yurii_note#lock_vault()
-      if simple_yurii_note#vault_mounted(l:current_root) == 1
-        echohl ErrorMsg
-        echom 'simple_yurii_note: ロックに失敗（他アプリが開いている可能性）'
-        echom '  :SimpleLock で再試行するか、そのまま :YuriiChooseIndex で切り替えてください'
-        echohl NONE
-        return ''
-      endif
+    call simple_yurii_note#lock_vault()
+    if simple_yurii_note#vault_mounted(l:current_root) == 1
+      echohl ErrorMsg
+      echom 'simple_yurii_note: vault のロックに失敗。他アプリが vault 内のファイルを開いていないか確認してください'
+      echohl NONE
+      return ''
     endif
   endif
   let l:new_root = s:setup_root_and_index(1)
