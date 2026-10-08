@@ -1090,6 +1090,11 @@ function! s:setup_persistent_undo_for_root(root) abort
   if empty(a:root)
     return
   endif
+  " ロック中は .undo を作らない。gocryptfs が空でないマウントポイントを拒否する。
+  if simple_yurii_note#vault_locked_flag() == 1
+    set noundofile
+    return
+  endif
   let l:root_abs = fnamemodify(a:root, ':p')
   let l:root_abs = substitute(l:root_abs, s:sep() . '\+$', '', '')
   let l:undo_dir = l:root_abs . s:sep() . '.undo'
@@ -10385,6 +10390,21 @@ function! s:mount_cache_reset() abort
   endif
 endfunction
 
+" mountpoint 直下のゴミ（.state / .undo）を gocryptfs のマウント前に削除する。
+" ロック中に vimrc やプラグインの初期化が mountpoint に書いてしまったファイルが
+" あると、gocryptfs は空でないマウントポイントを拒否する。
+function! s:clear_mountpoint_garbage(root) abort
+  if empty(a:root) || !isdirectory(a:root)
+    return
+  endif
+  for l:name in ['.state', '.undo']
+    let l:dir = a:root . s:sep() . l:name
+    if isdirectory(l:dir)
+      call system('rm -rf ' . shellescape(l:dir))
+    endif
+  endfor
+endfunction
+
 " vault の暗号状態を1か所で判定して返す。判定が各所に散ると、ある経路で変数が
 " 未定義になる／平文とロックを取り違える（2026-10-08 の E121 の原因）ので、
 " mount/lock/set_password はこれを使う。
@@ -10426,7 +10446,12 @@ function! s:temp_passfile(pw) abort
 endfunction
 
 " パスワードを聞いてマウント（成功=1、空入力/3回失敗=0）
+" マウント前に mountpoint 内のゴミ（.state / .undo / hacks 等）を掃除する。
+" gocryptfs は「空でないマウントポイント」を拒否するため、起動時の vimrc や
+" プラグインの初期化がロック中に mountpoint へファイルを作ると、正しいパスワード
+" でもマウントに失敗する。
 function! s:mount_by_password(cipher, root) abort
+  call s:clear_mountpoint_garbage(a:root)
   for l:i in range(3)
     let l:pw = inputsecret('vault password: ')
     if empty(l:pw)
@@ -10715,6 +10740,7 @@ function! s:init_encrypted_impl() abort
     endif
     let l:stage = 'mount'
     call mkdir(l:root, 'p')
+    call s:clear_mountpoint_garbage(l:root)
     let l:out = system('gocryptfs -passfile=' . shellescape(l:pf) . ' ' . shellescape(l:cipher)
           \ . ' ' . shellescape(l:root) . ' 2>&1')
     if v:shell_error != 0
