@@ -425,6 +425,42 @@ endfunction
 
 
 function! s:state_dir() abort
+  " vault（PKM ルート）の .state/ を優先する。
+  " vault 全体を暗号化（gocryptfs 等）している場合、ノートタイトル等を含む
+  " 状態（hub / recent / locks）もいっしょに暗号化されるように置く場所を
+  " vault 内へ統一する。未設定時のみ従来の stdpath に落ちる。
+  if !empty(get(g:, 'simple_yurii_note_state_in_vault', 1))
+    let l:root = ''
+    if exists('g:simple_yurii_note_root') && !empty(trim(g:simple_yurii_note_root))
+      let l:root = trim(g:simple_yurii_note_root)
+    else
+      " 障害時に古い場所へ戻せるよう既存の root.txt も尊重する
+      let l:legacy = (exists('*stdpath') ? stdpath('data') : expand('~/.vim')) . s:sep() . 'simple_yurii_note'
+      let l:rootfile = l:legacy . s:sep() . 'root.txt'
+      if filereadable(l:rootfile)
+        let l:lines = readfile(l:rootfile)
+        if !empty(l:lines) && !empty(trim(l:lines[0]))
+          let l:root = trim(l:lines[0])
+        endif
+      endif
+    endif
+    if !empty(l:root)
+      let l:root = fnamemodify(expand(l:root), ':p')
+      let l:dir = l:root . s:sep() . '.state'
+      if !isdirectory(l:dir)
+        try
+          call mkdir(l:dir, 'p')
+        catch
+          return s:state_dir_legacy()
+        endtry
+      endif
+      return l:dir
+    endif
+  endif
+  return s:state_dir_legacy()
+endfunction
+
+function! s:state_dir_legacy() abort
   if exists('*stdpath')
     return stdpath('data') . s:sep() . 'simple_yurii_note'
   endif
@@ -435,8 +471,66 @@ function! simple_yurii_note#state_dir() abort
   return s:state_dir()
 endfunction
 
+" 旧 state_dir（~/.vim/simple_yurii_note など）の状態を vault 内 .state/ へ1回だけ引っ越す。
+" 引っ越すのは vault の中身由来のデータ（hubs / hubs.json / recent.json / locks）だけ。
+" root.txt は vault を探すためのブートストラップなので残す（vault の場所は暗号対象外）。
+function! simple_yurii_note#migrate_state_into_vault() abort
+  if empty(get(g:, 'simple_yurii_note_state_in_vault', 1))
+    return
+  endif
+  let l:legacy = s:state_dir_legacy()
+  let l:newdir = s:state_dir()
+  " 失敗時などで新旧が同じなら何もしない
+  if l:newdir ==# l:legacy || !isdirectory(l:legacy)
+    return
+  endif
+  let l:stamp = l:newdir . s:sep() . '.migrated_from_legacy'
+  if filereadable(l:stamp)
+    return
+  endif
+  for l:name in ['hubs', 'hubs.json', 'recent.json', 'locks']
+    let l:src = l:legacy . s:sep() . l:name
+    if !isdirectory(l:src) && !filereadable(l:src)
+      continue
+    endif
+    let l:dst = l:newdir . s:sep() . l:name
+    if isdirectory(l:src)
+      if !isdirectory(l:dst)
+        call mkdir(l:dst, 'p')
+      endif
+      for l:entry in split(glob(l:src . '/*', 1), "\n")
+        let l:base = fnamemodify(l:entry, ':t')
+        if !filereadable(l:dst . s:sep() . l:base)
+          call rename(l:entry, l:dst . s:sep() . l:base)
+        endif
+      endfor
+    elseif !filereadable(l:dst)
+      call rename(l:src, l:dst)
+    endif
+  endfor
+  " 全移動後に空になった legacy のディレクトリを掃除（root.txt は無視）
+  for l:name in ['hubs', 'hubs.json', 'recent.json', 'locks']
+    let l:src = l:legacy . s:sep() . l:name
+    if !isdirectory(l:src)
+      continue
+    endif
+    if empty(glob(l:src . s:sep() . '*', 1))
+      try
+        call delete(l:src, 'd')
+      catch
+      endtry
+    endif
+  endfor
+  try
+    call writefile([l:legacy], l:stamp)
+  catch
+  endtry
+endfunction
+
 function! s:root_state_file() abort
-  return s:state_dir() . s:sep() . 'root.txt'
+  " root.txt は vault を探すためのブートストラップなので、
+  " vault 外（旧 state dir）に置いたままにする
+  return s:state_dir_legacy() . s:sep() . 'root.txt'
 endfunction
 
 function! s:load_persisted_root() abort
@@ -10107,4 +10201,90 @@ function! simple_yurii_note#open_web() abort
   else
     echoerr 'simple_yurii_note: no browser found'
   endif
+endfunction
+
+
+" ---------------------------------------------------------------------------
+" vault の gocryptfs 運用（パスワード変更 / 終了時の残留掃除）
+" ---------------------------------------------------------------------------
+
+" vault を指している root（末尾スラッシュを整えた形）
+function! s:cipher_root() abort
+  let l:root = s:get_pkm_root()
+  if empty(l:root)
+    return ''
+  endif
+  let l:root = substitute(l:root, s:sep() . '\+$', '', '')
+  return l:root
+endfunction
+
+" 暗号ディレクトリ（<vault>.crypt、g: で上書き可）
+function! simple_yurii_note#cipher_dir() abort
+  if !empty(get(g:, 'simple_yurii_note_cipher_dir', ''))
+    return fnamemodify(expand(g:simple_yurii_note_cipher_dir), ':p')
+  endif
+  let l:root = s:cipher_root()
+  return empty(l:root) ? '' : l:root . '.crypt'
+endfunction
+
+" vault が FUSE マウント中か（mountpoint コマンド）
+function! simple_yurii_note#vault_mounted(...) abort
+  let l:root = empty(a:000) ? s:cipher_root() : a:1
+  if empty(l:root)
+    return -1
+  endif
+  if !exists('s:mounted_cache')
+    let s:mounted_cache = {'time': 0, 'val': -1}
+  endif
+  let l:now = reltimefloat(reltime())
+  if l:now - s:mounted_cache.time < 2 && s:mounted_cache.val >= 0
+    return s:mounted_cache.val
+  endif
+  call system('mountpoint -q ' . shellescape(l:root))
+  let s:mounted_cache = {'time': l:now, 'val': v:shell_error == 0 ? 1 : 0}
+  return s:mounted_cache.val
+endfunction
+
+" パスワード変更（gocryptfs -passwd）。マウント中は不可。
+function! simple_yurii_note#set_password() abort
+  let l:cipher = simple_yurii_note#cipher_dir()
+  if empty(l:cipher) || !isdirectory(l:cipher)
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 暗号ディレクトリが見つからない: ' . l:cipher
+    echohl NONE
+    return
+  endif
+  if simple_yurii_note#vault_mounted() == 1
+    echohl WarningMsg
+    echom 'simple_yurii_note: vault がマウント中。終了/ロック後に実行して（:q してから）'
+    echohl NONE
+    return
+  endif
+  if !has('terminal')
+    echohl WarningMsg
+    echom 'simple_yurii_note: :terminal が無い。手動で実行: gocryptfs -passwd ' . l:cipher
+    echohl NONE
+    return
+  endif
+  execute 'terminal gocryptfs -passwd ' . shellescape(l:cipher)
+endfunction
+
+" Vim 終了時: vault の中身由来の残留（recent.json / viminfo）を消す。
+function! simple_yurii_note#exit_cleanup() abort
+  " recent.json（visit 履歴。残留させない方針）
+  try
+    let l:recent = s:state_dir() . s:sep() . 'recent.json'
+    if filereadable(l:recent)
+      call delete(l:recent)
+    endif
+  catch
+  endtry
+  " viminfo（ヤンク本文等が落ちるファイルを vault 内に寄せて、終了時に消す）
+  try
+    let l:vi = &viminfofile
+    if !empty(l:vi) && filereadable(l:vi) && stridx(l:vi, expand('~/.viminfo')) != 0
+      call delete(l:vi)
+    endif
+  catch
+  endtry
 endfunction

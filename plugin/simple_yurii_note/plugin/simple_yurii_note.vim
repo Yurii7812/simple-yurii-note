@@ -218,6 +218,11 @@ command!          SimpleWeb  call simple_yurii_note#open_web()
 " ゴミ箱（ソフト削除）
 command!          SimpleTrash      call simple_yurii_note#trash_current()
 command!          SimpleTrashList  call simple_yurii_note#trash_list()
+" vault の gocryptfs パスワード変更（マウント中は不可。閉じてから実行）
+command!          SimpleSetPassword call simple_yurii_note#set_password()
+command!          SimpleYuriinoteSetPassword call simple_yurii_note#set_password()
+" 終了時に vault 外へ残留させない（recent.json / viminfo を消す）
+command!          SimpleExitCleanup call simple_yurii_note#exit_cleanup()
 " テーブル操作コマンド
 command! -nargs=* TN         call simple_yurii_note#table_new(<q-args>)
 command! -nargs=* NewTable   call simple_yurii_note#table_new(<q-args>)
@@ -742,6 +747,12 @@ augroup END
 
 autocmd VimEnter * call simple_yurii_note#cleanup_stale_locks()
 
+" 旧 state_dir の状態を vault 内 .state/ へ1回だけ移行（root.txt は残す）
+augroup simple_yurii_note_migrate_state
+  autocmd!
+  autocmd VimEnter * call simple_yurii_note#migrate_state_into_vault()
+augroup END
+
 " ---------------------------------------------------------------------------
 " AutoSync: BufWritePost で update_one を起動
 " ---------------------------------------------------------------------------
@@ -850,3 +861,9 @@ endif
 " ---------------------------------------------------------------------------
 nnoremap <silent> \sc <Cmd>CopyStack<CR>
 command! CopyStack call simple_yurii_note#stack_copy_toggle()
+
+" 終了時に recent.json / viminfo を消す（vault 内に寄せたものを残留させない）
+augroup simple_yurii_note_exit_cleanup
+  autocmd!
+  autocmd VimLeave * call simple_yurii_note#exit_cleanup()
+augroup END

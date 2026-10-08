@@ -16,6 +16,7 @@ simple_yurii_note#autosync_on_save
 simple_yurii_note#check_missing_prefix_in_current_dir
 simple_yurii_note#check_missing_prefix_in_current_dir_once
 simple_yurii_note#choose_index_root
+simple_yurii_note#cipher_dir
 simple_yurii_note#cleanup_stale_locks
 simple_yurii_note#clear_title_cache
 simple_yurii_note#clipboard_copy
@@ -29,6 +30,7 @@ simple_yurii_note#current_file
 simple_yurii_note#current_title
 simple_yurii_note#digit_key
 simple_yurii_note#ensure_root_and_index
+simple_yurii_note#exit_cleanup
 simple_yurii_note#expand_s_under_cursor
 simple_yurii_note#get_link_under_cursor
 simple_yurii_note#go_back
@@ -58,6 +60,7 @@ simple_yurii_note#linkify_selection_new_note
 simple_yurii_note#lock_add
 simple_yurii_note#lock_remove
 simple_yurii_note#make_link
+simple_yurii_note#migrate_state_into_vault
 simple_yurii_note#move_visible
 simple_yurii_note#new_child
 simple_yurii_note#new_here_typed
@@ -102,6 +105,7 @@ simple_yurii_note#replace_visual_selection
 simple_yurii_note#resolve_link
 simple_yurii_note#save_before_normal_jump
 simple_yurii_note#save_current_note
+simple_yurii_note#set_password
 simple_yurii_note#set_yomi
 simple_yurii_note#sort_selection
 simple_yurii_note#sort_time
@@ -152,6 +156,7 @@ simple_yurii_note#v2_new_group_visual
 simple_yurii_note#v2_new_here
 simple_yurii_note#v2_new_parent
 simple_yurii_note#v2_new_plain
+simple_yurii_note#vault_mounted
 simple_yurii_note#visual_new_prefix_note
 simple_yurii_note#visual_new_quick_no_title
 simple_yurii_note#write_guide
