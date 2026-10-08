@@ -867,3 +867,12 @@ augroup simple_yurii_note_exit_cleanup
   autocmd!
   autocmd VimLeave * call simple_yurii_note#exit_cleanup()
 augroup END
+
+" vault が gocryptfs 管理でロック中のとき、:MOUNT / :LOCK / temissazved な書き込みガード
+command!          SimpleMount      call simple_yurii_note#mount_vault()
+command!          SimpleMountVault call simple_yurii_note#mount_vault()
+augroup simple_yurii_note_encrypted_guard
+  autocmd!
+  autocmd BufWritePre * call simple_yurii_note#guard_vault_write(expand('<afile>:p'))
+  autocmd BufEnter    * call simple_yurii_note#vault_locked_buffer_hint()
+augroup END
