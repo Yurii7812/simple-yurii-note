@@ -10574,15 +10574,14 @@ function! simple_yurii_note#set_password() abort
   "   ・root が A/note 型 → A/.crypt に conf があれば変更
   "   ・root が直置き型（note 無し）→ 中身があれば平文 vault なので init（レイアウト変換）。
   "     空で旧配置の conf があるときだけ「ロック中の legacy vault」として変更扱い。
+  let l:cipher = simple_yurii_note#cipher_dir()
   let l:encrypted = (simple_yurii_note#vault_mounted() == 1)
   if !l:encrypted
     if fnamemodify(l:root, ':t') ==# 'note'
-      let l:cipher = simple_yurii_note#cipher_dir()
       let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
     elseif s:dir_has_content(l:root)
       let l:encrypted = 0
     else
-      let l:cipher = simple_yurii_note#cipher_dir()
       let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
     endif
   endif
