@@ -1386,16 +1386,18 @@ endfunction
 
 function! simple_yurii_note#choose_index_root() abort
   let l:current_root = s:get_pkm_root()
-  " 暗号化 vault がマウント中なら、切り替え前にロックする。ロックできなければ
-  " 切り替えを中止する（未ロックのまま異動すると Vim 終了時に mountpoint に
-  " 平文が残る）。
+  " 暗号化 vault がマウント中ならロックするか確認する
   if !empty(l:current_root) && simple_yurii_note#vault_mounted(l:current_root) == 1
-    call simple_yurii_note#lock_vault(l:current_root)
-    if simple_yurii_note#vault_mounted(l:current_root) == 1
-      echohl ErrorMsg
-      echom 'simple_yurii_note: vault のロックに失敗したため切り替えを中止'
-      echohl NONE
-      return ''
+    let l:yn = input('vault はマウント中です。ロックしてから切り替えますか？ (y/n): ')
+    if l:yn ==# 'y' || l:yn ==# 'Y'
+      call simple_yurii_note#lock_vault()
+      if simple_yurii_note#vault_mounted(l:current_root) == 1
+        echohl ErrorMsg
+        echom 'simple_yurii_note: ロックに失敗（他アプリが開いている可能性）'
+        echom '  :SimpleLock で再試行するか、そのまま :YuriiChooseIndex で切り替えてください'
+        echohl NONE
+        return ''
+      endif
     endif
   endif
   let l:new_root = s:setup_root_and_index(1)
