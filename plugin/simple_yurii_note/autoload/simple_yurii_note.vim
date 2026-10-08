@@ -3541,10 +3541,10 @@ function! s:hint_label(idx) abort
 endfunction
 
 " 現在バッファの候補位置（ドキュメント順：本文 → Parent/Child。ラベルは 40 個で
-" 一周するので、回り込みを正しくするには全リンクが要る。上限 400 本で打ち切り）。
+" 一周するので、回り込みを正しくするには全リンクが要る。上限なし＝全件）。
 " digit_key / ラベル表示の両方がこの並びを使う。
 function! s:hint_positions() abort
-  let l:max = 400
+  let l:max = 0
   let [l:up_m, l:dn_m] = s:v2_boundaries()
   if l:up_m > 0
     let l:pos = s:link_positions_in_range_limited(1, l:up_m - 1, l:max)
