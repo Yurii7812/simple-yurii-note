@@ -64,20 +64,20 @@ MONO_FONT_CANDIDATES = (
     "Courier New",
 )
 
-COL_BG = "#f4f5f7"
+COL_BG = "#f6f8fa"
 COL_CARD = "#ffffff"
-COL_BORDER = "#d0d4da"
-COL_TEXT = "#1c1f23"
-COL_MUTED = "#6a7078"
-COL_ACCENT = "#1a6fd4"
+COL_BORDER = "#d9dfe6"
+COL_TEXT = "#1a1e23"
+COL_MUTED = "#5f6871"
+COL_ACCENT = "#2264b0"
 COL_ACCENT_TEXT = "#ffffff"
-COL_CANVAS = "#202020"
-COL_PREVIEW = "#2b2b2b"
-COL_DONE = "#1a7f37"
-COL_PENDING = "#9aa0a6"
+COL_CANVAS = "#26282c"
+COL_PREVIEW = "#26282c"
+COL_DONE = "#1f7a3d"
+COL_DANGER = "#b8503f"
 
-FONT_SIZES = {"title": 16, "section": 11, "body": 10, "small": 9,
-              "input": 16, "progress": 20}
+FONT_SIZES = {"title": 22, "section": 14, "body": 15, "small": 13,
+              "input": 20, "progress": 36}
 
 
 @dataclass
@@ -162,8 +162,8 @@ class ScanApp:
         self.vault_root = Path(vault_root).resolve()
         self.dest = Path(dest).resolve()
         self.root.title(APP_TITLE)
-        self.root.geometry("1280x820")
-        self.root.minsize(980, 680)
+        self.root.geometry("1400x900")
+        self.root.minsize(1080, 760)
 
         self.folder: Optional[Path] = None
         self.items: list[ImageItem] = []
@@ -246,104 +246,146 @@ class ScanApp:
         style.configure("TLabel", background=COL_BG, foreground=COL_TEXT, font=(self.ui_font, body))
         style.configure("Card.TLabel", background=COL_CARD, foreground=COL_TEXT, font=(self.ui_font, body))
         style.configure("CardMuted.TLabel", background=COL_CARD, foreground=COL_MUTED, font=(self.ui_font, small))
-        style.configure("Title.TLabel", background=COL_BG, foreground=COL_TEXT, font=(self.ui_font, FONT_SIZES["title"], "bold"))
-        style.configure("Subtitle.TLabel", background=COL_BG, foreground=COL_MUTED, font=(self.ui_font, small))
+        style.configure("CardNote.TLabel", background=COL_CARD, foreground=COL_MUTED, font=(self.ui_font, body))
+        style.configure("Title.TLabel", background=COL_BG, foreground=COL_TEXT,
+                        font=(self.ui_font, FONT_SIZES["title"], "bold"))
+        style.configure("Subtitle.TLabel", background=COL_BG, foreground=COL_MUTED, font=(self.ui_font, body))
         style.configure("Muted.TLabel", background=COL_BG, foreground=COL_MUTED, font=(self.ui_font, small))
-        style.configure("Mono.TLabel", background=COL_BG, foreground=COL_TEXT, font=(self.mono_font, body, "bold"))
-        style.configure("MonoCard.TLabel", background=COL_CARD, foreground=COL_TEXT, font=(self.mono_font, body, "bold"))
-        style.configure("Preview.TLabel", background=COL_CARD, foreground=COL_ACCENT, font=(self.mono_font, small, "bold"))
-        style.configure("ProgressNum.TLabel", background=COL_CARD, foreground=COL_ACCENT, font=(self.ui_font, FONT_SIZES["progress"], "bold"))
-        style.configure("Chip.TLabel", background="#e8ebf0", foreground=COL_TEXT,
-                        font=(self.mono_font, small, "bold"), padding=(6, 1),
-                        relief="solid", borderwidth=1)
-        style.configure("TButton", padding=(10, 5), font=(self.ui_font, body))
+        style.configure("Status.TLabel", background=COL_BG, foreground=COL_TEXT, font=(self.ui_font, body))
+        style.configure("Mono.TLabel", background=COL_BG, foreground=COL_MUTED, font=(self.mono_font, body))
+        style.configure("MonoCard.TLabel", background=COL_CARD, foreground=COL_MUTED, font=(self.mono_font, body))
+        style.configure("Preview.TLabel", background=COL_CARD, foreground=COL_MUTED, font=(self.ui_font, small))
+        style.configure("ProgressNum.TLabel", background=COL_CARD, foreground=COL_ACCENT,
+                        font=(self.ui_font, FONT_SIZES["progress"], "bold"))
+        style.configure("PrevId.TLabel", background=COL_CARD, foreground=COL_TEXT,
+                        font=(self.mono_font, FONT_SIZES["input"]))
+        # ボタンは大きくはっきり（らくらくスマホ風）
+        style.configure("TButton", padding=(18, 10), font=(self.ui_font, body),
+                        background=COL_CARD, foreground=COL_TEXT,
+                        borderwidth=1, bordercolor=COL_BORDER, relief="solid")
+        style.map("TButton",
+                  background=[("active", "#eef2f6"), ("pressed", "#e2e8ee")],
+                  bordercolor=[("active", "#b9c5d2")])
+        style.configure("Big.TButton", padding=(26, 14), font=(self.ui_font, body + 2, "bold"),
+                        background=COL_CARD, foreground=COL_TEXT,
+                        borderwidth=1, bordercolor=COL_BORDER, relief="solid")
+        style.map("Big.TButton",
+                  background=[("active", "#eef2f6"), ("pressed", "#e2e8ee")],
+                  bordercolor=[("active", "#b9c5d2")])
         style.configure("Accent.TButton", font=(self.ui_font, body, "bold"),
                         foreground=COL_ACCENT_TEXT, background=COL_ACCENT,
-                        padding=(18, 8), borderwidth=0)
+                        padding=(20, 10), borderwidth=0)
         style.map("Accent.TButton",
-                  background=[("active", "#155bb0"), ("pressed", "#0f4d99"), ("disabled", "#a9c5e8")],
-                  foreground=[("disabled", "#eef4fb")])
+                  background=[("active", "#1c5496"), ("pressed", "#174880"), ("disabled", "#b3c8de")],
+                  foreground=[("disabled", "#eef4fa")])
+        style.configure("BigAccent.TButton", font=(self.ui_font, body + 2, "bold"),
+                        foreground=COL_ACCENT_TEXT, background=COL_ACCENT,
+                        padding=(30, 14), borderwidth=0)
+        style.map("BigAccent.TButton",
+                  background=[("active", "#1c5496"), ("pressed", "#174880"), ("disabled", "#b3c8de")],
+                  foreground=[("disabled", "#eef4fa")])
+        style.configure("Finish.TButton", font=(self.ui_font, body, "bold"),
+                        foreground=COL_ACCENT_TEXT, background=COL_DONE,
+                        padding=(20, 10), borderwidth=0)
+        style.map("Finish.TButton",
+                  background=[("active", "#186a34"), ("pressed", "#155d2e"), ("disabled", "#a8c9b3")],
+                  foreground=[("disabled", "#f0f7f2")])
+        style.configure("Danger.TButton", font=(self.ui_font, body, "bold"),
+                        foreground=COL_DANGER, background=COL_CARD,
+                        borderwidth=1, bordercolor=COL_BORDER, relief="solid", padding=(18, 10))
+        style.map("Danger.TButton",
+                  background=[("active", "#f6e9e6"), ("pressed", "#f0dcd7")],
+                  bordercolor=[("active", "#d8b3aa")])
         style.configure("Card.TLabelframe", background=COL_CARD, bordercolor=COL_BORDER,
                         relief="solid", borderwidth=1)
-        style.configure("Card.TLabelframe.Label", background=COL_CARD, foreground=COL_ACCENT,
-                        font=(self.ui_font, FONT_SIZES["section"], "bold"))
-        style.configure("Treeview", rowheight=52, font=(self.ui_font, body),
+        style.configure("Card.TLabelframe.Label", background=COL_BG, foreground=COL_MUTED,
+                        font=(self.ui_font, FONT_SIZES["section"]))
+        style.configure("Treeview", rowheight=76, font=(self.ui_font, body),
                         background=COL_CARD, fieldbackground=COL_CARD,
                         foreground=COL_TEXT, borderwidth=0)
-        style.configure("Treeview.Heading", font=(self.ui_font, body, "bold"), padding=(4, 6))
+        style.configure("Treeview.Heading", font=(self.ui_font, small), padding=(8, 9),
+                        background=COL_BG, foreground=COL_MUTED, borderwidth=0)
+        style.map("Treeview.Heading", background=[("active", COL_BG)])
         style.map("Treeview", background=[("selected", COL_ACCENT)],
                   foreground=[("selected", COL_ACCENT_TEXT)])
-        style.configure("TEntry", fieldbackground="#ffffff", padding=4)
-        style.configure("TCombobox", padding=3)
+        style.configure("TEntry", fieldbackground=COL_CARD, foreground=COL_TEXT,
+                        padding=8, borderwidth=1, bordercolor=COL_BORDER)
+        style.map("TEntry", bordercolor=[("focus", COL_ACCENT)])
         style.configure("Horizontal.TProgressbar", background=COL_ACCENT,
-                        troughcolor="#dde2e8", borderwidth=0)
+                        troughcolor="#e4e9ee", borderwidth=0, thickness=14)
+        # コンボボックスの候補リストも大きく
+        self.root.option_add("*TCombobox*Listbox.font", (self.ui_font, body))
+        self.root.option_add("*TCombobox*Listbox.padding", (8, 6))
 
-    def _key_chip(self, parent, key: str, desc: str):
-        chip = ttk.Frame(parent, style="Card.TFrame")
-        ttk.Label(chip, text=key, style="Chip.TLabel").pack(side="left")
-        ttk.Label(chip, text=desc, style="CardMuted.TLabel").pack(side="left", padx=(5, 14))
-        return chip
+    def _focus_back(self, fn):
+        """ボタン実行後にフォーカスを root へ戻す（Space 再押下の誤発火防止）。"""
+
+        def run():
+            fn()
+            self.root.focus_set()
+        return run
 
     # ---------- セットアップ画面 ----------
     def _build_setup_frame(self):
-        self.setup_frame = ttk.Frame(self.root, padding=14)
+        self.setup_frame = ttk.Frame(self.root, padding=20)
 
         heading = ttk.Frame(self.setup_frame)
-        heading.pack(fill="x", pady=(0, 10))
+        heading.pack(fill="x", pady=(0, 14))
         ttk.Label(heading, text=APP_TITLE, style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             heading,
             text="画像の順番を整えてから ID を付けます。まずスキャン画像のフォルダを選んでください。",
             style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
-
-        dest_card = ttk.Labelframe(self.setup_frame, text="移動先（今開いている Index のフォルダ）",
-                                   style="Card.TLabelframe", padding=12)
-        dest_card.pack(fill="x")
-        ttk.Label(dest_card, textvariable=self.dest_var, style="MonoCard.TLabel").pack(anchor="w")
+        ).pack(anchor="w", pady=(4, 0))
+        dest_row = ttk.Frame(heading)
+        dest_row.pack(anchor="w", pady=(6, 0))
+        ttk.Label(dest_row, text="移動先:", style="Muted.TLabel").pack(side="left")
+        ttk.Label(dest_row, textvariable=self.dest_var, style="Mono.TLabel").pack(side="left", padx=(8, 0))
 
         folder_card = ttk.Labelframe(self.setup_frame, text="スキャン画像フォルダ",
-                                     style="Card.TLabelframe", padding=12)
-        folder_card.pack(fill="x", pady=(10, 0))
+                                     style="Card.TLabelframe", padding=14)
+        folder_card.pack(fill="x")
         folder_row = ttk.Frame(folder_card, style="Card.TFrame")
         folder_row.pack(fill="x")
-        ttk.Button(folder_row, text="フォルダを選択", command=self.choose_folder).pack(side="left")
-        ttk.Label(folder_row, textvariable=self.folder_var, style="CardMuted.TLabel").pack(
-            side="left", padx=10, fill="x", expand=True)
+        ttk.Button(folder_row, text="フォルダを選ぶ", style="Big.TButton",
+                   command=self.choose_folder).pack(side="left")
+        ttk.Label(folder_row, textvariable=self.folder_var, style="CardNote.TLabel").pack(
+            side="left", padx=12, fill="x", expand=True)
         recent_row = ttk.Frame(folder_card, style="Card.TFrame")
-        recent_row.pack(fill="x", pady=(8, 0))
-        ttk.Label(recent_row, text="最近のフォルダ:", style="CardMuted.TLabel").pack(side="left")
+        recent_row.pack(fill="x", pady=(12, 0))
+        ttk.Label(recent_row, text="最近:", style="CardNote.TLabel").pack(side="left")
         self.recent_bar = ttk.Frame(recent_row, style="Card.TFrame")
-        self.recent_bar.pack(side="left", fill="x", expand=True)
+        self.recent_bar.pack(side="left", fill="x", expand=True, padx=(8, 0))
 
         order_card = ttk.Labelframe(self.setup_frame, text="並び替えと順番の微調整",
-                                    style="Card.TLabelframe", padding=12)
-        order_card.pack(fill="x", pady=(10, 0))
+                                    style="Card.TLabelframe", padding=14)
+        order_card.pack(fill="x", pady=(14, 0))
         controls = ttk.Frame(order_card, style="Card.TFrame")
         controls.pack(fill="x")
-        ttk.Label(controls, text="自動並び替え:", style="Card.TLabel").pack(side="left")
-        ttk.Combobox(
-            controls, textvariable=self.sort_var, state="readonly", width=26,
+        ttk.Label(controls, text="自動並び替え:", style="CardNote.TLabel").pack(side="left")
+        self.sort_combo = ttk.Combobox(
+            controls, textvariable=self.sort_var, state="readonly", width=28,
+            font=(self.ui_font, FONT_SIZES["body"]),
             values=[
                 "ファイル名（自然順・昇順）",
                 "ファイル名（自然順・降順）",
                 "更新日時（古い順）",
                 "更新日時（新しい順）",
             ],
-        ).pack(side="left", padx=6)
+        )
+        self.sort_combo.pack(side="left", padx=(8, 8), ipady=4)
         ttk.Button(controls, text="適用", command=self.apply_sort).pack(side="left")
-        ttk.Separator(controls, orient="vertical").pack(side="left", fill="y", padx=12)
-        ttk.Label(controls, text="選択した画像:", style="Card.TLabel").pack(side="left")
-        ttk.Button(controls, text="一つ上へ", command=lambda: self.move_selected(-1)).pack(side="left", padx=(6, 2))
-        ttk.Button(controls, text="一つ下へ", command=lambda: self.move_selected(1)).pack(side="left", padx=2)
-        ttk.Button(controls, text="除外", command=self.exclude_selected).pack(side="left", padx=(10, 0))
+        ttk.Separator(controls, orient="vertical").pack(side="left", fill="y", padx=14)
+        ttk.Button(controls, text="一つ上へ", command=lambda: self.move_selected(-1)).pack(side="left", padx=(6, 4))
+        ttk.Button(controls, text="一つ下へ", command=lambda: self.move_selected(1)).pack(side="left", padx=(0, 12))
+        ttk.Button(controls, text="除外", style="Danger.TButton", command=self.exclude_selected).pack(side="left")
 
         action_row = ttk.Frame(self.setup_frame)
-        action_row.pack(fill="x", pady=(12, 8))
-        ttk.Button(action_row, text="名前付けを開始", style="Accent.TButton",
+        action_row.pack(fill="x", pady=(16, 10))
+        ttk.Button(action_row, text="名前付けを開始", style="BigAccent.TButton",
                    command=self.start_naming).pack(side="left")
-        ttk.Button(action_row, text="閉じる", command=self.on_close).pack(side="left", padx=(8, 0))
-        ttk.Button(action_row, text="名前付け済みを移動して終了",
+        ttk.Button(action_row, text="閉じる", command=self.on_close).pack(side="left", padx=(10, 0))
+        ttk.Button(action_row, text="名前付け済みを移動して終了", style="Finish.TButton",
                    command=lambda: self.move_processed(auto=False)).pack(side="right")
 
         body = ttk.Panedwindow(self.setup_frame, orient="horizontal")
@@ -362,13 +404,13 @@ class ScanApp:
         self.tree.heading("name", text="ファイル名")
         self.tree.heading("id", text="ID")
         self.tree.heading("modified", text="更新日時")
-        self.tree.column("#0", width=100, stretch=False)
-        self.tree.column("order", width=56, anchor="center", stretch=False)
-        self.tree.column("name", width=320)
-        self.tree.column("id", width=90, anchor="center", stretch=False)
-        self.tree.column("modified", width=135, stretch=False)
+        self.tree.column("#0", width=120, stretch=False)
+        self.tree.column("order", width=64, anchor="center", stretch=False)
+        self.tree.column("name", width=330)
+        self.tree.column("id", width=110, anchor="center", stretch=False)
+        self.tree.column("modified", width=145, stretch=False)
         self.tree.tag_configure("done", foreground=COL_DONE)
-        self.tree.tag_configure("todo", foreground=COL_PENDING)
+        self.tree.tag_configure("todo", foreground=COL_TEXT)
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -380,69 +422,79 @@ class ScanApp:
 
         ttk.Label(preview_frame, text="選択画像の確認", style="Mono.TLabel").pack(anchor="w")
         self.setup_preview = tk.Canvas(preview_frame, background=COL_PREVIEW,
-                                       highlightthickness=0, highlightbackground=COL_BORDER)
+                                       highlightthickness=1, highlightbackground=COL_BORDER)
         self.setup_preview.pack(fill="both", expand=True, pady=(6, 0))
         ttk.Label(self.setup_frame,
                   text="ヒント: 行をドラッグ＆ドロップ、またはボタンで順番を変更できます。",
-                  style="Muted.TLabel").pack(anchor="w", pady=(8, 0))
-        ttk.Label(self.setup_frame, textvariable=self.status_var, style="Mono.TLabel").pack(
+                  style="Muted.TLabel").pack(anchor="w", pady=(10, 0))
+        ttk.Label(self.setup_frame, textvariable=self.status_var, style="Status.TLabel").pack(
             anchor="w", pady=(2, 0))
 
     # ---------- 名前付け画面 ----------
     def _build_naming_frame(self):
-        self.naming_frame = ttk.Frame(self.root, padding=12)
-        header_card = ttk.Labelframe(self.naming_frame, style="Card.TLabelframe", padding=(14, 8))
-        header_card.pack(fill="x")
-        header = ttk.Frame(header_card, style="Card.TFrame")
+        self.naming_frame = ttk.Frame(self.root, padding=14)
+        header = ttk.Frame(self.naming_frame, style="Card.TFrame", padding=(16, 12))
         header.pack(fill="x")
 
         progress_box = ttk.Frame(header, style="Card.TFrame")
-        progress_box.pack(side="left")
+        progress_box.pack(side="left", fill="x", expand=True)
         ttk.Label(progress_box, textvariable=self.progress_var, style="ProgressNum.TLabel").pack(anchor="w")
-        self.naming_progress = ttk.Progressbar(progress_box, orient="horizontal", length=190, mode="determinate")
-        self.naming_progress.pack(anchor="w", pady=(3, 0))
+        self.naming_progress = ttk.Progressbar(progress_box, orient="horizontal", length=300, mode="determinate")
+        self.naming_progress.pack(anchor="w", pady=(4, 0))
         ttk.Label(progress_box, textvariable=self.current_file_var, style="CardMuted.TLabel").pack(
-            anchor="w", pady=(3, 0))
+            anchor="w", pady=(6, 0))
+        prev_row = ttk.Frame(progress_box, style="Card.TFrame")
+        prev_row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(prev_row, text="直前のID:", style="CardMuted.TLabel").pack(side="left")
+        ttk.Label(prev_row, textvariable=self.previous_id_var, style="PrevId.TLabel").pack(side="left", padx=(10, 24))
+        ttk.Label(prev_row, text="移動先:", style="CardMuted.TLabel").pack(side="left")
+        ttk.Label(prev_row, textvariable=self.dest_var, style="MonoCard.TLabel").pack(side="left", padx=(10, 0))
 
-        info_box = ttk.Frame(header, style="Card.TFrame")
-        info_box.pack(side="left", padx=(26, 0), anchor="n")
-        ttk.Label(info_box, text="直前のID", style="CardMuted.TLabel").pack(anchor="w")
-        ttk.Label(info_box, textvariable=self.previous_id_var, style="MonoCard.TLabel").pack(anchor="w")
-        ttk.Label(info_box, text="移動先", style="CardMuted.TLabel").pack(anchor="w", pady=(6, 0))
-        ttk.Label(info_box, textvariable=self.dest_var, style="MonoCard.TLabel").pack(anchor="w")
-
-        ttk.Button(header, text="移動して終了", style="Accent.TButton",
-                   command=lambda: self.move_processed(auto=False)).pack(side="right", anchor="n")
-        ttk.Button(header, text="セットアップに戻る", command=self.show_setup).pack(
-            side="right", padx=(0, 8), anchor="n")
+        header_buttons = ttk.Frame(header, style="Card.TFrame")
+        header_buttons.pack(side="right", anchor="n")
+        ttk.Button(header_buttons, text="移動して終了", style="Finish.TButton",
+                   command=self._focus_back(lambda: self.move_processed(auto=False))).pack(side="top", fill="x")
+        ttk.Button(header_buttons, text="セットアップに戻る",
+                   command=self._focus_back(self.show_setup)).pack(side="top", fill="x", pady=(8, 0))
 
         self.image_canvas = tk.Canvas(self.naming_frame, background=COL_CANVAS, highlightthickness=0)
         self.image_canvas.pack(fill="both", expand=True, pady=10)
         self.image_canvas.bind("<Configure>", lambda e: self.render_current_image())
         self.image_canvas.bind("<MouseWheel>", self.on_mousewheel)
 
-        self.input_holder = ttk.Frame(self.naming_frame, style="Card.TFrame", padding=12)
+        self.input_holder = ttk.Frame(self.naming_frame, style="Card.TFrame", padding=14)
         self.input_frame = ttk.Frame(self.input_holder, style="Card.TFrame")
-        ttk.Label(self.input_frame, text="ID:", style="Card.TLabel").pack(side="left")
+        ttk.Label(self.input_frame, text="ID:", style="PrevId.TLabel").pack(side="left")
         self.input_entry = ttk.Entry(self.input_frame, textvariable=self.input_var,
-                                     font=(self.mono_font, FONT_SIZES["input"]), width=24)
-        self.input_entry.pack(side="left", padx=8)
+                                     font=(self.mono_font, FONT_SIZES["input"]), width=20)
+        self.input_entry.pack(side="left", padx=(10, 14), ipady=4)
         ttk.Label(self.input_frame, text="Enter で確定 ／ Esc でキャンセル",
-                  style="CardMuted.TLabel").pack(side="left")
+                  style="CardNote.TLabel").pack(side="left")
         self.input_entry.bind("<Return>", self.confirm_manual_id)
         self.input_entry.bind("<Escape>", self.cancel_input)
 
-        self.naming_help = ttk.Frame(self.naming_frame, style="Card.TFrame", padding=(12, 8))
-        self.naming_help.pack(fill="x", pady=(8, 0))
-        legend = ttk.Frame(self.naming_help, style="Card.TFrame")
-        legend.pack(anchor="center")
-        row = ttk.Frame(legend, style="Card.TFrame")
-        row.pack(anchor="center")
-        for key, desc in (("→", "次の連番"), ("↓", "子ID"), ("↑", "直前IDを編集"),
-                          ("Space", "手入力"), ("←", "取り消し")):
-            self._key_chip(row, key, desc).pack(side="left")
-        ttk.Label(self.naming_frame, textvariable=self.status_var, style="Mono.TLabel").pack(
-            anchor="center", pady=(6, 0))
+        # キー操作と同じ動きの大きなボタン（キーボードでも押してもOK）
+        self.action_bar = ttk.Frame(self.naming_frame)
+        self.action_bar.pack(fill="x")
+        undo_group = ttk.Frame(self.action_bar)
+        undo_group.pack(side="left")
+        ttk.Button(undo_group, text="← ひとつ戻す",
+                   command=self._focus_back(self.on_left)).pack(side="left")
+        ttk.Button(undo_group, text="↑ 直前のIDを編集",
+                   command=self._focus_back(self.on_up)).pack(side="left", padx=(8, 0))
+        spacer = ttk.Frame(self.action_bar)
+        spacer.pack(side="left", fill="x", expand=True)
+        main_group = ttk.Frame(self.action_bar)
+        main_group.pack(side="right")
+        ttk.Button(main_group, text="Space 手入力", style="Big.TButton",
+                   command=self._focus_back(self.on_space)).pack(side="left")
+        ttk.Button(main_group, text="↓ 子ID", style="BigAccent.TButton",
+                   command=self._focus_back(self.on_down)).pack(side="left", padx=(10, 0))
+        ttk.Button(main_group, text="→ 次の連番", style="BigAccent.TButton",
+                   command=self._focus_back(self.on_right)).pack(side="left", padx=(10, 0))
+
+        ttk.Label(self.naming_frame, textvariable=self.status_var, style="Status.TLabel").pack(
+            anchor="center", pady=(8, 0))
 
     # ---------- フォルダ ----------
     def choose_folder(self):
@@ -467,7 +519,6 @@ class ScanApp:
         for path in recent:
             ttk.Button(self.recent_bar, text=Path(path).name or path,
                        command=lambda p=path: self.load_folder(Path(p))).pack(side="left", padx=(0, 6))
-
     def load_folder(self, folder: Path, ask_resume: bool = True):
         self.folder = Path(folder)
         self.folder_var.set(str(folder))
@@ -547,7 +598,7 @@ class ScanApp:
             try:
                 st = path.stat()
                 stat_text = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
-                image_ref = self.make_thumbnail(path, (86, 66))
+                image_ref = self.make_thumbnail(path, (104, 78))
             except OSError:
                 pass
             iid = str(idx)
@@ -840,7 +891,7 @@ class ScanApp:
     def show_input(self, value: str):
         self.input_active = True
         self.input_var.set(value)
-        self.input_holder.pack(fill="x", pady=(6, 4), before=self.naming_help)
+        self.input_holder.pack(fill="x", pady=(6, 8), before=self.action_bar)
         self.input_frame.pack(fill="x", pady=2)
         self.input_entry.focus_set()
         self.input_entry.icursor(tk.END)
@@ -948,7 +999,7 @@ class ScanApp:
             self.image_canvas.winfo_width() // 2,
             self.image_canvas.winfo_height() // 2,
             text="すべての画像にIDが付きました。移動して同期します…",
-            fill="white", font=(self.ui_font, 18, "bold"), anchor="center",
+            fill="white", font=(self.ui_font, 24, "bold"), anchor="center",
         )
         self.naming_progress.configure(maximum=max(len(self.items), 1), value=len(self.items))
         self.progress_var.set(f"{len(self.items)} / {len(self.items)}")
@@ -1022,7 +1073,7 @@ class ScanApp:
                     self.image_canvas.winfo_width() // 2,
                     self.image_canvas.winfo_height() // 2,
                     text="完了しました。ウィンドウを閉じてください。",
-                    fill="white", font=(self.ui_font, 18, "bold"), anchor="center",
+                    fill="white", font=(self.ui_font, 24, "bold"), anchor="center",
                 )
                 self.status_var.set("完了")
         finally:
