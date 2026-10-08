@@ -571,6 +571,25 @@ function! s:save_persisted_root(root) abort
   call s:syn_writefile([fnamemodify(a:root, ':p')], s:root_state_file())
 endfunction
 
+" 「プロジェクトフォルダ A を選んだら A/note を vault 本体にする」解決。
+" A/note がディレクトリとして存在すれば、必ず note 側を root にする
+" （Index の有無は見ない。暗号化 vault はロック中に Index が見えないため、
+"   見ると毎回「Create index.md?」が出てしまう）。
+function! s:resolve_note_root(dir) abort
+  if empty(a:dir)
+    return a:dir
+  endif
+  let l:d = substitute(fnamemodify(expand(a:dir), ':p'), s:sep() . '\+$', '', '')
+  " 二重解決を避ける（すでに note 自体なら何もしない）
+  if fnamemodify(l:d, ':t') ==# 'note'
+    return a:dir
+  endif
+  if isdirectory(l:d . s:sep() . 'note')
+    return fnamemodify(l:d . s:sep() . 'note', ':p')
+  endif
+  return a:dir
+endfunction
+
 function! s:get_pkm_root() abort
   let l:root = ''
   if exists('g:simple_yurii_note_root')
@@ -586,6 +605,12 @@ function! s:get_pkm_root() abort
     return ''
   endif
   let l:root = fnamemodify(expand(l:root), ':p')
+  " A を覚えていても A/note があれば note 側へ寄せる（毎回のIndex作成確認を防ぐ）
+  let l:resolved = s:resolve_note_root(l:root)
+  if l:resolved !=# l:root
+    let l:root = fnamemodify(l:resolved, ':p')
+    let g:simple_yurii_note_root = l:root
+  endif
   " rm ゴミ箱ガード（bash）に vault を知らせる
   if !has('win32')
     let $YURII_NOTE_VAULT = l:root
@@ -1162,11 +1187,7 @@ function! s:startup_recover_missing_root() abort
 
   let l:index = s:index_path(l:new_root)
   if !filereadable(l:index)
-    let l:ans = tolower(trim(input('Create index.md? y/n: ')))
-    if l:ans !=# 'y'
-      echom 'index.md not created'
-      return l:new_root
-    endif
+    " 確認はしない（暗号化 vault がロック中だと Index が無いように見えるため）
     if !isdirectory(l:new_root)
       call mkdir(l:new_root, 'p')
     endif
@@ -1248,31 +1269,34 @@ function! s:setup_root_and_index(open_index) abort
   endif
   let l:root = fnamemodify(expand(l:root), ':p')
 
-  " vault が「A/note/.crypt」型のときは note/ が vault 本体。
-  " ユーザーが A（親ディレクトリ）を指定したら自動的に A/note を選ぶ。
-  if !filereadable(l:root . s:sep() . 'index.md') && isdirectory(l:root . s:sep() . 'note')
-    let l:root = fnamemodify(l:root . s:sep() . 'note', ':p')
-  endif
+  " ユーザーがプロジェクト A を指定したら A/note を vault 本体にする
+  " （A/note があれば必ず。Index の有無は見ない）
+  let l:root = fnamemodify(s:resolve_note_root(l:root), ':p')
 
   if !isdirectory(l:root)
     call mkdir(l:root, 'p')
   endif
   let g:simple_yurii_note_root = l:root
   call s:save_persisted_root(l:root)
-  call s:setup_persistent_undo_for_root(l:root)
 
-  " Step2: Index作成確認
-  let l:index = s:index_path(l:root)
-  if !filereadable(l:index)
-    let l:ans = tolower(trim(input('Create index.md? y/n: ')))
-    if l:ans ==# 'y'
-      call s:write_index_and_guide(l:root)
-      call simple_yurii_note#clear_title_cache()
-      echom 'Created: ' . l:index
-    else
-      echom 'index.md not created'
+  " ロック中の暗号化 vault を選んだら、ここでパスワードを聞いてマウントする
+  " （ロック中に .undo/index を作ると mountpoint が非空になりマウントできなくなる）
+  if simple_yurii_note#vault_locked_flag() == 1
+    call simple_yurii_note#mount_vault()
+    if simple_yurii_note#vault_locked_flag() == 1
+      echom 'simple_yurii_note: vault はロック中。:SimpleMount で解除してください'
       return l:root
     endif
+  endif
+
+  call s:setup_persistent_undo_for_root(l:root)
+
+  " Step2: Index が無ければ黙って作る（毎回の確認はしない）
+  let l:index = s:index_path(l:root)
+  if !filereadable(l:index)
+    call s:write_index_and_guide(l:root)
+    call simple_yurii_note#clear_title_cache()
+    echom 'Created: ' . l:index
   endif
 
   " Step3: Indexを開く
@@ -1304,7 +1328,8 @@ function! s:prompt_index_root() abort
     echo 'Cancelled'
     return ''
   endif
-  return fnamemodify(expand(l:dir), ':p')
+  " A を選んだら A/note を root にする
+  return fnamemodify(s:resolve_note_root(fnamemodify(expand(l:dir), ':p')), ':p')
 endfunction
 
 function! simple_yurii_note#ensure_root_and_index() abort
@@ -1338,22 +1363,17 @@ function! simple_yurii_note#ensure_root_and_index() abort
     return s:setup_root_and_index(1)
   endif
 
-  " rootは設定済みでディレクトリはあるがIndexがない → Index作成だけ
+  " rootは設定済みでディレクトリはあるがIndexがない → 黙って作る
+  " （ロック中は冒頭のガードで来ない。アンロック後に本当に無いときだけ）
   if !empty(l:root)
     let g:simple_yurii_note_root = l:root
     call s:save_persisted_root(l:root)
     call s:setup_persistent_undo_for_root(l:root)
     let l:index = s:index_path(l:root)
-    let l:ans = tolower(trim(input('Create index.md? y/n: ')))
-    if l:ans ==# 'y'
-      call s:write_index_and_guide(l:root)
-      call simple_yurii_note#clear_title_cache()
-      echom 'Created: ' . l:index
-      return l:root
-    else
-      echom 'index.md not created'
-      return ''
-    endif
+    call s:write_index_and_guide(l:root)
+    call simple_yurii_note#clear_title_cache()
+    echom 'Created: ' . l:index
+    return l:root
   endif
 
   " rootが未設定 → ディレクトリ選択から
@@ -10275,10 +10295,9 @@ function! s:vault_clean() abort
 endfunction
 
 " 暗号箱の場所（g:simple_yurii_note_cipher_dir で上書き可）
-" 候補順: ①vault外dir内の定期 .crypt（vaultの中に入れる配置）
-"         ②隠し兄弟 .<name>-crypt（~/files/.yurii-note-crypt 型）
-"         ③従来の <root>.crypt
-" confがある場所を優先。どれも無い場合は①を返す（新規用）。
+" 「A/note を vault、暗号実体は A/.crypt」が正規（兄弟構成＝自己包括なし）。
+" 旧配置も探す: A/.note-crypt（A/note 時代の名残）/ <root>.crypt。
+" conf がある場所を優先。どれも無ければ新規用に正規の場所を返す。
 function! simple_yurii_note#cipher_dir() abort
   if !empty(get(g:, 'simple_yurii_note_cipher_dir', ''))
     return fnamemodify(expand(g:simple_yurii_note_cipher_dir), ':p')
@@ -10288,13 +10307,21 @@ function! simple_yurii_note#cipher_dir() abort
     return ''
   endif
   let l:parent = fnamemodify(l:root, ':h') . s:sep()
-  " 暗号実体の候補: ①A内の隠し前列(.note-crypt) ②A/.crypt ③root.crypt
-  " A/note を root とする運用では①が正規の置き場所
-  let l:cand = [
-        \ l:parent . '.' . fnamemodify(l:root, ':t') . '-crypt',
-        \ l:parent . '.crypt',
-        \ l:root . '.crypt',
-        \ ]
+  if fnamemodify(l:root, ':t') ==# 'note'
+    " A/note 型: 正規は A/.crypt
+    let l:cand = [
+          \ l:parent . '.crypt',
+          \ l:parent . '.note-crypt',
+          \ l:root . '.crypt',
+          \ ]
+  else
+    " 旧来の root 直置き型: 正規は兄弟の .<name>-crypt（親の .crypt は共用事故になるため後ろ）
+    let l:cand = [
+          \ l:parent . '.' . fnamemodify(l:root, ':t') . '-crypt',
+          \ l:parent . '.crypt',
+          \ l:root . '.crypt',
+          \ ]
+  endif
   for l:c in l:cand
     if filereadable(l:c . s:sep() . 'gocryptfs.conf')
       return l:c
