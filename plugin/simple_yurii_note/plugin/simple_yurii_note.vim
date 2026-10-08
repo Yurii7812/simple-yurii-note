@@ -745,6 +745,18 @@ augroup simple_yurii_note_lock
   autocmd BufUnload,BufDelete,VimLeavePre *.md call simple_yurii_note#lock_remove(expand('<afile>:p'))
 augroup END
 
+" vault の暗号（gocryptfs箱）
+"   ・起動時にロック中ならパスワードを聞いてマウント
+"   ・終了時に自動でロック（閉じるとロック）
+"   ・:SimpleSetPassword = パスワード変更
+" ---------------------------------------------------------------------------
+augroup simple_yurii_note_vault
+  autocmd!
+  autocmd VimEnter  * call simple_yurii_note#maybe_mount_interactive()
+  autocmd VimLeave  * call simple_yurii_note#quit_unmount()
+  autocmd BufWritePre * call simple_yurii_note#guard_vault_write(expand('<afile>:p'))
+augroup END
+
 autocmd VimEnter * call simple_yurii_note#cleanup_stale_locks()
 
 " 旧 state_dir の状態を vault 内 .state/ へ1回だけ移行（root.txt は残す）
@@ -868,18 +880,4 @@ augroup simple_yurii_note_exit_cleanup
   autocmd VimLeave * call simple_yurii_note#exit_cleanup()
 augroup END
 
-" vault が gocryptfs 管理でロック中のとき、:MOUNT / :LOCK / temissazved な書き込みガード
-command!          SimpleMount      call simple_yurii_note#mount_vault()
-command!          SimpleMountVault call simple_yurii_note#mount_vault()
-command!          SimpleLock       call simple_yurii_note#lock_vault()
-command!          SimpleLockVault  call simple_yurii_note#lock_vault()
-" 起動時に encrypted vault がロック中ならパスワードを聞いてマウントする
-augroup simple_yurii_note_automount
-  autocmd!
-  autocmd VimEnter * ++once call simple_yurii_note#maybe_mount_interactive()
-augroup END
-augroup simple_yurii_note_encrypted_guard
-  autocmd!
-  autocmd BufWritePre * call simple_yurii_note#guard_vault_write(expand('<afile>:p'))
-  autocmd BufEnter    * call simple_yurii_note#vault_locked_buffer_hint()
-augroup END
+" ---------------------------------------------------------------------------
