@@ -871,6 +871,13 @@ augroup END
 " vault が gocryptfs 管理でロック中のとき、:MOUNT / :LOCK / temissazved な書き込みガード
 command!          SimpleMount      call simple_yurii_note#mount_vault()
 command!          SimpleMountVault call simple_yurii_note#mount_vault()
+command!          SimpleLock       call simple_yurii_note#lock_vault()
+command!          SimpleLockVault  call simple_yurii_note#lock_vault()
+" 起動時に encrypted vault がロック中ならパスワードを聞いてマウントする
+augroup simple_yurii_note_automount
+  autocmd!
+  autocmd VimEnter * ++once call simple_yurii_note#maybe_mount_interactive()
+augroup END
 augroup simple_yurii_note_encrypted_guard
   autocmd!
   autocmd BufWritePre * call simple_yurii_note#guard_vault_write(expand('<afile>:p'))

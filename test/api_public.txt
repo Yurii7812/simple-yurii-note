@@ -60,7 +60,9 @@ simple_yurii_note#linkify_selection_from_clipboard
 simple_yurii_note#linkify_selection_new_note
 simple_yurii_note#lock_add
 simple_yurii_note#lock_remove
+simple_yurii_note#lock_vault
 simple_yurii_note#make_link
+simple_yurii_note#maybe_mount_interactive
 simple_yurii_note#migrate_state_into_vault
 simple_yurii_note#mount_vault
 simple_yurii_note#move_visible
@@ -95,6 +97,7 @@ simple_yurii_note#recent_map
 simple_yurii_note#refresh_guide
 simple_yurii_note#refresh_link_hints
 simple_yurii_note#relation_link_popup
+simple_yurii_note#reload_vault_buffers
 simple_yurii_note#rename_down_links_to_yaml_title
 simple_yurii_note#rename_link_text
 simple_yurii_note#rename_link_text_with_default

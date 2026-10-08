@@ -522,7 +522,7 @@ function! simple_yurii_note#migrate_state_into_vault() abort
     endif
   endfor
   try
-    call writefile([l:legacy], l:stamp)
+    call s:syn_writefile([l:legacy], l:stamp)
   catch
   endtry
 endfunction
@@ -557,7 +557,7 @@ function! s:save_persisted_root(root) abort
   if !isdirectory(l:dir)
     call mkdir(l:dir, 'p')
   endif
-  call writefile([fnamemodify(a:root, ':p')], s:root_state_file())
+  call s:syn_writefile([fnamemodify(a:root, ':p')], s:root_state_file())
 endfunction
 
 function! s:get_pkm_root() abort
@@ -694,7 +694,7 @@ function! simple_yurii_note#lock_add(path) abort
   if get(b:, 'yurii_lock_self', '') ==# l:key
     return
   endif
-  call writefile([
+  call s:syn_writefile([
         \ 'pid=' . getpid(),
         \ 'path=' . fnamemodify(a:path, ':p'),
         \ 'time=' . localtime(),
@@ -1000,7 +1000,7 @@ function! s:refresh_guide(root) abort
       return
     endif
   endif
-  call writefile(l:new, l:guide)
+  call s:syn_writefile(l:new, l:guide)
 endfunction
 
 " 公開: 既存の操作ガイドを最新にする（VimEnter 用。無ければ何もしない）。
@@ -1034,7 +1034,7 @@ function! s:write_index_and_guide(root) abort
   let l:guide = fnamemodify(a:root, ':p') . s:sep() . s:guide_name
   let l:first_guide = !filereadable(l:guide)
   call s:refresh_guide(a:root)
-  call writefile(s:index_template(l:first_guide), l:index)
+  call s:syn_writefile(s:index_template(l:first_guide), l:index)
   call s:mark_index_created()
 endfunction
 
@@ -1833,7 +1833,7 @@ function! s:write_note_lines_for_path(path, lines) abort
       call deletebufline(l:buf, len(a:lines) + 1, l:old_last)
     endif
   else
-    call writefile(a:lines, a:path)
+    call s:syn_writefile(a:lines, a:path)
   endif
 endfunction
 
@@ -4231,7 +4231,7 @@ function! s:save_json_state(name, value) abort
   let l:dir = s:state_dir()
   if !isdirectory(l:dir) | call mkdir(l:dir, 'p') | endif
   try
-    call writefile([json_encode(a:value)], s:hist_state_file(a:name))
+    call s:syn_writefile([json_encode(a:value)], s:hist_state_file(a:name))
   catch
   endtry
 endfunction
@@ -4342,7 +4342,7 @@ function! s:hub_migrate() abort
       call add(l:lines, '[' . s:get_title(l:p) . '](' . fnamemodify(l:p, ':p') . ')')
     endif
   endfor
-  call writefile(l:lines, l:file)
+  call s:syn_writefile(l:lines, l:file)
   return l:file
 endfunction
 
@@ -4382,7 +4382,7 @@ function! simple_yurii_note#hub_set(...) abort
     return
   endif
   call add(l:lines, l:link)
-  call writefile(l:lines, l:hub)
+  call s:syn_writefile(l:lines, l:hub)
   echo printf('simple_yurii_note: ハブに追加（%d 件）', len(l:lines))
 endfunction
 
@@ -5127,7 +5127,7 @@ function! s:v2_write_other_side_label(target_path, label, cur_path, cur_title, b
   if !l:result.ok
     return l:result.reason ==# 'dup' ? 1 : 0
   endif
-  call writefile(l:result.lines, a:target_path)
+  call s:syn_writefile(l:result.lines, a:target_path)
   return 1
 endfunction
 
@@ -5504,7 +5504,7 @@ function! simple_yurii_note#v2_new_here() abort
   let l:dir = expand('%:p:h')
   let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
-  call writefile(simple_yurii_note#note_template(l:ts, 0), l:file)
+  call s:syn_writefile(simple_yurii_note#note_template(l:ts, 0), l:file)
   let l:save_ai = &autoindent | let l:save_si = &smartindent
   setlocal noautoindent nosmartindent
   call append(line('.'), '[' . l:ts . '](' . l:ts . '.md)')
@@ -5592,7 +5592,7 @@ function! simple_yurii_note#v2_new_group_visual() abort range
         \ s:make_link_from_dir(l:cur, l:cur_title, l:dir),
         \ s:v2_down_mark,
         \ ]
-  call writefile(l:content, l:file)
+  call s:syn_writefile(l:content, l:file)
 
   " 元の選択をグループへのリンクで置き換える
   let l:link = '[' . l:ts . '](' . l:ts . '.md)'
@@ -5665,7 +5665,7 @@ function! s:simple_body_append_to_file(file, link, is_group) abort
     endif
     call extend(l:lines, a:is_group ? ['', a:link] : ['', a:link, ''], l:hdr)
   endif
-  call writefile(l:lines, a:file)
+  call s:syn_writefile(l:lines, a:file)
 endfunction
 
 " simple: file の ### Parent に parent_path へのリンクを 1 本足す
@@ -5688,7 +5688,7 @@ function! s:simple_add_parent(file, parent_path, parent_title) abort
     endfor
     call insert(l:lines, l:link, l:hdr + 1)
   endif
-  call writefile(l:lines, a:file)
+  call s:syn_writefile(l:lines, a:file)
 endfunction
 
 " simple: file の ### Related に other_path へのリンクを 1 本足す（zr の相手側）。
@@ -5749,7 +5749,7 @@ function! s:simple_add_related(file, other_path, other_title) abort
     endfor
     call insert(l:lines, l:link, l:end)
   endif
-  call writefile(l:lines, a:file)
+  call s:syn_writefile(l:lines, a:file)
   return 1
 endfunction
 
@@ -5877,7 +5877,7 @@ function! s:v2_new_interactive(attr) abort
   endif
 
   " 新ノートを先に作る（sync がリンク先を解決できるように）
-  call writefile(simple_yurii_note#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
+  call s:syn_writefile(simple_yurii_note#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
 
   let l:link = '[' . l:ts . '](' . l:ts . '.md)'
   let l:added = 0
@@ -6615,7 +6615,7 @@ function! simple_yurii_note#create_note(prefix, title, open_after, insert_mode) 
       call insert(l:tmpl, l:parent_link, len(l:tmpl) - 1)
     endif
   endif
-  call writefile(l:tmpl, l:file)
+  call s:syn_writefile(l:tmpl, l:file)
 
   let l:link = simple_yurii_note#make_link(l:file, a:title)
   let l:save_ai = &autoindent
@@ -6843,7 +6843,7 @@ function! s:new_note_no_title(prefix) abort
     let l:cursor_line = 8
   endif
 
-  call writefile(l:content, l:file)
+  call s:syn_writefile(l:content, l:file)
 
   " 通常モード: 新ノート作成前はリンク先が未存在のため、作成後に親の本文リンクを同期する
   " mm/nf/nk の体感速度を優先し、重い update_one は非同期で走らせる。
@@ -6968,7 +6968,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
     endif
   endif
 
-  call writefile(l:content, l:file)
+  call s:syn_writefile(l:content, l:file)
 
   " ---- 元ファイルの選択範囲を置き換える ----
   " スクロール位置・カーソルを保存
@@ -7005,7 +7005,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
           let l:back_idx2 = len(l:plines) - 2
         endif
         call insert(l:plines, l:link_to_new, l:back_idx2 + 1)
-        call writefile(l:plines, l:parent_fp)
+        call s:syn_writefile(l:plines, l:parent_fp)
         call s:run_update_one_for(l:parent_fp)
       endif
     endif
@@ -7239,7 +7239,7 @@ function! simple_yurii_note#new_quick(args) abort
     let l:cursor_line = 8
   endif
 
-  call writefile(l:content, l:file)
+  call s:syn_writefile(l:content, l:file)
 
   " 通常モード: 新ノート作成前はリンク先が未存在のため、作成後に親の本文リンクを同期する
   " mm/nf/nk の体感速度を優先し、重い update_one は非同期で走らせる。
@@ -7272,7 +7272,7 @@ function! simple_yurii_note#new_quick(args) abort
           let l:back_idx = len(l:plines) - 2
         endif
         call insert(l:plines, l:new_link, l:back_idx + 1)
-        call writefile(l:plines, l:parent_fp)
+        call s:syn_writefile(l:plines, l:parent_fp)
         call s:run_update_one_for(l:parent_fp)
       endif
     endif
@@ -7802,7 +7802,7 @@ function! simple_yurii_note#add_clipboard_before_up() abort
           \ l:current_file, l:current_title, fnamemodify(l:target_path, ':h'))
     let l:up_result = s:add_link_to_lines_section(l:target_lines, 'up', l:current_link)
     if l:up_result.added
-      call writefile(l:up_result.lines, l:target_path)
+      call s:syn_writefile(l:up_result.lines, l:target_path)
       let l:up_added += 1
     endif
   endfor
@@ -7978,7 +7978,7 @@ function! simple_yurii_note#linkify_selection_new_note() abort range
           \ s:v2_up_mark,
           \ s:v2_down_mark,
           \ ]
-    call writefile(l:new_content, l:new_file)
+    call s:syn_writefile(l:new_content, l:new_file)
     " 新ノートの親は元のノート（確認なしで入れる。あとから \P でも足せる）
     if !empty(l:parent_link_lines)
       call s:simple_add_parent(l:new_file, l:parent_file, l:parent_title)
@@ -8221,7 +8221,7 @@ function! simple_yurii_note#at_add() abort
           \ l:current_file, l:current_title, fnamemodify(l:target_fp, ':h'))
     let l:down_result = s:add_link_to_lines_section(l:lines, 'down', l:new_link)
     if l:down_result.added
-      call writefile(l:down_result.lines, l:target_fp)
+      call s:syn_writefile(l:down_result.lines, l:target_fp)
       let l:down_added += 1
     else
       let l:already += 1
@@ -9571,7 +9571,7 @@ function! simple_yurii_note#csv_new() abort
   let l:src_name = expand('%:p')
   let l:base_dir = empty(l:src_name) ? getcwd() : fnamemodify(l:src_name, ':p:h')
   let l:csv_path = s:next_t_csv_path(l:base_dir, 1)
-  call writefile([], l:csv_path)
+  call s:syn_writefile([], l:csv_path)
   call s:append_current_file_branch_link(s:csv_branch_link(l:csv_path))
   silent! write
   execute 'edit ' . fnameescape(l:csv_path)
@@ -9670,7 +9670,7 @@ function! simple_yurii_note#table_csv_edit() abort
   let l:src_indent = matchstr(getline(l:start), '^\s*')
   let l:csv_lines = s:table_lines_to_csv(getline(l:start, l:end))
   let l:csv_path = s:table_csv_temp_path(l:src_buf, l:start)
-  call writefile(l:csv_lines, l:csv_path)
+  call s:syn_writefile(l:csv_lines, l:csv_path)
 
   execute 'edit ' . fnameescape(l:csv_path)
 
@@ -10228,13 +10228,29 @@ function! s:cipher_root() abort
   return l:root
 endfunction
 
-" 暗号ディレクトリ（<vault>.crypt、g: で上書き可）
+" 暗号ディレクトリは vault フォルダの中に置く（外に出すべきでない）:
+"   root=vault直下(<outer>/notes 型): 暗号実体は <outer>/.crypt
+"   root=vault直下(従来型):          暗号実体は <root>/.crypt
+" g:simple_yurii_note_cipher_dir で上書き可
 function! simple_yurii_note#cipher_dir() abort
   if !empty(get(g:, 'simple_yurii_note_cipher_dir', ''))
     return fnamemodify(expand(g:simple_yurii_note_cipher_dir), ':p')
   endif
   let l:root = s:cipher_root()
-  return empty(l:root) ? '' : l:root . '.crypt'
+  if empty(l:root)
+    return ''
+  endif
+  let l:cand = [
+        \ fnamemodify(l:root, ':h') . s:sep() . '.crypt',
+        \ l:root . s:sep() . '.crypt',
+        \ ]
+  for l:c in l:cand
+    if filereadable(l:c . s:sep() . 'gocryptfs.conf')
+      return l:c
+    endif
+  endfor
+  " conf無しでも新規作成先は最初の候補（外に出てしまわない最初のカジリ）
+  return l:cand[0]
 endfunction
 
 " vault が FUSE マウント中か（mountpoint コマンド）
@@ -10256,25 +10272,6 @@ function! simple_yurii_note#vault_mounted(...) abort
 endfunction
 
 " パスワード変更（gocryptfs -passwd）。マウント中でも可（conf の書き換えのみ）。
-function! simple_yurii_note#set_password() abort
-  let l:cipher = simple_yurii_note#cipher_dir()
-  if empty(l:cipher) || !isdirectory(l:cipher)
-    echohl ErrorMsg
-    echom 'simple_yurii_note: 暗号ディレクトリが見つからない: ' . l:cipher
-    echohl NONE
-    return
-  endif
-  if !has('terminal')
-    echohl WarningMsg
-    echom 'simple_yurii_note: :terminal が無い。手動で実行: gocryptfs -passwd ' . l:cipher
-    echohl NONE
-    return
-  endif
-  let l:script = 'gocryptfs -passwd ' . shellescape(l:cipher)
-        \ . '; echo; echo "=== パスワード変更完了。この窓は :q で閉じてね ==="'
-  ":terminal はシェルを経由しないので、sh -c を明示して組み立てる
-  call term_start(['/bin/sh', '-c', l:script], {'term_name': 'SimpleSetPassword'})
-endfunction
 
 " vault が gocryptfs 管理（=<vault>.crypt がある）でも未マウントなら 1。
 " ロック中は vault への書き込みを openc versal 全部ブロックするための合図。
@@ -10353,33 +10350,201 @@ function! simple_yurii_note#vault_locked_buffer_hint() abort
 endfunction
 
 " マウント（gocryptfs <cipher> <vault> を :terminal で実行。パスワード入力）
-function! simple_yurii_note#mount_vault() abort
+
+" ---------------------------------------------------------------------------
+" gocryptfs vault 運用の本体（起動時マウント/ロック/パスワード変更）
+" 暗号実体: vault の親dir内の隠しディレクトリ <parent>/.<名字>-crypt
+" ---------------------------------------------------------------------------
+
+" memo化リセット（マウント・ロック操作後に即効で状態を更新する用）
+" writefile の薄板ラッパー。vault(gocryptfs)がロック中でも書かれてしまう事故を防ぐ
+" (guard_vault_write は vault 配下じゃなければ何もせず return する)
+function! s:syn_writefile(lines, path, ...) abort
+  call simple_yurii_note#guard_vault_write(a:path)
+  if a:0 == 0
+    return writefile(a:lines, a:path)
+  endif
+  return writefile(a:lines, a:path, a:1)
+endfunction
+
+function! s:mount_cache_reset() abort
+  let s:mounted_cache = {'time': 0, 'val': -1}
+endfunction
+
+" パスワードを一時ファイル(l:0600)に置いて gocryptfs に渡す。直後に消す。
+function! s:temp_passfile(pw) abort
+  let l:pf = tempname()
+  call s:syn_writefile([a:pw], l:pf)
+  call system('chmod 600 ' . shellescape(l:pf))
+  return l:pf
+endfunction
+
+" パスワードを聞いて gocryptfs でマウント（成功=1）。空入力で中止。
+function! s:mount_by_password(cipher, root) abort
+  for l:i in range(3)
+    let l:pw = inputsecret('vault password: ')
+    if empty(l:pw)
+      echom 'simple_yurii_note: マウントせず終了（:SimpleMount で再試行）'
+      return 0
+    endif
+    let l:pf = s:temp_passfile(l:pw)
+    call system('gocryptfs -passfile=' . shellescape(l:pf) . ' ' . shellescape(a:cipher)
+          \ . ' ' . shellescape(a:root) . ' 2>&1 | tail -1')
+    call delete(l:pf)
+    call s:mount_cache_reset()
+    if simple_yurii_note#vault_mounted() == 1
+      redraw
+      return 1
+    endif
+    echohl ErrorMsg
+    echom 'simple_yurii_note: パスワードが違う (' . (l:i + 1) . '/3)'
+    echohl NONE
+  endfor
+  echohl ErrorMsg
+  echom 'simple_yurii_note: 3回間違えた。:SimpleMount で再試行'
+  echohl NONE
+  return 0
+endfunction
+
+" VimEnter: encrypted vault がロック中ならここでパスワードを聞いてマウントする
+function! simple_yurii_note#maybe_mount_interactive() abort
+  if get(g:, 'simple_yurii_note_skip_interactive_mount', 0)
+    return
+  endif
   let l:cipher = simple_yurii_note#cipher_dir()
   let l:root = s:cipher_root()
-  if empty(l:cipher) || !isdirectory(l:cipher)
+  if empty(l:cipher) || empty(l:root)
+    return
+  endif
+  if !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    return
+  endif
+  if simple_yurii_note#vault_mounted() == 1
+    return
+  endif
+  redraw
+  if s:mount_by_password(l:cipher, l:root) != 1
+    return
+  endif
+  " バッファ内容を復号側へ差し替え。未開け未読ファイルなら index を開く
+  call simple_yurii_note#reload_vault_buffers(l:root)
+  let l:curp = expand('%:p')
+  if empty(l:curp) || (stridx(l:curp, fnamemodify(l:root, ':p')) == 0 && !filereadable(l:curp))
+    execute 'silent! edit ' . fnameescape(l:root . '/index.md')
+  endif
+endfunction
+
+" 主コマンド: :SimpleMount（手動マウント）
+function! simple_yurii_note#mount_vault() abort
+  let [l:cipher, l:root] = [simple_yurii_note#cipher_dir(), s:cipher_root()]
+  if empty(l:cipher) || empty(l:root) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 暗号ディレクトリ(' . l:cipher . ')が見つからない'
+    echohl NONE
+    return
+  endif
+  if simple_yurii_note#vault_mounted() == 1
+    echom 'simple_yurii_note: 既にマウント済み'
+    return
+  endif
+  if s:mount_by_password(l:cipher, l:root) != 1
+    return
+  endif
+  call simple_yurii_note#reload_vault_buffers(l:root)
+  echom 'simple_yurii_note: vault mounted'
+endfunction
+
+" 主コマンド: :SimpleLock（保存後アンマウント）
+function! simple_yurii_note#lock_vault() abort
+  let l:root = s:cipher_root()
+  if empty(l:root)
+    return
+  endif
+  if simple_yurii_note#vault_mounted() != 1
+    echom 'simple_yurii_note: マウントされていない'
+    return
+  endif
+  call simple_yurii_note#save_current_note()
+  let l:cur = bufnr('%')
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b) || l:b == l:cur
+      continue
+    endif
+    let l:p = fnamemodify(bufname(l:b), ':p')
+    if stridx(l:p, fnamemodify(l:root, ':p')) == 0 && getbufvar(l:b, '&modified')
+      execute 'silent! buffer ' . l:b
+      silent! update
+    endif
+  endfor
+  execute 'buffer ' . l:cur
+  call system('fusermount3 -u ' . shellescape(l:root))
+  call s:mount_cache_reset()
+  if v:shell_error != 0
+    echohl WarningMsg
+    echom 'simple_yurii_note: 使い残りがあるためアンマウント失敗。開けてるアプリを閉じて :SimpleLock'
+    echohl NONE
+    return
+  endif
+  echom 'simple_yurii_note: vault locked'
+endfunction
+
+" 主コマンド: :SimpleSetPassword（inputsecretで旧/新/確認）
+function! simple_yurii_note#set_password() abort
+  let l:cipher = simple_yurii_note#cipher_dir()
+  if empty(l:cipher) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
     echohl ErrorMsg
     echom 'simple_yurii_note: 暗号ディレクトリが見つからない: ' . l:cipher
     echohl NONE
     return
   endif
-  if empty(l:root) || !isdirectory(l:root)
+  let l:old = inputsecret('Current password: ')
+  if empty(l:old)
+    return
+  endif
+  let l:new = inputsecret('New password: ')
+  if empty(l:new)
+    echom 'simple_yurii_note: 空パスワードは不可。中止'
+    return
+  endif
+  if l:new !=# inputsecret('New password (again): ')
     echohl ErrorMsg
-    echom 'simple_yurii_note: vault ロケーションが無い: ' . l:root
+    echom 'simple_yurii_note: 新パスワードが一致しない。中止'
     echohl NONE
     return
   endif
-  if simple_yurii_note#vault_mounted() == 1
-    echom 'simple_yurii_note: vault は既にマウント済み'
-    return
-  endif
-  if !has('terminal')
-    echohl WarningMsg
-    echom 'simple_yurii_note: :terminal が無い。手動で実行: gocryptfs ' . l:cipher . ' ' . l:root
+  let l:pold = s:temp_passfile(l:old)
+  let l:out = system('gocryptfs -passwd -passfile=' . shellescape(l:pold) . ' '
+        \ . shellescape(l:cipher) . ' 2>&1 | tail -1', l:new . "\n" . l:new . "\n")
+  call delete(l:pold)
+  if v:shell_error == 0
+    redraw
+    echom 'simple_yurii_note: パスワードを変更しました（次のマウントから有効）'
+  else
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 変更失敗: ' . trim(substitute(l:out, "\n", ' ', 'g'))[0:110]
     echohl NONE
+  endif
+endfunction
+
+" マウント後にバッファ内容をリロード（vim 起動時の未読や古い表示を回す）
+function! simple_yurii_note#reload_vault_buffers(...) abort
+  let l:root = empty(a:000) ? s:cipher_root() : a:1
+  if empty(l:root)
     return
   endif
-  let l:script = 'gocryptfs ' . shellescape(l:cipher) . ' ' . shellescape(l:root)
-        \ . '; echo; echo "=== マウント完了。この窓は :q で閉じて、:e でバッファを再読込 ==="'
-  ":terminal はシェルを経由しないので、sh -c を明示して組み立てる
-  call term_start(['/bin/sh', '-c', l:script], {'term_name': 'SimpleMount'})
+  let l:rootp = fnamemodify(l:root, ':p')
+  let l:cur = bufnr('%')
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b)
+      continue
+    endif
+    let l:p = fnamemodify(bufname(l:b), ':p')
+    if !empty(l:p) && stridx(l:p, l:rootp) == 0
+      execute 'silent! buffer ' . l:b
+      silent! edit!
+    endif
+  endfor
+  if bufexists(l:cur) && l:cur != bufnr('%')
+    execute 'silent! buffer ' . l:cur
+  endif
 endfunction
