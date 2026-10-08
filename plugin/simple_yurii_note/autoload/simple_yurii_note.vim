@@ -3543,9 +3543,9 @@ function! s:hint_positions() abort
   let [l:up_m, l:dn_m] = s:v2_boundaries()
   if l:up_m > 0
     let l:pos = s:link_positions_in_range_limited(1, l:up_m - 1, l:max)
-    if len(l:pos) < l:max
+    if l:max == 0 || len(l:pos) < l:max
       let l:pos += s:link_positions_in_range_limited(
-            \ l:up_m + 1, line('$'), l:max - len(l:pos))
+            \ l:up_m + 1, line('$'), l:max == 0 ? 0 : l:max - len(l:pos))
     endif
     return l:pos
   endif
