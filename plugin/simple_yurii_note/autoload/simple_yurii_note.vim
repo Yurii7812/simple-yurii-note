@@ -10272,7 +10272,8 @@ function! simple_yurii_note#set_password() abort
   endif
   let l:script = 'gocryptfs -passwd ' . shellescape(l:cipher)
         \ . '; echo; echo "=== パスワード変更完了。この窓は :q で閉じてね ==="'
-  execute 'terminal ' . l:script
+  ":terminal はシェルを経由しないので、sh -c を明示して組み立てる
+  call term_start(['/bin/sh', '-c', l:script], {'term_name': 'SimpleSetPassword'})
 endfunction
 
 " vault が gocryptfs 管理（=<vault>.crypt がある）でも未マウントなら 1。
@@ -10377,6 +10378,8 @@ function! simple_yurii_note#mount_vault() abort
     echohl NONE
     return
   endif
-  execute 'terminal gocryptfs ' . shellescape(l:cipher) . ' ' . shellescape(l:root)
+  let l:script = 'gocryptfs ' . shellescape(l:cipher) . ' ' . shellescape(l:root)
         \ . '; echo; echo "=== マウント完了。この窓は :q で閉じて、:e でバッファを再読込 ==="'
+  ":terminal はシェルを経由しないので、sh -c を明示して組み立てる
+  call term_start(['/bin/sh', '-c', l:script], {'term_name': 'SimpleMount'})
 endfunction
