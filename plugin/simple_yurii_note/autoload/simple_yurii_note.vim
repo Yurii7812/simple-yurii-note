@@ -619,7 +619,11 @@ function! s:get_pkm_root() abort
 endfunction
 
 function! s:index_path(root) abort
-  return fnamemodify(a:root, ':p') . s:sep() . 'index.md'
+  " root が既に末尾スラッシュ付き（':p'）なので二重スラッシュを作らない。
+  " 「root//index.md」のまま edit すると BufReadPre の <afile>:p が
+  " 「/index.md」に化け、noswapfile の自動コマンドが効かなくなる。
+  let l:root = fnamemodify(a:root, ':p')
+  return l:root . (l:root =~# s:sep() . '$' ? '' : s:sep()) . 'index.md'
 endfunction
 
 function! s:is_root_note_path(path) abort
@@ -10294,6 +10298,20 @@ function! s:vault_clean() abort
   return substitute(l:root, s:sep() . '\+$', '', '')
 endfunction
 
+" dir の中に何かあるか（'.'/'..' は数えない）
+function! s:dir_has_content(dir) abort
+  if !isdirectory(a:dir)
+    return 0
+  endif
+  if exists('*readdir')
+    return !empty(readdir(a:dir))
+  endif
+  let l:ls = split(glob(a:dir . s:sep() . '*', 1), "\n")
+  let l:ls += filter(split(glob(a:dir . s:sep() . '.*', 1), "\n"),
+        \ 'fnamemodify(v:val, ":t") !~# ''^\.\{1,2}$''')
+  return !empty(l:ls)
+endfunction
+
 " 暗号箱の場所（g:simple_yurii_note_cipher_dir で上書き可）
 " 「A/note を vault、暗号実体は A/.crypt」が正規（兄弟構成＝自己包括なし）。
 " 旧配置も探す: A/.note-crypt（A/note 時代の名残）/ <root>.crypt。
@@ -10356,11 +10374,23 @@ endfunction
 
 " vault が暗号箱持ちでロック中なら 1（暗号箱なし vault はいつも 0）
 function! simple_yurii_note#vault_locked_flag() abort
+  let l:root = s:vault_clean()
+  if empty(l:root)
+    return 0
+  endif
   let l:cipher = simple_yurii_note#cipher_dir()
   if empty(l:cipher) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
     return 0
   endif
-  return simple_yurii_note#vault_mounted() == 1 ? 0 : 1
+  if simple_yurii_note#vault_mounted() == 1
+    return 0
+  endif
+  " 直置き型（A 自身が root）で中身がある＝ロックされた mountpoint ではなく
+  " 平文の vault が再作成された状態。同名の旧暗号箱があってもロック扱いにしない。
+  if fnamemodify(l:root, ':t') !=# 'note' && s:dir_has_content(l:root)
+    return 0
+  endif
+  return 1
 endfunction
 
 " 一時パスワードファイル（0600, すぐ消す）
@@ -10407,6 +10437,12 @@ function! simple_yurii_note#maybe_mount_interactive() abort
     return
   endif
   if !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    return
+  endif
+  if !isdirectory(l:root)
+    " mountpoint が無いと gocryptfs はマウントできない。yurii-note は
+    " 死んだ root.txt が残っているだけかもしれないので、聞かずに止める。
+    echom 'simple_yurii_note: vault ディレクトリが無いのでマウントできません: ' . l:root
     return
   endif
   if simple_yurii_note#vault_mounted() == 1
@@ -10458,21 +10494,22 @@ function! s:cd_out_of_vault(root) abort
   endif
 endfunction
 
-" vault をロックする前: 履歴を vault 内へ書き出し、以後の書き先を vault 外へ戻す。
-" アンマウント後に &viminfofile / undodir が vault 内を指したままだと、
-" 平文の mountpoint に書かれてしまうため。
+" vault をロックする前: 履歴を vault 内へ書き出し、以後の書き先を無効化する。
+" アンマウント後に &viminfofile / undodir が vault 内を指したまま平文の
+" mountpoint に書かれるのを防ぐ（vault 外に平文の履歴を残さない）。
 function! s:release_vault_runtime() abort
   silent! wviminfo
-  let l:fallback = s:state_dir_legacy()
-  if !isdirectory(l:fallback)
-    call mkdir(l:fallback, 'p')
+  set viminfofile=
+  set noundofile
+endfunction
+
+" VimLeavePre: viminfo はこの後（VimLeave の前）に書かれる。ロック中のまま
+" 終了する場合、書き先を無効化して mountpoint に平文を作らない保険。
+function! simple_yurii_note#before_write_viminfo() abort
+  if simple_yurii_note#vault_locked_flag() == 1
+    set viminfofile=
+    set noundofile
   endif
-  execute 'set viminfofile=' . fnameescape(l:fallback . s:sep() . 'viminfo')
-  let l:undo = l:fallback . s:sep() . 'undo'
-  if !isdirectory(l:undo)
-    call mkdir(l:undo, 'p')
-  endif
-  execute 'set undodir=' . fnameescape(l:undo)
 endfunction
 
 " :SimpleLock（保存フラッシュしてからアンマウント）
@@ -10525,15 +10562,32 @@ endfunction
 
 " :SimpleSetPassword（inputsecret で旧/新/確認。マウント中でもOK）
 function! simple_yurii_note#set_password() abort
-  let l:cipher = simple_yurii_note#cipher_dir()
-  if empty(l:cipher)
+  let l:root = s:vault_clean()
+  if empty(l:root)
     echohl ErrorMsg
     echom 'simple_yurii_note: vault(root) が決まっていません'
     echohl NONE
     return
   endif
+  " 判定: 暗号化済み（=パスワード変更）か、未暗号化（=init）か
+  "   ・マウント済み → 変更
+  "   ・root が A/note 型 → A/.crypt に conf があれば変更
+  "   ・root が直置き型（note 無し）→ 中身があれば平文 vault なので init（レイアウト変換）。
+  "     空で旧配置の conf があるときだけ「ロック中の legacy vault」として変更扱い。
+  let l:encrypted = (simple_yurii_note#vault_mounted() == 1)
+  if !l:encrypted
+    if fnamemodify(l:root, ':t') ==# 'note'
+      let l:cipher = simple_yurii_note#cipher_dir()
+      let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    elseif s:dir_has_content(l:root)
+      let l:encrypted = 0
+    else
+      let l:cipher = simple_yurii_note#cipher_dir()
+      let l:encrypted = !empty(l:cipher) && filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    endif
+  endif
   " 未暗号化 vault = 今からノート全体を暗号化して始める（init）
-  if !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+  if !l:encrypted
     return simple_yurii_note#init_encrypted()
   endif
   let l:old = inputsecret('Current password: ')
@@ -10569,9 +10623,10 @@ function! simple_yurii_note#set_password() abort
 endfunction
 
 " 未暗号化 vault を gocryptfs 化する（ノート全部を暗号箱へ入れ替える）
-"   mv root → root-plain-…   （退避）
-"   mkdir root（mountpoint）+ gocryptfs -init <cipher>
-"   mount → 平文を cp -a → 検証 → 平文退避を消す
+"   必ず「プロジェクト A/note（mountpoint）↔ A/.crypt（暗号箱）」に正規化する。
+"   root が note でない（ノートが直置き）ときは、暗号化と同時に
+"   中身を A/note へ寄せてレイアウトを変換する（root も A/note に更新）。
+"   mv root → <root-t>-plain-…（退避）→ mkdir → init → mount → cp → 検証 → 退避を消す
 " 処理完了後もマウントは継続（そのまま作業できる）。閉じるとロック。
 function! simple_yurii_note#init_encrypted() abort
   return s:init_encrypted_impl()
@@ -10579,20 +10634,25 @@ endfunction
 
 " stage: mv→init→mount→copy→verify でcatch時に巻き戻る
 function! s:init_encrypted_impl() abort
-  let l:root = s:vault_clean()
-  if empty(l:root)
+  let l:cur = s:vault_clean()
+  if empty(l:cur)
     echohl ErrorMsg
     echom 'simple_yurii_note: vault(root) が決まっていません'
     echohl NONE
     return
   endif
-  let l:cipher = simple_yurii_note#cipher_dir()
-  if simple_yurii_note#vault_mounted(escape(l:root, '\\'), 1) == 1
+  if simple_yurii_note#vault_mounted(escape(l:cur, '\\'), 1) == 1
     echohl WarningMsg
     echom 'simple_yurii_note: 既にマウント済み（暗号化済み vault）。:SimpleSetPassword はパスワード変更用'
     echohl NONE
     return
   endif
+  " vault 本体は常に A/note、暗号箱は A/.crypt（プロジェクトの中。隣には作らない）
+  let l:proj = fnamemodify(l:cur, ':t') ==# 'note' ? fnamemodify(l:cur, ':h') : l:cur
+  let l:proj = substitute(fnamemodify(l:proj, ':p'), s:sep() . '\+$', '', '')
+  let l:root = l:proj . s:sep() . 'note'
+  let l:cipher = l:proj . s:sep() . '.crypt'
+  let l:converted = (l:root !=# substitute(fnamemodify(l:cur, ':p'), s:sep() . '\+$', '', ''))
   let l:new = inputsecret('vault の新しいパスワード: ')
   if empty(l:new)
     echom 'simple_yurii_note: 中止（空パスワード）'
@@ -10604,11 +10664,19 @@ function! s:init_encrypted_impl() abort
     echohl NONE
     return
   endif
-  let l:plaindir = l:root . '-plain-' . strftime('%Y%m%d%H%M%S')
-  let l:n = trim(system('find ' . shellescape(l:root) . ' -mindepth 1 2>/dev/null | wc -l'))
+  " バッファの未保存分は、パスが有効な今のうちに書き出しておく
+  call simple_yurii_note#save_current_note()
+  " 退避（mv）で cwd のディレクトリが消えるので、vault の外へ出ておく
+  call s:cd_out_of_vault(l:cur)
+  let l:plaindir = fnamemodify(l:cur, ':h') . s:sep() . fnamemodify(l:cur, ':t') . '-plain-' . strftime('%Y%m%d%H%M%S')
+  let l:n = trim(system('find ' . shellescape(l:cur) . ' -mindepth 1 2>/dev/null | wc -l'))
   if str2nr(l:n) > 0
-    let l:size = trim(system('du -sh ' . shellescape(l:root) . ' 2>/dev/null | cut -f1'))
-    let l:yn = input(printf('%s を暗号化します：%s 個のファイル(%s)。よければ y: ', l:root, l:n, l:size))
+    let l:size = trim(system('du -sh ' . shellescape(l:cur) . ' 2>/dev/null | cut -f1'))
+    let l:msg = l:converted
+          \ ? printf('%s を暗号化して %s + %s にします：%s 個のファイル(%s)。よければ y: ',
+          \          l:cur, l:root, l:cipher, l:n, l:size)
+          \ : printf('%s を暗号化します：%s 個のファイル(%s)。よければ y: ', l:cur, l:n, l:size)
+    let l:yn = input(l:msg)
     if l:yn !=# 'y'
       echom 'simple_yurii_note: 中止'
       return
@@ -10622,7 +10690,7 @@ function! s:init_encrypted_impl() abort
       throw 'cipher が既に存在・非空: ' . l:cipher
     endif
     let l:stage = 'mv'
-    call system('mv ' . shellescape(l:root) . ' ' . shellescape(l:plaindir))
+    call system('mv ' . shellescape(l:cur) . ' ' . shellescape(l:plaindir))
     if v:shell_error != 0
       throw 'mv 失敗'
     endif
@@ -10641,7 +10709,6 @@ function! s:init_encrypted_impl() abort
       throw 'mount 失敗: ' . trim(substitute(l:out, "\n", ' ', 'g'))
     endif
     let l:stage = 'copy'
-    call simple_yurii_note#save_current_note()
     let l:out = system('cp -a ' . shellescape(l:plaindir) . '/. ' . shellescape(l:root) . '/ 2>&1')
     if v:shell_error != 0
       throw 'copy 失敗'
@@ -10661,7 +10728,7 @@ function! s:init_encrypted_impl() abort
   catch
     let l:before_err = v:exception
     " 巻き戻し: mount 中なら外し、root/退避を復元
-    call s:init_rollback(l:root, l:plaindir, l:cipher, l:stage)
+    call s:init_rollback(l:cur, l:root, l:plaindir, l:cipher, l:stage, l:converted)
     echohl ErrorMsg
     echom 'simple_yurii_note: 暗号化失敗(' . l:before_err . ')。元の状態に戻しました'
     echohl NONE
@@ -10670,13 +10737,16 @@ function! s:init_encrypted_impl() abort
   endtry
   call delete(l:pf)
   call s:mount_cache_reset()
-  " 「note/.crypt が vault の中に見える」のための symlink は mount 前に作成済み。
-  " ここでは保険として消えていないかだけ確認する。
-  let l:symlink = l:root . s:sep() . '.crypt'
-  if !getftype(l:symlink) && simple_yurii_note#vault_mounted() != 1
-    let l:cand = simple_yurii_note#cipher_dir()
-    call system('ln -s ' . shellescape('../' . fnamemodify(l:cand, ':t')) . ' ' . shellescape(l:symlink))
+  if l:converted
+    " root を A/note に更新してバッファも張り替える（旧 A/index.md → A/note/index.md）
+    let g:simple_yurii_note_root = fnamemodify(l:root, ':p')
+    call s:save_persisted_root(l:root)
+    call s:setup_persistent_undo_for_root(l:root)
+    call s:adopt_vault_runtime(l:root)
+    call simple_yurii_note#clear_title_cache()
+    call s:remap_vault_buffers_to(l:cur, l:root)
   endif
+  call simple_yurii_note#reload_vault_buffers(l:root)
   " Index 無しの真空 vault だと起動後に作成確認が出るので、ここで作る
   if !filereadable(s:index_path(l:root))
     try
@@ -10684,11 +10754,43 @@ function! s:init_encrypted_impl() abort
     catch
     endtry
   endif
+  silent! execute 'cd ' . fnameescape(l:root)
   redraw
   echom 'simple_yurii_note: vault を暗号化しました。閉じるとロックされます（開くときはパスワード）'
 endfunction
 
-function! s:init_rollback(root, plaindir, cipher, stage) abort
+" レイアウト変換後: 旧 root 配下のバッファを新 root 配下の同名ファイルへ張り替える
+function! s:remap_vault_buffers_to(oldroot, newroot) abort
+  let l:oldp = fnamemodify(a:oldroot, ':p')
+  let l:newp = fnamemodify(a:newroot, ':p')
+  let l:cur = bufnr('%')
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b)
+      continue
+    endif
+    let l:p = fnamemodify(bufname(l:b), ':p')
+    if empty(l:p) || stridx(l:p, l:oldp) != 0
+      continue
+    endif
+    let l:rel = strpart(l:p, len(l:oldp))
+    if empty(l:rel)
+      continue
+    endif
+    let l:np = l:newp . l:rel
+    if !filereadable(l:np)
+      continue
+    endif
+    execute 'silent! buffer ' . l:b
+    silent! execute 'edit! ' . fnameescape(l:np)
+  endfor
+  if bufexists(l:cur) && l:cur != bufnr('%')
+    execute 'silent! buffer ' . l:cur
+  endif
+endfunction
+
+" 巻き戻し。a:converted=1 のときは「A を丸ごと退避した」型なので、
+" 再作成したプロジェクト A を消してから plaindir を A に戻す
+function! s:init_rollback(oldroot, root, plaindir, cipher, stage, converted) abort
   let l:root = fnamemodify(a:root, ':p')
   if index(['mount', 'copy', 'verify'], a:stage) >= 0
     " mount したまま失敗したときは外して root を掃除
@@ -10698,8 +10800,17 @@ function! s:init_rollback(root, plaindir, cipher, stage) abort
       call system('rm -rf ' . shellescape(l:root))
     endif
   endif
-  if isdirectory(a:plaindir)
-    call system('mv ' . shellescape(a:plaindir) . ' ' . shellescape(l:root))
+  if a:converted
+    " plaindir がある＝退避（mv）が成功しているときだけ掃除して戻す。
+    " mv 自体が失敗しているなら A は無傷なので何もしない。
+    if isdirectory(a:plaindir)
+      call system('rm -rf ' . shellescape(fnamemodify(l:root, ':h')))
+      call system('mv ' . shellescape(a:plaindir) . ' ' . shellescape(a:oldroot))
+    endif
+  else
+    if isdirectory(a:plaindir)
+      call system('mv ' . shellescape(a:plaindir) . ' ' . shellescape(l:root))
+    endif
   endif
   " init以後の失敗は暗号箱も掃除（成功検証までのものなので）
   if a:stage !=# 'none'
@@ -10709,7 +10820,8 @@ endfunction
 
 
 " マウント成功後: 履歴(viminfo)と undo を vault 内へ向け直す。
-" ロック中は vimrc が vault 外の退避先を指しているため、ここで切り替える。
+" 起動時はロック中で読めなかった vault 内の履歴を rviminfo で読み直し、
+" vault 外に残った平文 viminfo があれば取り込んで消す。
 function! s:adopt_vault_runtime(root) abort
   let l:root = substitute(fnamemodify(a:root, ':p'), s:sep() . '\+$', '', '')
   if empty(l:root)
@@ -10723,11 +10835,24 @@ function! s:adopt_vault_runtime(root) abort
     endtry
   endif
   let l:vi = l:state . s:sep() . 'viminfo'
+  " 旧・平文の viminfo を vault 内へ取り込んで消す:
+  "   ① vault 外の退避先 ~/.vim/simple_yurii_note/viminfo
+  "   ② 旧 vimrc が A/note を解決できず作った A/.state/viminfo
+  let l:legacy = [s:state_dir_legacy() . s:sep() . 'viminfo']
+  if fnamemodify(l:root, ':t') ==# 'note'
+    call add(l:legacy, fnamemodify(l:root, ':h') . s:sep() . '.state' . s:sep() . 'viminfo')
+  endif
+  for l:old in l:legacy
+    if filereadable(l:old) && fnamemodify(l:old, ':p') !=# fnamemodify(l:vi, ':p')
+      silent! execute 'rviminfo ' . fnameescape(l:old)
+      silent! call delete(l:old)
+    endif
+  endfor
   if &viminfofile !=# l:vi
     execute 'set viminfofile=' . fnameescape(l:vi)
-    " ロック中は読めなかった vault 内の履歴をここで読み込む
-    silent! rviminfo
   endif
+  " ロック中は読めなかった vault 内の履歴をここで読み込む
+  silent! rviminfo
   call s:setup_persistent_undo_for_root(l:root)
 endfunction
 

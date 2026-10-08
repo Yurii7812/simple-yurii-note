@@ -13,6 +13,7 @@ simple_yurii_note#after_shell_rm
 simple_yurii_note#at_add
 simple_yurii_note#at_add_reverse
 simple_yurii_note#autosync_on_save
+simple_yurii_note#before_write_viminfo
 simple_yurii_note#check_missing_prefix_in_current_dir
 simple_yurii_note#check_missing_prefix_in_current_dir_once
 simple_yurii_note#choose_index_root
