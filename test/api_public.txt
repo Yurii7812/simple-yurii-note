@@ -42,6 +42,7 @@ simple_yurii_note#hub_list
 simple_yurii_note#hub_map
 simple_yurii_note#hub_open
 simple_yurii_note#hub_set
+simple_yurii_note#init_encrypted
 simple_yurii_note#init_persistent_undo_if_ready
 simple_yurii_note#is_autosave_target
 simple_yurii_note#is_vault_note

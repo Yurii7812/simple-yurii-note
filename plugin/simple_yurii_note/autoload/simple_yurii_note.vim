@@ -447,6 +447,13 @@ function! s:state_dir() abort
     if !empty(l:root)
       let l:root = fnamemodify(expand(l:root), ':p')
       let l:dir = l:root . s:sep() . '.state'
+      " ロック中の vault（gocryptfs マウント前）に .state を作らない。
+      " gocryptfs は空でないマウントポイントを拒否するため、作成すると
+      " 正しいパスワードでもマウントに失敗する。書き込みは各所のロック
+      " ガードで止まるので、ここでは場所だけ返す。
+      if simple_yurii_note#vault_locked_flag() == 1
+        return l:dir
+      endif
       if !isdirectory(l:dir)
         try
           call mkdir(l:dir, 'p')
@@ -476,6 +483,10 @@ endfunction
 " root.txt は vault を探すためのブートストラップなので残す（vault の場所は暗号対象外）。
 function! simple_yurii_note#migrate_state_into_vault() abort
   if empty(get(g:, 'simple_yurii_note_state_in_vault', 1))
+    return
+  endif
+  " vault がロック中なら vault への書き込み(移行)をしない（mount後に自動で走る前提）
+  if simple_yurii_note#vault_locked_flag() == 1
     return
   endif
   let l:legacy = s:state_dir_legacy()
@@ -653,7 +664,9 @@ endfunction
 
 function! s:lock_dir() abort
   let l:dir = s:state_dir() . s:sep() . 'locks'
-  if !isdirectory(l:dir)
+  " ロック中に mkdir すると gocryptfs の mountpoint に平文の .state/locks が
+  " できてしまう（マウントも失敗する）。作成はアンロック中だけ。
+  if !isdirectory(l:dir) && simple_yurii_note#vault_locked_flag() != 1
     call mkdir(l:dir, 'p')
   endif
   return l:dir
@@ -1004,6 +1017,10 @@ endfunction
 
 " 公開: 既存の操作ガイドを最新にする（VimEnter 用。無ければ何もしない）。
 function! simple_yurii_note#refresh_guide() abort
+  " ロック中の vault には書けない（mount後に自動で走らせる前提）
+  if simple_yurii_note#vault_locked_flag() == 1
+    return
+  endif
   let l:root = s:get_pkm_root()
   if empty(l:root) || !isdirectory(l:root)
     return
@@ -1172,6 +1189,10 @@ function! s:startup_recover_missing_root() abort
 endfunction
 
 function! simple_yurii_note#startup_restore_root() abort
+  " ロック中に Index 無し判定や作成確認はしない（mount後に通常のフローへ）
+  if simple_yurii_note#vault_locked_flag() == 1
+    return
+  endif
   if get(s:, 'startup_root_recovery_active', 0)
     return
   endif
@@ -1226,6 +1247,12 @@ function! s:setup_root_and_index(open_index) abort
     return ''
   endif
   let l:root = fnamemodify(expand(l:root), ':p')
+
+  " vault が「A/note/.crypt」型のときは note/ が vault 本体。
+  " ユーザーが A（親ディレクトリ）を指定したら自動的に A/note を選ぶ。
+  if !filereadable(l:root . s:sep() . 'index.md') && isdirectory(l:root . s:sep() . 'note')
+    let l:root = fnamemodify(l:root . s:sep() . 'note', ':p')
+  endif
 
   if !isdirectory(l:root)
     call mkdir(l:root, 'p')
@@ -1282,6 +1309,14 @@ endfunction
 
 function! simple_yurii_note#ensure_root_and_index() abort
   let l:root = s:get_pkm_root()
+
+  " ロック中の vault では Index 判定も作成確認もしない。
+  " マウント待ち（inputsecret）中に他の起動タイマーがここへ入り、
+  " 「Create index.md?」をパスワード入力の上に重ねてしまうのを防ぐ。
+  " マウント成功後に改めて呼ばれる。
+  if simple_yurii_note#vault_locked_flag() == 1
+    return ''
+  endif
 
   if get(s:, 'startup_root_recovery_active', 0)
     if !empty(l:root) && filereadable(s:index_path(l:root))
@@ -10216,22 +10251,9 @@ endfunction
 
 
 function! simple_yurii_note#exit_cleanup() abort
-  " recent.json（visit 履歴。残留させない方針）
-  try
-    let l:recent = s:state_dir() . s:sep() . 'recent.json'
-    if filereadable(l:recent)
-      call delete(l:recent)
-    endif
-  catch
-  endtry
-  " viminfo（ヤンク本文等が落ちるファイルを vault 内に寄せて、終了時に消す）
-  try
-    let l:vi = &viminfofile
-    if !empty(l:vi) && filereadable(l:vi) && stridx(l:vi, expand('~/.viminfo')) != 0
-      call delete(l:vi)
-    endif
-  catch
-  endtry
+  " 履歴（コマンド履歴・タイトル入力履歴・recent）は vault 内 .state/ に
+  " 残す方針に変更（消すと不便）。vault が暗号化されると履歴も暗号化される。
+  return
 endfunction
 
 
@@ -10266,9 +10288,11 @@ function! simple_yurii_note#cipher_dir() abort
     return ''
   endif
   let l:parent = fnamemodify(l:root, ':h') . s:sep()
+  " 暗号実体の候補: ①A内の隠し前列(.note-crypt) ②A/.crypt ③root.crypt
+  " A/note を root とする運用では①が正規の置き場所
   let l:cand = [
-        \ l:parent . '.crypt',
         \ l:parent . '.' . fnamemodify(l:root, ':t') . '-crypt',
+        \ l:parent . '.crypt',
         \ l:root . '.crypt',
         \ ]
   for l:c in l:cand
@@ -10362,8 +10386,14 @@ function! simple_yurii_note#maybe_mount_interactive() abort
     return
   endif
   redraw
-  call s:mount_by_password(l:cipher, l:root)
+  if s:mount_by_password(l:cipher, l:root) != 1
+    return
+  endif
+  call s:adopt_vault_runtime(l:root)
   call simple_yurii_note#reload_vault_buffers()
+  " パスワード待ちの間に他経路の起動タイマー（SimpleIndex 等）はロック中として
+  " 空振りしている。マウントできたここで Index を開き直す。
+  call timer_start(0, {-> execute('SimpleIndex')})
 endfunction
 
 " :SimpleMount（手動マウント）
@@ -10383,8 +10413,39 @@ function! simple_yurii_note#mount_vault() abort
   if s:mount_by_password(l:cipher, l:root) != 1
     return
   endif
+  call s:adopt_vault_runtime(l:root)
   call simple_yurii_note#reload_vault_buffers()
   echom 'simple_yurii_note: vault unlocked'
+endfunction
+
+" vault が cwd のままだと fusermount が "Device or resource busy" で
+" 失敗し、終了時にロックされない。アンマウント前に vault の外へ出る。
+function! s:cd_out_of_vault(root) abort
+  let l:rootp = substitute(fnamemodify(a:root, ':p'), s:sep() . '\+$', '', '')
+  if empty(l:rootp)
+    return
+  endif
+  let l:cwd = substitute(fnamemodify(getcwd(), ':p'), s:sep() . '\+$', '', '')
+  if l:cwd ==# l:rootp || stridx(l:cwd, l:rootp . s:sep()) == 0
+    silent! execute 'cd ' . fnameescape(expand('~'))
+  endif
+endfunction
+
+" vault をロックする前: 履歴を vault 内へ書き出し、以後の書き先を vault 外へ戻す。
+" アンマウント後に &viminfofile / undodir が vault 内を指したままだと、
+" 平文の mountpoint に書かれてしまうため。
+function! s:release_vault_runtime() abort
+  silent! wviminfo
+  let l:fallback = s:state_dir_legacy()
+  if !isdirectory(l:fallback)
+    call mkdir(l:fallback, 'p')
+  endif
+  execute 'set viminfofile=' . fnameescape(l:fallback . s:sep() . 'viminfo')
+  let l:undo = l:fallback . s:sep() . 'undo'
+  if !isdirectory(l:undo)
+    call mkdir(l:undo, 'p')
+  endif
+  execute 'set undodir=' . fnameescape(l:undo)
 endfunction
 
 " :SimpleLock（保存フラッシュしてからアンマウント）
@@ -10408,7 +10469,9 @@ function! simple_yurii_note#lock_vault() abort
       silent! update
     endif
   endfor
-  call system('fusermount3 -u ' . shellescape(l:root))
+  call s:release_vault_runtime()
+  call s:cd_out_of_vault(l:root)
+  call system('fusermount3 -u -z ' . shellescape(l:root))
   call s:mount_cache_reset()
   if v:shell_error != 0
     echohl WarningMsg
@@ -10428,18 +10491,23 @@ function! simple_yurii_note#quit_unmount() abort
   if empty(l:root)
     return
   endif
-  call system('fusermount3 -u ' . shellescape(l:root))
+  call s:cd_out_of_vault(l:root)
+  call system('fusermount3 -u -z ' . shellescape(l:root))
   call s:mount_cache_reset()
 endfunction
 
 " :SimpleSetPassword（inputsecret で旧/新/確認。マウント中でもOK）
 function! simple_yurii_note#set_password() abort
   let l:cipher = simple_yurii_note#cipher_dir()
-  if empty(l:cipher) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+  if empty(l:cipher)
     echohl ErrorMsg
-    echom 'simple_yurii_note: この vault はまだ暗号化されていません: ' . l:cipher
+    echom 'simple_yurii_note: vault(root) が決まっていません'
     echohl NONE
     return
+  endif
+  " 未暗号化 vault = 今からノート全体を暗号化して始める（init）
+  if !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    return simple_yurii_note#init_encrypted()
   endif
   let l:old = inputsecret('Current password: ')
   if empty(l:old)
@@ -10473,7 +10541,170 @@ function! simple_yurii_note#set_password() abort
   endif
 endfunction
 
-" マウント後にバッファをディスク内容へ差し替え
+" 未暗号化 vault を gocryptfs 化する（ノート全部を暗号箱へ入れ替える）
+"   mv root → root-plain-…   （退避）
+"   mkdir root（mountpoint）+ gocryptfs -init <cipher>
+"   mount → 平文を cp -a → 検証 → 平文退避を消す
+" 処理完了後もマウントは継続（そのまま作業できる）。閉じるとロック。
+function! simple_yurii_note#init_encrypted() abort
+  return s:init_encrypted_impl()
+endfunction
+
+" stage: mv→init→mount→copy→verify でcatch時に巻き戻る
+function! s:init_encrypted_impl() abort
+  let l:root = s:vault_clean()
+  if empty(l:root)
+    echohl ErrorMsg
+    echom 'simple_yurii_note: vault(root) が決まっていません'
+    echohl NONE
+    return
+  endif
+  let l:cipher = simple_yurii_note#cipher_dir()
+  if simple_yurii_note#vault_mounted(escape(l:root, '\\'), 1) == 1
+    echohl WarningMsg
+    echom 'simple_yurii_note: 既にマウント済み（暗号化済み vault）。:SimpleSetPassword はパスワード変更用'
+    echohl NONE
+    return
+  endif
+  let l:new = inputsecret('vault の新しいパスワード: ')
+  if empty(l:new)
+    echom 'simple_yurii_note: 中止（空パスワード）'
+    return
+  endif
+  if l:new !=# inputsecret('もう一度（確認）: ')
+    echohl ErrorMsg
+    echom 'simple_yurii_note: パスワードが一致しません。中止'
+    echohl NONE
+    return
+  endif
+  let l:plaindir = l:root . '-plain-' . strftime('%Y%m%d%H%M%S')
+  let l:n = trim(system('find ' . shellescape(l:root) . ' -mindepth 1 2>/dev/null | wc -l'))
+  if str2nr(l:n) > 0
+    let l:size = trim(system('du -sh ' . shellescape(l:root) . ' 2>/dev/null | cut -f1'))
+    let l:yn = input(printf('%s を暗号化します：%s 個のファイル(%s)。よければ y: ', l:root, l:n, l:size))
+    if l:yn !=# 'y'
+      echom 'simple_yurii_note: 中止'
+      return
+    endif
+  endif
+  let l:pf = s:temp_passfile(l:new)
+  let l:stage = 'none'
+  let l:before_err = ''
+  try
+    if !empty(glob(l:cipher . s:sep() . '*', 1)) || filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+      throw 'cipher が既に存在・非空: ' . l:cipher
+    endif
+    let l:stage = 'mv'
+    call system('mv ' . shellescape(l:root) . ' ' . shellescape(l:plaindir))
+    if v:shell_error != 0
+      throw 'mv 失敗'
+    endif
+    let l:stage = 'init'
+    call mkdir(fnamemodify(l:cipher, ':h'), 'p')
+    call mkdir(l:cipher, 'p')
+    let l:out = system('gocryptfs -init -passfile=' . shellescape(l:pf) . ' ' . shellescape(l:cipher) . ' 2>&1')
+    if v:shell_error != 0
+      throw 'init 失敗: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+    endif
+    let l:stage = 'mount'
+    call mkdir(l:root, 'p')
+    let l:out = system('gocryptfs -passfile=' . shellescape(l:pf) . ' ' . shellescape(l:cipher)
+          \ . ' ' . shellescape(l:root) . ' 2>&1')
+    if v:shell_error != 0
+      throw 'mount 失敗: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+    endif
+    let l:stage = 'copy'
+    call simple_yurii_note#save_current_note()
+    let l:out = system('cp -a ' . shellescape(l:plaindir) . '/. ' . shellescape(l:root) . '/ 2>&1')
+    if v:shell_error != 0
+      throw 'copy 失敗'
+    endif
+    let l:stage = 'verify'
+    let l:a = trim(system('find ' . shellescape(l:plaindir) . ' -mindepth 1 2>/dev/null | wc -l'))
+    let l:b = trim(system('find ' . shellescape(l:root) . ' -mindepth 1 2>/dev/null | wc -l'))
+    if str2nr(l:a) != str2nr(l:b)
+      throw printf('件数不一致 plain=%s mounted=%s', l:a, l:b)
+    endif
+    let l:stage = 'done'
+    " 平文の退避は暗号箱へ移し終えたので消す（残すと平文がディスクに漏れる）
+    call system('rm -rf ' . shellescape(l:plaindir))
+    " FUSE 内に .crypt symlink（../<cipher>）を保存しておく
+    " （mount後に作ると暗号ファイルとして格納され、再マウント時も表示される）
+    call system('ln -s ' . shellescape('../' . fnamemodify(l:cipher, ':t')) . ' ' . shellescape(l:root . s:sep() . '.crypt'))
+  catch
+    let l:before_err = v:exception
+    " 巻き戻し: mount 中なら外し、root/退避を復元
+    call s:init_rollback(l:root, l:plaindir, l:cipher, l:stage)
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 暗号化失敗(' . l:before_err . ')。元の状態に戻しました'
+    echohl NONE
+    call delete(l:pf)
+    return
+  endtry
+  call delete(l:pf)
+  call s:mount_cache_reset()
+  " 「note/.crypt が vault の中に見える」のための symlink は mount 前に作成済み。
+  " ここでは保険として消えていないかだけ確認する。
+  let l:symlink = l:root . s:sep() . '.crypt'
+  if !getftype(l:symlink) && simple_yurii_note#vault_mounted() != 1
+    let l:cand = simple_yurii_note#cipher_dir()
+    call system('ln -s ' . shellescape('../' . fnamemodify(l:cand, ':t')) . ' ' . shellescape(l:symlink))
+  endif
+  " Index 無しの真空 vault だと起動後に作成確認が出るので、ここで作る
+  if !filereadable(s:index_path(l:root))
+    try
+      call s:write_index_and_guide(l:root)
+    catch
+    endtry
+  endif
+  redraw
+  echom 'simple_yurii_note: vault を暗号化しました。閉じるとロックされます（開くときはパスワード）'
+endfunction
+
+function! s:init_rollback(root, plaindir, cipher, stage) abort
+  let l:root = fnamemodify(a:root, ':p')
+  if index(['mount', 'copy', 'verify'], a:stage) >= 0
+    " mount したまま失敗したときは外して root を掃除
+    call s:cd_out_of_vault(l:root)
+    call system('fusermount3 -u ' . shellescape(l:root) . ' 2>/dev/null')
+    if isdirectory(l:root)
+      call system('rm -rf ' . shellescape(l:root))
+    endif
+  endif
+  if isdirectory(a:plaindir)
+    call system('mv ' . shellescape(a:plaindir) . ' ' . shellescape(l:root))
+  endif
+  " init以後の失敗は暗号箱も掃除（成功検証までのものなので）
+  if a:stage !=# 'none'
+    call system('rm -rf ' . shellescape(a:cipher))
+  endif
+endfunction
+
+
+" マウント成功後: 履歴(viminfo)と undo を vault 内へ向け直す。
+" ロック中は vimrc が vault 外の退避先を指しているため、ここで切り替える。
+function! s:adopt_vault_runtime(root) abort
+  let l:root = substitute(fnamemodify(a:root, ':p'), s:sep() . '\+$', '', '')
+  if empty(l:root)
+    return
+  endif
+  let l:state = l:root . s:sep() . '.state'
+  if !isdirectory(l:state)
+    try
+      call mkdir(l:state, 'p')
+    catch
+    endtry
+  endif
+  let l:vi = l:state . s:sep() . 'viminfo'
+  if &viminfofile !=# l:vi
+    execute 'set viminfofile=' . fnameescape(l:vi)
+    " ロック中は読めなかった vault 内の履歴をここで読み込む
+    silent! rviminfo
+  endif
+  call s:setup_persistent_undo_for_root(l:root)
+endfunction
+
+" マウント後にバッファ内容を復号側へ差し替え
 function! simple_yurii_note#reload_vault_buffers(...) abort
   let l:root = empty(a:000) ? s:vault_clean() : a:1
   if empty(l:root)
@@ -10496,7 +10727,7 @@ function! simple_yurii_note#reload_vault_buffers(...) abort
   endif
 endfunction
 
-" ロック中に vault を書こうとしたら止める（:w / ノート書き込み全経路）
+" ロック中に vault を書こうとしたら全部止める（:w / ノート作成 / sync など全経路）
 function! simple_yurii_note#guard_vault_write(path) abort
   if simple_yurii_note#vault_locked_flag() != 1
     return
@@ -10508,22 +10739,13 @@ function! simple_yurii_note#guard_vault_write(path) abort
   let l:p = fnamemodify(expand(a:path), ':p')
   if stridx(l:p, fnamemodify(l:root, ':p')) == 0
     echohl ErrorMsg
-    echom 'simple_yurii_note: vault はロック中です。:SimpleMount でマウントしてから'
+    echom 'simple_yurii_note: vault はロック中。:SimpleMount でマウントしてから'
     echohl NONE
     throw 'simple_yurii_note: vault locked'
   endif
 endfunction
 
-" writefile を全部ここに統一（ロック中の vault への作成も止めるため）
-function! s:syn_writefile(lines, path, ...) abort
-  call simple_yurii_note#guard_vault_write(a:path)
-  if a:0 == 0
-    return writefile(a:lines, a:path)
-  endif
-  return writefile(a:lines, a:path, a:1)
-endfunction
-
-" ロック中に vault のバッファを開いたときのフック（undo 書き込みを封じる）
+" ロック中に vault のバッファを開いたときのフック（undo 書き込みも封じる）
 function! simple_yurii_note#vault_locked_buffer_hint() abort
   if simple_yurii_note#vault_locked_flag() != 1
     return
@@ -10538,8 +10760,17 @@ function! simple_yurii_note#vault_locked_buffer_hint() abort
     if !exists('s:vault_locked_shown') || empty(s:vault_locked_shown)
       let s:vault_locked_shown = 1
       echohl WarningMsg
-      echom 'simple_yurii_note: vault はロック中。編集は不可（:SimpleMount でマウント）'
+      echom 'simple_yurii_note: vault はロック中。編集不可（:SimpleMount でマウント）'
       echohl NONE
     endif
   endif
+endfunction
+
+" writefile を全部ここに統一（ロック中 vault へ作成する経路も止めるため）
+function! s:syn_writefile(lines, path, ...) abort
+  call simple_yurii_note#guard_vault_write(a:path)
+  if a:0 == 0
+    return writefile(a:lines, a:path)
+  endif
+  return writefile(a:lines, a:path, a:1)
 endfunction

@@ -221,6 +221,9 @@ command!          SimpleTrashList  call simple_yurii_note#trash_list()
 " vault の gocryptfs パスワード変更（マウント中は不可。閉じてから実行）
 command!          SimpleSetPassword call simple_yurii_note#set_password()
 command!          SimpleYuriinoteSetPassword call simple_yurii_note#set_password()
+" vault の手動ロック解除 / ロック（gocryptfs）
+command!          SimpleMount call simple_yurii_note#mount_vault()
+command!          SimpleLock  call simple_yurii_note#lock_vault()
 " 終了時に vault 外へ残留させない（recent.json / viminfo を消す）
 command!          SimpleExitCleanup call simple_yurii_note#exit_cleanup()
 " テーブル操作コマンド
