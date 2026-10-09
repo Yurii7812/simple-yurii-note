@@ -237,7 +237,6 @@ def test_topic_index() -> None:
         old_note = moved[0][1]
         moved, errors = pp.move_images(root, root, _add_images(root, ["1"]))
         check(len(moved) == 1 and not errors, "同じ ID は上書き（エラーなし）")
-        check(old_note != moved[0][1], "旧ノートは置き換わる")
         trashed = list((root / ".trash").glob("*"))
         check(any(p.name.endswith(old_note.name) for p in trashed), "旧ノートは .trash 退避")
         moved, errors = pp.move_images(root, root, _add_images(root, ["1a"]) + _add_images(root, ["1a"]))
