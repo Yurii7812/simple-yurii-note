@@ -1405,10 +1405,19 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
     if name != "index.md":
-        # 本文末尾の空行は落とす（本文と ### Parent の間に空行を入れない）
-        while lines and lines[-1].strip() == "":
-            lines.pop()
+        # 末尾の空行は、最後の実体行がリンク行のときだけ落とす
+        # （生成ノートのリンク群と `### Parent` をくっつける。本文末が
+        #   散文/見出しなら空行はそのまま。2026-10-09）
+        last = next((ln for ln in reversed(lines) if ln.strip() != ""), None)
+        if last is not None and _SIMPLE_LINK_LINE_RE.match(last):
+            while lines and lines[-1].strip() == "":
+                lines.pop()
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
+        last = next((ln for ln in reversed(lines) if ln.strip() != ""), None)
+        if last is not None and re.match(r"^#\s", last):
+            # 本文が見出しだけのときはテンプレート通り書くための余白を置く
+            if len(lines) == lines.index(last) + 1:
+                lines += ["", ""]
         lines.append(UP_MARK)
         lines += parent_lines
         while lines and lines[-1].strip() == "":
