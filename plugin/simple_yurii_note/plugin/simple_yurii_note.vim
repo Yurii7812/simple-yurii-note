@@ -222,6 +222,9 @@ command!          SimpleTrashEmpty call simple_yurii_note#trash_empty()
 " vault の gocryptfs パスワード変更（マウント中は不可。閉じてから実行）
 command!          SimpleSetPassword call simple_yurii_note#set_password()
 command!          SimpleYuriinoteSetPassword call simple_yurii_note#set_password()
+" vault の暗号化を解除して平文に戻す（A/note + A/.crypt → A 直下）
+command!          SimpleRemovePassword call simple_yurii_note#remove_password()
+command!          SimpleYuriinoteRemovePassword call simple_yurii_note#remove_password()
 " vault の手動ロック解除 / ロック（gocryptfs）
 command!          SimpleMount call simple_yurii_note#mount_vault()
 command!          SimpleLock  call simple_yurii_note#lock_vault()

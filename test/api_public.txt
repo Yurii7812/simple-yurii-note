@@ -101,6 +101,7 @@ simple_yurii_note#refresh_guide
 simple_yurii_note#refresh_link_hints
 simple_yurii_note#relation_link_popup
 simple_yurii_note#reload_vault_buffers
+simple_yurii_note#remove_password
 simple_yurii_note#rename_down_links_to_yaml_title
 simple_yurii_note#rename_link_text
 simple_yurii_note#rename_link_text_with_default

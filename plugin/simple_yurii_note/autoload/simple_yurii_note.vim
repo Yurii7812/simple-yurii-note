@@ -568,7 +568,13 @@ function! s:save_persisted_root(root) abort
   if !isdirectory(l:dir)
     call mkdir(l:dir, 'p')
   endif
-  call s:syn_writefile([fnamemodify(a:root, ':p')], s:root_state_file())
+  " root.txt は legacy state dir（vault の外）に置く。初回は親が無いので作る。
+  let l:file = s:root_state_file()
+  let l:file_dir = fnamemodify(l:file, ':h')
+  if !isdirectory(l:file_dir)
+    call mkdir(l:file_dir, 'p')
+  endif
+  call s:syn_writefile([fnamemodify(a:root, ':p')], l:file)
 endfunction
 
 " 「プロジェクトフォルダ A を選んだら A/note を vault 本体にする」解決。
@@ -916,6 +922,7 @@ function! s:guide_template() abort
         \ '- vault は `A/note`（平文ビュー）+ `A/.crypt`（暗号実体）の兄弟構成。起動時にパスワードを聞いてマウントし、Vim 終了時に自動ロックする',
         \ '- `:SimpleMount` … 手動マウント ・ `:SimpleLock` … 手動ロック（アンマウント）',
         \ '- `:SimpleSetPassword` … 未暗号化なら暗号化 init、暗号化済みならパスワード変更（`:SimpleYuriinoteSetPassword` も同じ）',
+        \ '- `:SimpleRemovePassword` … 暗号化を解除して平文に戻す（`A/note` + `A/.crypt` → ノートを `A` 直下へ。`:SimpleYuriinoteRemovePassword` も同じ）',
         \ '- `:SimpleExitCleanup` … 終了時の後始末（viminfo 書き出し等）',
         \ '- `:SimpleChooseIndex` / `:SimpleChooseIndexDir` / `:YuriiChooseIndex` / `:YuriiChooseIndexDir` … vault を選び直す（`A/note` があれば必ずそれを root に）',
         \ '- 注意: gocryptfs は**空でないマウントポイントを拒否**する。ロック中は vault 内に `.state` 等を作らない。中身とファイル名は暗号化されるが、時刻・サイズ・構造は漏れる',
@@ -10888,6 +10895,150 @@ function! s:init_encrypted_impl() abort
   silent! execute 'cd ' . fnameescape(l:root)
   redraw
   echom 'simple_yurii_note: vault を暗号化しました。閉じるとロックされます（開くときはパスワード）'
+endfunction
+
+" :SimpleRemovePassword（暗号化を解除して平文 vault に戻す）
+"   暗号化 vault（A/note + A/.crypt）を解除し、ノートをプロジェクト直下 A へ戻す。
+"   ロック中ならパスワードを聞いてマウントしてから解除する。
+"   手順: 平文を兄弟の一時 <A>-plain-<ts> へ cp → diff 検証 → アンマウント →
+"         マウントポイント削除 → 一時平文を A 直下へ cp → 検証 → 暗号箱削除 → 一時削除。
+"   途中で失敗しても平文は必ず「暗号箱 or 一時 or A 直下」のどれかに残る（データ消失なし）。
+function! simple_yurii_note#remove_password() abort
+  return s:remove_encryption_impl()
+endfunction
+
+function! s:remove_encryption_impl() abort
+  let l:st = s:vault_status()
+  if empty(l:st.root)
+    echohl ErrorMsg
+    echom 'simple_yurii_note: vault(root) が決まっていません'
+    echohl NONE
+    return
+  endif
+  if !l:st.encrypted
+    echohl WarningMsg
+    echom 'simple_yurii_note: この vault は暗号化されていません（解除する必要はありません）'
+    echohl NONE
+    return
+  endif
+  " ロック中ならパスワードを聞いてマウントしてから解除する
+  if l:st.locked
+    call simple_yurii_note#mount_vault()
+    if simple_yurii_note#vault_mounted() != 1
+      echohl ErrorMsg
+      echom 'simple_yurii_note: マウントできませんでした。解除を中止'
+      echohl NONE
+      return
+    endif
+  endif
+  " 正規形（A/note 型）はマウントポイント note を、直置き型は root 自体を平文に戻す
+  let l:mount = l:st.root
+  let l:cipher = l:st.cipher
+  let l:proj = (l:st.layout ==# 'note') ? fnamemodify(l:mount, ':h') : l:mount
+  let l:proj = substitute(fnamemodify(l:proj, ':p'), s:sep() . '\+$', '', '')
+  if empty(l:cipher) || !filereadable(l:cipher . s:sep() . 'gocryptfs.conf')
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 暗号箱が見つかりません: ' . l:cipher
+    echohl NONE
+    return
+  endif
+  let l:n = trim(system('find ' . shellescape(l:mount) . ' -mindepth 1 2>/dev/null | wc -l'))
+  let l:size = trim(system('du -sh ' . shellescape(l:mount) . ' 2>/dev/null | cut -f1'))
+  let l:msg = (l:st.layout ==# 'note')
+        \ ? printf('暗号を解除して %s 直下の平文に戻します：%s 個(%s)。よければ y: ', l:proj, l:n, l:size)
+        \ : printf('暗号を解除します（%s のまま平文に戻します）：%s 個(%s)。よければ y: ', l:proj, l:n, l:size)
+  if input(l:msg) !=# 'y'
+    echom 'simple_yurii_note: 中止'
+    return
+  endif
+  " バッファの未保存分は、パスが有効な今のうちに書き出しておく
+  call simple_yurii_note#save_current_note()
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b) || l:b == bufnr('%')
+      continue
+    endif
+    let l:p = fnamemodify(bufname(l:b), ':p')
+    if stridx(l:p, fnamemodify(l:mount, ':p')) == 0 && getbufvar(l:b, '&modified')
+      execute 'silent! buffer ' . l:b
+      silent! update
+    endif
+  endfor
+  let l:temp = fnamemodify(l:proj, ':h') . s:sep() . fnamemodify(l:proj, ':t')
+        \ . '-plain-' . strftime('%Y%m%d%H%M%S')
+  let l:stage = 'none'
+  try
+    if !empty(glob(l:temp . s:sep() . '*', 1)) || isdirectory(l:temp)
+      throw '一時退避先が既に存在: ' . l:temp
+    endif
+    let l:stage = 'copy'
+    call mkdir(l:temp, 'p')
+    let l:out = system('cp -a --no-preserve=xattr,context,mode,ownership '
+          \ . shellescape(l:mount) . '/. ' . shellescape(l:temp) . '/ 2>&1')
+    if v:shell_error != 0
+      throw 'copy 失敗'
+    endif
+    " FUSE 内の .crypt symlink（../.crypt）は暗号箱を消すと無効になるので持ち込まない
+    call system('find ' . shellescape(l:temp) . ' -maxdepth 1 -name .crypt -type l -delete 2>/dev/null')
+    let l:out = system('diff -rq --no-dereference --exclude=.crypt '
+          \ . shellescape(l:mount) . ' ' . shellescape(l:temp) . ' 2>&1 | head -20')
+    if v:shell_error != 0
+      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+    endif
+    " アンマウント（cwd がマウント内だと busy になるので vault の外へ出る）
+    let l:stage = 'unmount'
+    call s:cd_out_of_vault(l:mount)
+    call system('fusermount3 -u ' . shellescape(l:mount) . ' 2>&1')
+    call s:mount_cache_reset()
+    if simple_yurii_note#vault_mounted(escape(l:mount, '\\'), 1) == 1
+      throw 'アンマウント失敗（他アプリが開いていませんか）'
+    endif
+    " マウントポイント（空）を外し、一時平文を A 直下へ複製して検証
+    let l:stage = 'restore'
+    call system('rm -rf ' . shellescape(l:mount))
+    call mkdir(l:proj, 'p')
+    let l:out = system('cp -a --no-preserve=xattr,context,mode,ownership '
+          \ . shellescape(l:temp) . '/. ' . shellescape(l:proj) . '/ 2>&1')
+    if v:shell_error != 0
+      throw 'コピー失敗'
+    endif
+    " A に元からある非 vault ファイル（Only in <proj>）は無視し、欠落・不一致だけを見る。
+    " diff のメッセージが翻訳されると "Only in" が一致しないので LC_ALL=C で英語に固定する。
+    let l:out = system('LC_ALL=C diff -rq --no-dereference ' . shellescape(l:temp) . ' '
+          \ . shellescape(l:proj) . ' 2>&1 | grep -v ' . shellescape('^Only in ' . l:proj) . ' || true')
+    if !empty(trim(l:out))
+      throw 'restore 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+    endif
+    " 暗号箱を削除（これで解除完了）
+    let l:stage = 'rm-cipher'
+    call system('rm -rf ' . shellescape(l:cipher))
+    call s:mount_cache_reset()
+  catch
+    let l:err = v:exception
+    " 平文は「暗号箱 or 一時 or A 直下」のどれかに残る。一時退避は不要になったら消す。
+    " アンマウント前（copy）は vault 無傷。アンマウント後も暗号箱は残っている。
+    call system('rm -rf ' . shellescape(l:temp))
+    if l:stage ==# 'restore' || l:stage ==# 'rm-cipher'
+      " A 直下へは平文をコピー済み。暗号箱が残っていれば二重だが安全側。
+      call s:mount_cache_reset()
+    endif
+    echohl ErrorMsg
+    echom 'simple_yurii_note: 暗号解除に失敗(' . l:err . ')。平文データは失われていません'
+    echohl NONE
+    return
+  endtry
+  call system('rm -rf ' . shellescape(l:temp))
+  " root を A 直下へ更新し、バッファを張り替える（旧 A/note/index.md → A/index.md）
+  let g:simple_yurii_note_root = fnamemodify(l:proj, ':p')
+  call s:save_persisted_root(l:proj)
+  call s:setup_persistent_undo_for_root(l:proj)
+  call simple_yurii_note#clear_title_cache()
+  if l:mount !=# l:proj
+    call s:remap_vault_buffers_to(l:mount, l:proj)
+  endif
+  call simple_yurii_note#reload_vault_buffers(l:proj)
+  silent! execute 'cd ' . fnameescape(l:proj)
+  redraw
+  echom 'simple_yurii_note: 暗号を解除しました。' . l:proj . ' は平文の vault です'
 endfunction
 
 " レイアウト変換後: 旧 root 配下のバッファを新 root 配下の同名ファイルへ張り替える
