@@ -3,8 +3,10 @@
 
 1. plugin の nnoremap/xnoremap/vnoremap を全部拾い、s:guide_template() に
    載っていなければ失敗（キーを足したらガイドも直せ）。
-2. test/guide_keys.txt の必須トークンがガイドに無ければ失敗。
-3. 旧名・旧用語が残っていたら失敗。
+2. plugin の command! を全部拾い、s:guide_template() に載っていなければ失敗
+   （コマンドを足したらガイドも直せ）。
+3. test/guide_keys.txt の必須トークンがガイドに無ければ失敗。
+4. 旧名・旧用語が残っていたら失敗。
 """
 import re
 import sys
@@ -31,6 +33,29 @@ def guide_source() -> str:
     if not m:
         sys.exit("NG: s:guide_template() が見つからない")
     return m.group(0)
+
+
+def command_files() -> list:
+    files = []
+    for path in (REPO / "plugin").glob("**/*.vim"):
+        if "node_modules" in path.parts:
+            continue
+        files.append(path)
+    return files
+
+
+def all_commands() -> list:
+    cmds = []
+    pat = re.compile(r"^\s*command!\s*(?:-[A-Za-z=0-9?*+]+(?:\s+\d+)?\s+)*([A-Za-z_][A-Za-z0-9_]*)")
+    for path in command_files():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = pat.match(line)
+            if not m:
+                continue
+            name = m.group(1)
+            if name not in cmds:
+                cmds.append(name)
+    return cmds
 
 
 def mapped_keys() -> list:
@@ -73,14 +98,22 @@ def main() -> int:
             print(f"NG: guide_keys.txt の {token} が操作ガイドに無い", file=sys.stderr)
             ng += 1
 
+    for cmd in all_commands():
+        if not re.search(r"(?<![\w:]):" + re.escape(cmd) + r"(?![\w])", guide):
+            print(f"NG: コマンド :{cmd} が操作ガイドに無い。guide_template を更新すること", file=sys.stderr)
+            ng += 1
+
+    # コマンド名（`:RenameChildLinkTitles` 等）は BANNED 語を含みうるので、
+    # インラインコードのコマンド表記を除いてから旧表記を探す。
+    guide_no_cmds = re.sub(r"`:[^`]*`", "", guide)
     for bad in BANNED:
-        if bad in guide:
+        if bad in guide_no_cmds:
             print(f"NG: 操作ガイドに旧表記 {bad!r} が残っている", file=sys.stderr)
             ng += 1
 
     if ng:
         return 1
-    print(f"guide OK ({len(mapped_keys())} mappings)")
+    print(f"guide OK ({len(mapped_keys())} mappings, {len(all_commands())} commands)")
     return 0
 
 
