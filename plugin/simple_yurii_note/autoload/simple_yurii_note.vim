@@ -4562,7 +4562,8 @@ function! s:trash_entries() abort
 endfunction
 
 function! s:trash_dest(dir, base) abort
-  let l:ts = strftime('%y%m%d%H%M%S')
+  " アプリ (fsapi.cjs / vault.js) と同じ 14 桁の <日時>_<名前>（衝突時は <日時>_<n>_<名前>）
+  let l:ts = strftime('%Y%m%d%H%M%S')
   let l:dest = a:dir . s:sep() . l:ts . '_' . a:base
   let l:i = 1
   while filereadable(l:dest)
@@ -4685,7 +4686,7 @@ function! simple_yurii_note#trash_empty() abort
   endif
   let l:n = len(l:names)
   if confirm(printf('ゴミ箱の %d 件を完全に削除しますか？（元に戻せません）', l:n),
-        \ "&はい\n&いいえ", 2) != 1
+        \ "&Yes\n&No", 2) != 1
     echo 'キャンセルしました'
     return
   endif
