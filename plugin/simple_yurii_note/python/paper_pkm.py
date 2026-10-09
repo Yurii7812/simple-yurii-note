@@ -64,6 +64,8 @@ KEYWORD_LINE_RE = re.compile(
 FM_FOLGEZETTEL = "folgezettel"
 FM_PAPER_KEYWORD = "paper_keyword"
 FM_PAPER_INDEX = "paper_index"
+FM_PAPER_TOPIC = "paper_topic"          # トピック別Indexノートのfm（値=起点ID）
+FM_PAPER_TOPIC_INDEX = "paper_topic_index"  # 番号別Index（グループ）のfm（値=起点ID）
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
@@ -333,6 +335,57 @@ def create_scan_note(
     return path
 
 
+def topic_display(fid: str, topic: str) -> str:
+    """トピック別Indexの表示名（例: 1-仏教）。"""
+    return f"{fid}-{topic}"
+
+
+def create_topic_note(
+    folder: Path,
+    fid: str,
+    topic: str,
+    image_name: str,
+    when: Optional[datetime] = None,
+) -> Path:
+    """トピック別Indexノート（例: title: 1-仏教・画像添付・Parent は regen が直す）。"""
+    path = unique_note_path(folder)
+    display = topic_display(fid, topic)
+    fm = [_time_line(when), f"title: {display}", f"{FM_PAPER_TOPIC}: {fid}"]
+    body = [f"# {display}", "", f"![]({image_name})"]
+    write_note(path, fm, body)
+    return path
+
+
+def scan_topic_notes(root: Path) -> dict[str, list[tuple[str, Path]]]:
+    """`paper_topic:` を持つノート → {起点ID: [(表示名, ノート), …]}。"""
+    found: dict[str, list[tuple[str, Path]]] = {}
+    for p in iter_md(root):
+        try:
+            fm, _ = read_note(p)
+        except OSError:
+            continue
+        fid = fm_value(fm, FM_PAPER_TOPIC)
+        if not fid or not ID_PATTERN.fullmatch(fid):
+            continue
+        title = fm_value(fm, "title") or p.stem
+        found.setdefault(fid, []).append((title, p))
+    for lst in found.values():
+        lst.sort(key=lambda t: natural_key(t[0]))
+    return found
+
+
+def find_id_index(root: Path, fid: str) -> Optional[Path]:
+    """起点IDの番号別Index（グループ）ノート（`paper_topic_index: <fid>`）。"""
+    for p in iter_md(root):
+        try:
+            fm, _ = read_note(p)
+        except OSError:
+            continue
+        if fm_value(fm, FM_PAPER_TOPIC_INDEX) == fid:
+            return p
+    return None
+
+
 def _new_group_note(root: Path, display: str, reading: str) -> Path:
     path = unique_note_path(root)
     fm = [
@@ -463,6 +516,54 @@ def regen(root: Path, do_sync: bool = True) -> bool:
                                  "### Parent",
                                  markdown_link(index_display, index_path, folge_index.parent)])
 
+    # --- トピック別Index（B案: `1_Index` グループにノートと `1-仏教` を入れる） ---
+    topics = scan_topic_notes(root)
+    id_index_paths: dict[str, Path] = {}
+
+    def _parent_link_lines(fid: str, base_dir: Path, exclude: Optional[Path] = None) -> list[str]:
+        id_index = id_index_paths.get(fid) or find_id_index(root, fid)
+        if id_index is not None and id_index != exclude:
+            id_index_paths[fid] = id_index
+            fm_g, _b = read_note(id_index)
+            gd = fm_value(fm_g, "title") or id_index.stem
+            return [markdown_link(gd, id_index, base_dir)]
+        pid = parent_id(fid)
+        if pid is not None and pid in folge:
+            return [markdown_link(pid, folge[pid], base_dir)]
+        if pid is None:
+            return [markdown_link(index_display, index_path, base_dir)]
+        return []
+
+    for fid in sorted(topics, key=natural_key):
+        tlist = topics[fid]
+        gid = find_id_index(root, fid)
+        if gid is None:
+            gid = unique_note_path(root)
+            fm_g = [
+                _time_line(),
+                f"title: {fid}_Index",
+                f"{FM_PAPER_TOPIC_INDEX}: {fid}",
+                "attribute: group",
+            ]
+            write_note(gid, fm_g, [])
+        else:
+            fm_g, _b = read_note(gid)
+        id_index_paths[fid] = gid
+        children = []
+        if fid in folge:
+            children.append(markdown_link(fid, folge[fid], gid.parent))
+        children += [markdown_link(disp, p, gid.parent) for disp, p in tlist]
+        p_lines = _parent_link_lines(fid, gid.parent, exclude=gid)
+        write_note(gid, fm_g, [f"# {fid}_Index"] + children + ["### Parent"] + p_lines)
+        # トピックノート自身の Parent
+        for disp, tpath in tlist:
+            fm_t, body_t = read_note(tpath)
+            p_lines = _parent_link_lines(fid, tpath.parent)
+            while body_t and body_t[-1].strip() == "":
+                body_t.pop()
+            body_t += ["### Parent"] + p_lines
+            write_note(tpath, fm_t, body_t)
+
     # --- スキャンノートの親子リンク -----------------------------------------
     for fid, note_path in folge.items():
         children = sorted(
@@ -478,11 +579,8 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             inner.append("")
         inner += intra + ["### Parent"]
 
-        pid = parent_id(fid)
-        if pid is not None and pid in folge:
-            inner.append(markdown_link(pid, folge[pid], note_path.parent))
-        elif pid is None:
-            inner.append(markdown_link(index_display, index_path, note_path.parent))
+        p_lines = _parent_link_lines(fid, note_path.parent)
+        inner += p_lines
 
         mapping = {
             e["display"]: readings[e["display"]]
@@ -567,40 +665,50 @@ def move_images(
     dest: Path,
     assignments: list[tuple[Path, str]],
 ) -> tuple[list[tuple[str, Path]], list[tuple[Path, str, str]]]:
-    """スキャン画像を ID 名で dest へ移し、スキャンノートを作る。
+    """スキャン画像を ID 名（または `ID-トピック` 名）で dest へ移し、ノートを作る。
 
-    assignments: [(元画像パス, ID)]。戻り値は (moved, errors)。
-    moved: [(ID, ノートパス)] / errors: [(元パス, ID, 理由)]。
+    assignments: [(元画像パス, ID)] または [(元画像パス, ID, トピック名)]。
+    トピック名があるときはトピック別Indexノート（例: title: 1-仏教）を作る。
+    戻り値は (moved, errors)。
+    moved: [(ID, ノートパス)]（トピックは ID-トピック表示名）/ errors: [(元パス, ID, 理由)]。
     """
     root = Path(root).resolve()
     dest = Path(dest).resolve()
     existing = scan_folgezettel_notes(root)
+    topics = {disp: _p for _ids in scan_topic_notes(root).values()
+              for disp, _p in _ids}
     seen: set[str] = set()
     moved: list[tuple[str, Path]] = []
     errors: list[tuple[Path, str, str]] = []
 
-    for src, raw_id in assignments:
+    for src, raw_id, *rest in assignments:
         src = Path(src)
+        topic = rest[0].strip() if rest else None
+        topic = topic or None
         fid = normalize_id(raw_id)
         if not ID_PATTERN.fullmatch(fid):
             errors.append((src, fid, "IDの形式が不正です"))
             continue
-        if fid in seen or fid in existing:
-            errors.append((src, fid, "同じIDのノートがすでにあります"))
+        display = topic_display(fid, topic) if topic else fid
+        if display in seen or display in existing or display in topics:
+            errors.append((src, display, "その名前のノートがすでにあります"))
             continue
-        target = dest / (fid + src.suffix.lower())
+        target = dest / (display + src.suffix.lower())
         if target.exists():
-            errors.append((src, fid, f"{target.name} がすでに存在します"))
+            errors.append((src, display, f"{target.name} がすでに存在します"))
             continue
         when = image_datetime(src) or datetime.now()
         try:
             shutil.move(str(src), str(target))
         except OSError as exc:
-            errors.append((src, fid, str(exc)))
+            errors.append((src, display, str(exc)))
             continue
-        seen.add(fid)
-        note_path = create_scan_note(dest, fid, target.name, when)
-        moved.append((fid, note_path))
+        seen.add(display)
+        if topic:
+            note_path = create_topic_note(dest, fid, topic, target.name, when)
+        else:
+            note_path = create_scan_note(dest, fid, target.name, when)
+        moved.append((display, note_path))
     return moved, errors
 
 

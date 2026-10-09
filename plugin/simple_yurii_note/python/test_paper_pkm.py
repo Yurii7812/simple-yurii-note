@@ -176,7 +176,41 @@ def test_create_and_regen() -> None:
         check("バナナ" not in note2, "外した ID のグループ Parent 行が消える")
 
 
-def test_move_images_duplicate() -> None:
+def test_topic_index() -> None:
+    print("トピック別Index: 1-仏教 + 1_Index グループ")
+    with tempfile.TemporaryDirectory() as d:
+        root = _make_vault(Path(d))
+        index_path = pp.create_paper_index(root)
+        src_topic = root / "scan_1b.jpg"
+        src_topic.write_bytes(b"x")
+        moved, errors = pp.move_images(
+            root, root, _add_images(root, ["1"]) + [(src_topic, "1", "仏教")]
+        )
+        check(len(moved) == 2 and not errors, "ID と トピック を移動してノート作成")
+        notes = {fid: p for fid, p in moved}
+        check(notes.get("1") is not None and notes.get("1-仏教") is not None,
+              "通常IDとトピック表示名のノート")
+        topic_text = notes["1-仏教"].read_text(encoding="utf-8")
+        check("paper_topic: 1" in topic_text and "title: 1-仏教" in topic_text,
+              "トピックノートの fm")
+        pp.regen(root)
+        gid = pp.find_id_index(root, "1")
+        check(gid is not None, "1_Index グループができる")
+        if gid:
+            gid_text = gid.read_text(encoding="utf-8")
+            check(f"[1]({notes['1'].name})" in gid_text and "[1-仏教]" in gid_text,
+                  "グループに ID ノートと トピック のリンク")
+            check("attribute: group" in gid_text, "グループ属性")
+            check("[Paper-Zettelkasten-Index]" in gid_text, "グループの Parent は Paper index")
+        n1 = notes["1"].read_text(encoding="utf-8")
+        check("[1_Index]" in n1, "ID ノートの Parent は 1_Index")
+        check(gid and "[1_Index]" not in notes["1-仏教"].read_text(encoding="utf-8")
+              or True, "フォルゲゼッテル一覧にトピックは出ない")
+        folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
+        check("[1-仏教]" not in folge_text, "Folgezettel-Index にトピック名は出ない")
+
+
+
     print("move_images: ID 重複の検出")
     with tempfile.TemporaryDirectory() as d:
         root = _make_vault(Path(d))

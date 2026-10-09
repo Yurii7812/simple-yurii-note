@@ -86,6 +86,7 @@ class ImageItem:
     current_name: str
     folgezettel_id: Optional[str] = None
     processed: bool = False
+    topic_title: Optional[str] = None  # トピック別Index（例: 1-仏教）のとき「仏教」
 
     def current_path(self, folder: Path) -> Path:
         return folder / self.current_name
@@ -186,6 +187,9 @@ class ScanApp:
         self.previous_id_var = tk.StringVar(value="なし")
         self.current_file_var = tk.StringVar(value="")
         self.input_var = tk.StringVar(value="")
+        self.topic_id_var = tk.StringVar(value="")
+        self.topic_title_var = tk.StringVar(value="")
+        self.topic_preview_var = tk.StringVar(value="")
 
         self.ui_font = pick_font(self.root, UI_FONT_CANDIDATES, "TkDefaultFont")
         self.mono_font = pick_font(self.root, MONO_FONT_CANDIDATES, "TkFixedFont")
@@ -482,6 +486,27 @@ class ScanApp:
         self.input_entry.bind("<Return>", self.confirm_manual_id)
         self.input_entry.bind("<Escape>", self.cancel_input)
 
+        # トピック別Index入力（例: 番号1 + 仏教 → 1-仏教）
+        self.topic_frame = ttk.Frame(self.input_holder, style="Card.TFrame")
+        ttk.Label(self.topic_frame, text="番号:", style="PrevId.TLabel").pack(side="left")
+        self.topic_id_entry = ttk.Entry(self.topic_frame, textvariable=self.topic_id_var,
+                                        font=(self.mono_font, FONT_SIZES["input"]), width=8)
+        self.topic_id_entry.pack(side="left", padx=(10, 14), ipady=4)
+        ttk.Label(self.topic_frame, text="トピック:", style="PrevId.TLabel").pack(side="left")
+        self.topic_title_entry = ttk.Entry(self.topic_frame, textvariable=self.topic_title_var,
+                                           font=(self.mono_font, FONT_SIZES["input"]), width=20)
+        self.topic_title_entry.pack(side="left", padx=(10, 14), ipady=4)
+        ttk.Label(self.topic_frame, textvariable=self.topic_preview_var,
+                  style="CardNote.TLabel").pack(side="left", padx=(0, 14))
+        ttk.Label(self.topic_frame, text="Enter で確定 ／ Esc でキャンセル",
+                  style="CardNote.TLabel").pack(side="left")
+        self.topic_id_entry.bind("<Return>", self.focus_topic_title)
+        self.topic_id_entry.bind("<Escape>", self.cancel_input)
+        self.topic_title_entry.bind("<Return>", self.confirm_topic_note)
+        self.topic_title_entry.bind("<Escape>", self.cancel_input)
+        self.topic_id_var.trace_add("write", self.update_topic_preview)
+        self.topic_title_var.trace_add("write", self.update_topic_preview)
+
         # キー操作と同じ動きの大きなボタン（キーボードでも押してもOK）
         self.action_bar = ttk.Frame(self.naming_frame)
         self.action_bar.pack(fill="x")
@@ -499,6 +524,8 @@ class ScanApp:
                    command=self._focus_back(self.on_space)).pack(side="left")
         ttk.Button(main_group, text="↓ 子ID", style="BigAccent.TButton",
                    command=self._focus_back(self.on_down)).pack(side="left", padx=(10, 0))
+        ttk.Button(main_group, text="t トピックIndex", style="Big.TButton",
+                   command=self._focus_back(self.on_topic)).pack(side="left", padx=(10, 0))
         ttk.Button(main_group, text="→ 次の連番", style="BigAccent.TButton",
                    command=self._focus_back(self.on_right)).pack(side="left", padx=(10, 0))
 
@@ -901,6 +928,7 @@ class ScanApp:
         return "break"
 
     def show_input(self, value: str):
+        self.topic_frame.pack_forget()
         self.input_active = True
         self.input_var.set(value)
         self.input_holder.pack(fill="x", pady=(6, 8), before=self.action_bar)
@@ -908,6 +936,57 @@ class ScanApp:
         self.input_entry.focus_set()
         self.input_entry.icursor(tk.END)
         self.status_var.set("IDを入力または修正してEnterで確定します")
+
+    def show_topic_input(self):
+        self.input_holder.pack_forget()
+        self.input_active = True
+        previous = self.previous_id()
+        self.topic_id_var.set(previous or "")
+        self.topic_title_var.set("")
+        self.topic_preview_var.set("")
+        self.input_holder.pack(fill="x", pady=(6, 8), before=self.action_bar)
+        self.topic_frame.pack(fill="x", pady=2)
+        if previous:
+            self.topic_title_entry.focus_set()
+        else:
+            self.topic_id_entry.focus_set()
+        self.status_var.set("番号とトピック名を入力してEnterで確定します（例: 1 + 仏教 → 1-仏教）")
+
+    def on_topic(self, _event=None):
+        if self.input_active:
+            return
+        self.show_topic_input()
+        return "break"
+
+    def focus_topic_title(self, _event=None):
+        self.topic_title_entry.focus_set()
+        self.topic_title_entry.icursor(tk.END)
+        self.status_var.set("トピック名を入力してEnterで確定します")
+        return "break"
+
+    def update_topic_preview(self, *_args):
+        fid = pp.normalize_id(self.topic_id_var.get())
+        topic = self.topic_title_var.get().strip()
+        if fid and topic:
+            self.topic_preview_var.set(f"→ {pp.topic_display(fid, topic)}")
+        else:
+            self.topic_preview_var.set("")
+
+    def confirm_topic_note(self, _event=None):
+        fid = pp.normalize_id(self.topic_id_var.get())
+        topic = self.topic_title_var.get().strip()
+        if not fid:
+            self.status_var.set("番号を入力してください")
+            return "break"
+        if not topic:
+            self.status_var.set("トピック名を入力してください")
+            return "break"
+        valid, error = self.validate_id(fid)
+        if not valid:
+            self.status_var.set(error)
+            return "break"
+        self.commit_id(fid, topic)
+        return "break"
 
     def hide_input(self):
         self.input_frame.pack_forget()
@@ -933,7 +1012,7 @@ class ScanApp:
             return False, "IDは数字から始め、数字と英小文字を交互の階層にしてください（例: 1a2b）。"
         return True, ""
 
-    def commit_id(self, folgezettel_id: str):
+    def commit_id(self, folgezettel_id: str, topic: Optional[str] = None):
         if not self.folder or self.current_index >= len(self.items):
             return
         folgezettel_id = pp.normalize_id(folgezettel_id)
@@ -941,13 +1020,19 @@ class ScanApp:
         if not valid:
             self.status_var.set(error)
             return
-        if any(item.processed and item.folgezettel_id == folgezettel_id
-               for item in self.items):
+        if topic:
+            if any(item.processed and item.folgezettel_id == folgezettel_id
+                   and item.topic_title == topic for item in self.items):
+                self.status_var.set(f"「{pp.topic_display(folgezetzel_id, topic)}」はすでにあります")
+                return
+        elif any(item.processed and item.folgezettel_id == folgezettel_id
+                 and not item.topic_title for item in self.items):
             self.status_var.set(f"ID「{folgezettel_id}」はすでに使用されています")
             return
         item = self.items[self.current_index]
         old_path = item.current_path(self.folder)
-        new_path = self.folder / (folgezettel_id + old_path.suffix.lower())
+        new_name = pp.topic_display(folgezetzel_id, topic) if topic else folgezetzel_id
+        new_path = self.folder / (new_name + old_path.suffix.lower())
         if new_path.exists() and new_path.resolve() != old_path.resolve():
             self.status_var.set(f"ファイル「{new_path.name}」はすでに存在します")
             return
@@ -955,6 +1040,7 @@ class ScanApp:
             "current_name": item.current_name,
             "folgezettel_id": item.folgezettel_id,
             "processed": item.processed,
+            "topic_title": item.topic_title,
         }
         try:
             old_path.rename(new_path)
@@ -963,6 +1049,7 @@ class ScanApp:
             return
         item.current_name = new_path.name
         item.folgezettel_id = folgezettel_id
+        item.topic_title = topic
         item.processed = True
         self.undo_stack.append({
             "index": self.current_index,
@@ -997,6 +1084,7 @@ class ScanApp:
         old_state = record.get("old_state") or {}
         item.current_name = old_state.get("current_name", record["old_name"])
         item.folgezettel_id = old_state.get("folgezettel_id")
+        item.topic_title = old_state.get("topic_title")
         item.processed = bool(old_state.get("processed", False))
         self.current_index = index
         self.hide_input()
@@ -1035,10 +1123,15 @@ class ScanApp:
                 return
         self.moving = True
         try:
-            assignments = [
-                (item.current_path(self.folder), item.folgezettel_id or "")
-                for item in processed
-            ]
+            assignments = []
+            for item in processed:
+                if item.topic_title:
+                    assignments.append((item.current_path(self.folder),
+                                        item.folgezettel_id or "",
+                                        item.topic_title))
+                else:
+                    assignments.append((item.current_path(self.folder),
+                                        item.folgezettel_id or ""))
             moved, errors = pp.move_images(self.vault_root, self.dest, assignments)
             regen_ok = True
             try:
@@ -1047,9 +1140,10 @@ class ScanApp:
                 regen_ok = False
                 traceback.print_exc()
 
-            moved_ids = {fid for fid, _p in moved}
+            moved_items = {(fid, item.topic_title) for fid, item in moved}
             self.items = [item for item in self.items
-                          if not (item.processed and item.folgezettel_id in moved_ids)]
+                          if not (item.processed
+                                  and (item.folgezettel_id, item.topic_title) in moved_items)]
             self.current_index = self.first_unprocessed_index()
             self.undo_stack.clear()
             if self.items:
