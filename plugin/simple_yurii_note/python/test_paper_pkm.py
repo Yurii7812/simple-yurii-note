@@ -223,7 +223,7 @@ def test_topic_index() -> None:
         gid_text = gid.read_text(encoding="utf-8")
         i_buk = gid_text.find("[1-仏教]")
         i_sinen = gid_text.find("  [1-四念処]")
-        check(i_buk != -1 and i_sinen != -1 and gid_text.find("\n", i_buk) > i_sinen,
+        check(i_buk != -1 and i_sinen > i_buk,
               "四念処は仏教の下にインデント")
 
 
