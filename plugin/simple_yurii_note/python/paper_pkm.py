@@ -386,7 +386,7 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             for slot, entry in zip(slots, entries, strict=False):
                 body[slot] = entry["key"] + ": " + ", ".join(entry["ids"])
         if not any(ln.strip() == "### Parent" for ln in body):
-            body += ["", "### Parent",
+            body += ["### Parent",
                      markdown_link(index_display, index_path, root)]
             write_note(index_write, iw_fm, body)
         elif keyword_line_order:
@@ -413,7 +413,6 @@ def regen(root: Path, do_sync: bool = True) -> bool:
                 (f for f in entry["ids"] if f in folge), key=natural_key
             )
         ]
-        inner.append("")
         inner.append("### Parent")
         inner.append(markdown_link(index_display, index_path, group_path.parent))
 
@@ -442,7 +441,6 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         "",
         f"[{INDEX_WRITE[:-3]}]({INDEX_WRITE})",
         f"[{FOLGE_INDEX[:-3]}]({FOLGE_INDEX})",
-        "",
         *inner,
     ]
     write_note(index_path, fm, body)
@@ -458,7 +456,7 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         write_note(folge_index, fm_fi, [])
     fm, _ = read_note(folge_index)
     write_note(folge_index, fm, [f"# {FOLGE_INDEX[:-3]}", "", *inner,
-                                 "", "### Parent",
+                                 "### Parent",
                                  markdown_link(index_display, index_path, folge_index.parent)])
 
     # --- スキャンノートの親子リンク -----------------------------------------

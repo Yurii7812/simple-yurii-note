@@ -638,9 +638,7 @@ def render_note(note: Note) -> str:
     out += body
 
     # 本文 → こっちにとって見張り → 上側 → そっちにとって見張り → 下側
-    # 本文が空行で終わっていなければ 1 行だけ空ける（余白があるならそのまま）
-    if out and out[-1].strip() != "":
-        out.append("")
+    # 本文と ### Parent の間には空行を入れない（2026-10-09 指示）
     out.append(UP_MARK)
     out += _squeeze_blanks(_render_group(note.up))
     out.append(DOWN_MARK)
@@ -1415,6 +1413,8 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
         lines.append(UP_MARK)
         lines += parent_lines
+        while lines and lines[-1].strip() == "":
+            lines.pop()
         # `### Related` は zr で足したときだけ存在する（sync が勝手に作らない）。
         # 中身が空（全部消えた）になったら見出しも外す。
         related = [ln for ln in n.get("related", [])]
