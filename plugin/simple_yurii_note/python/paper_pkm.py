@@ -347,21 +347,19 @@ def create_topic_note(
     topic: str,
     image_name: str,
     when: Optional[datetime] = None,
+    parent_topic: Optional[str] = None,
 ) -> Path:
     """トピック別Indexノート（例: title: 1-仏教・画像添付・Parent は regen が直す）。
 
-    `仏教/四念処` のように `/` 区切りを入れると、`1-四念処` ノートを
-    fm `topic_parent: 1-仏教`（親トピック）付きで作る（階層は YAML 管理）。
+    parent_topic は親トピックノートの表示名（例: 1-仏教）→ fm `topic_parent:`。
+    階層は YAML 管理（あとから手書きでも変えられる）。
     """
     path = unique_note_path(folder)
-    if "/" in topic:
-        *_, parent_topic, name = [x.strip() for x in topic.split("/") if x.strip()]
-        display = topic_display(fid, name)
-        fm = [_time_line(when), f"title: {display}",
-              f"{FM_PAPER_TOPIC}: {fid}", f"{FM_TOPIC_PARENT}: {topic_display(fid, parent_topic)}"]
-    else:
-        display = topic_display(fid, topic)
-        fm = [_time_line(when), f"title: {display}", f"{FM_PAPER_TOPIC}: {fid}"]
+    display = topic_display(fid, topic)
+    fm = [_time_line(when), f"title: {display}",
+          f"{FM_PAPER_TOPIC}: {fid}"]
+    if parent_topic:
+        fm.append(f"{FM_TOPIC_PARENT}: {parent_topic}")
     body = [f"# {display}", "", f"![]({image_name})"]
     write_note(path, fm, body)
     return path
@@ -726,11 +724,12 @@ def move_images(
         src = Path(src)
         topic = rest[0].strip() if rest else None
         topic = topic or None
+        parent_topic = (rest[1].strip() if len(rest) > 1 and rest[1] else None)
         fid = normalize_id(raw_id)
         if not ID_PATTERN.fullmatch(fid):
             errors.append((src, fid, "IDの形式が不正です"))
             continue
-        display = topic_display(fid, topic.rsplit("/", 1)[-1].strip()) if topic else fid
+        display = topic_display(fid, topic) if topic else fid
         if display in seen or display in existing or display in topics:
             errors.append((src, display, "その名前のノートがすでにあります"))
             continue
@@ -746,7 +745,8 @@ def move_images(
             continue
         seen.add(display)
         if topic:
-            note_path = create_topic_note(dest, fid, topic, target.name, when)
+            note_path = create_topic_note(dest, fid, topic, target.name, when,
+                                          parent_topic=parent_topic)
         else:
             note_path = create_scan_note(dest, fid, target.name, when)
         moved.append((display, note_path))

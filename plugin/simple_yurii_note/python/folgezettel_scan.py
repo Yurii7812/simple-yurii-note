@@ -87,6 +87,7 @@ class ImageItem:
     folgezettel_id: Optional[str] = None
     processed: bool = False
     topic_title: Optional[str] = None  # トピック別Index（例: 1-仏教）のとき「仏教」
+    topic_parent: Optional[str] = None  # 親トピック表示名（例: 1-仏教）（トピック階層用）
 
     def current_path(self, folder: Path) -> Path:
         return folder / self.current_name
@@ -189,6 +190,7 @@ class ScanApp:
         self.input_var = tk.StringVar(value="")
         self.topic_id_var = tk.StringVar(value="")
         self.topic_title_var = tk.StringVar(value="")
+        self.topic_parent_var = tk.StringVar(value="")
         self.topic_preview_var = tk.StringVar(value="")
 
         self.ui_font = pick_font(self.root, UI_FONT_CANDIDATES, "TkDefaultFont")
@@ -494,18 +496,25 @@ class ScanApp:
         self.topic_id_entry.pack(side="left", padx=(10, 14), ipady=4)
         ttk.Label(self.topic_frame, text="トピック:", style="PrevId.TLabel").pack(side="left")
         self.topic_title_entry = ttk.Entry(self.topic_frame, textvariable=self.topic_title_var,
-                                           font=(self.mono_font, FONT_SIZES["input"]), width=20)
+                                           font=(self.mono_font, FONT_SIZES["input"]), width=16)
         self.topic_title_entry.pack(side="left", padx=(10, 14), ipady=4)
+        ttk.Label(self.topic_frame, text="親（省略可）:", style="CardMuted.TLabel").pack(side="left")
+        self.topic_parent_entry = ttk.Entry(self.topic_frame, textvariable=self.topic_parent_var,
+                                            font=(self.mono_font, FONT_SIZES["input"]), width=14)
+        self.topic_parent_entry.pack(side="left", padx=(10, 14), ipady=4)
         ttk.Label(self.topic_frame, textvariable=self.topic_preview_var,
                   style="CardNote.TLabel").pack(side="left", padx=(0, 14))
         ttk.Label(self.topic_frame, text="Enter で確定 ／ Esc でキャンセル",
                   style="CardNote.TLabel").pack(side="left")
         self.topic_id_entry.bind("<Return>", self.focus_topic_title)
         self.topic_id_entry.bind("<Escape>", self.cancel_input)
-        self.topic_title_entry.bind("<Return>", self.confirm_topic_note)
+        self.topic_title_entry.bind("<Return>", self.focus_topic_parent)
         self.topic_title_entry.bind("<Escape>", self.cancel_input)
+        self.topic_parent_entry.bind("<Return>", self.confirm_topic_note)
+        self.topic_parent_entry.bind("<Escape>", self.cancel_input)
         self.topic_id_var.trace_add("write", self.update_topic_preview)
         self.topic_title_var.trace_add("write", self.update_topic_preview)
+        self.topic_parent_var.trace_add("write", self.update_topic_preview)
 
         # キー操作と同じ動きの大きなボタン（キーボードでも押してもOK）
         self.action_bar = ttk.Frame(self.naming_frame)
@@ -961,20 +970,33 @@ class ScanApp:
     def focus_topic_title(self, _event=None):
         self.topic_title_entry.focus_set()
         self.topic_title_entry.icursor(tk.END)
-        self.status_var.set("トピック名を入力してEnterで確定します")
+        self.status_var.set("トピック名を入力し、Enterで親（省略可）へ。直接確定はもう一度Enter")
+        return "break"
+
+    def focus_topic_parent(self, _event=None):
+        if not self.topic_parent_var.get().strip():
+            return self.confirm_topic_note()
+        self.topic_parent_entry.focus_set()
+        self.topic_parent_entry.icursor(tk.END)
+        self.status_var.set("親トピック（例: 1-仏教）。Enterで確定")
         return "break"
 
     def update_topic_preview(self, *_args):
         fid = pp.normalize_id(self.topic_id_var.get())
         topic = self.topic_title_var.get().strip()
+        parent = self.topic_parent_var.get().strip()
         if fid and topic:
-            self.topic_preview_var.set(f"→ {pp.topic_display(fid, topic)}")
+            base = f"→ {pp.topic_display(fid, topic)}"
+            if parent:
+                base += f"（親: {parent}）"
+            self.topic_preview_var.set(base)
         else:
             self.topic_preview_var.set("")
 
     def confirm_topic_note(self, _event=None):
         fid = pp.normalize_id(self.topic_id_var.get())
         topic = self.topic_title_var.get().strip()
+        parent = self.topic_parent_var.get().strip()
         if not fid:
             self.status_var.set("番号を入力してください")
             return "break"
@@ -985,7 +1007,25 @@ class ScanApp:
         if not valid:
             self.status_var.set(error)
             return "break"
-        self.commit_id(fid, topic)
+        if parent:
+            # 「仏教」→「1-仏教」のように表示名へ正規化（既存トピックの title と照合）
+            known = {disp for lst in pp.scan_topic_notes(self.vault_root).values()
+                     for disp, _p, _t in lst}
+            known |= {item.current_name.rsplit(".", 1)[0]
+                      for item in self.items
+                      if item.processed and item.topic_title
+                      and (item.folgezettel_id or "") == fid}
+            if parent in known:
+                parent_disp = parent
+            elif pp.topic_display(fid, parent) in known:
+                parent_disp = pp.topic_display(fid, parent)
+            else:
+                self.status_var.set(
+                    f"親トピック「{parent}」はありません（先に作るか fm topic_parent で後から指定）")
+                return "break"
+        else:
+            parent_disp = None
+        self.commit_id(fid, topic, parent_disp)
         return "break"
 
     def hide_input(self):
@@ -1012,7 +1052,8 @@ class ScanApp:
             return False, "IDは数字から始め、数字と英小文字を交互の階層にしてください（例: 1a2b）。"
         return True, ""
 
-    def commit_id(self, folgezettel_id: str, topic: Optional[str] = None):
+    def commit_id(self, folgezettel_id: str, topic: Optional[str] = None,
+                  parent_topic: Optional[str] = None):
         if not self.folder or self.current_index >= len(self.items):
             return
         folgezettel_id = pp.normalize_id(folgezettel_id)
@@ -1041,6 +1082,7 @@ class ScanApp:
             "folgezettel_id": item.folgezettel_id,
             "processed": item.processed,
             "topic_title": item.topic_title,
+            "topic_parent": item.topic_parent,
         }
         try:
             old_path.rename(new_path)
@@ -1050,6 +1092,7 @@ class ScanApp:
         item.current_name = new_path.name
         item.folgezettel_id = folgezettel_id
         item.topic_title = topic
+        item.topic_parent = parent_topic
         item.processed = True
         self.undo_stack.append({
             "index": self.current_index,
@@ -1085,6 +1128,7 @@ class ScanApp:
         item.current_name = old_state.get("current_name", record["old_name"])
         item.folgezettel_id = old_state.get("folgezettel_id")
         item.topic_title = old_state.get("topic_title")
+        item.topic_parent = old_state.get("topic_parent")
         item.processed = bool(old_state.get("processed", False))
         self.current_index = index
         self.hide_input()
@@ -1128,7 +1172,7 @@ class ScanApp:
                 if item.topic_title:
                     assignments.append((item.current_path(self.folder),
                                         item.folgezettel_id or "",
-                                        item.topic_title))
+                                        item.topic_title, item.topic_parent))
                 else:
                     assignments.append((item.current_path(self.folder),
                                         item.folgezettel_id or ""))
