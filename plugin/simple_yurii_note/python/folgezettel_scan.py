@@ -823,10 +823,11 @@ class ScanApp:
         self.root.bind("<Up>", self.on_up)
         self.root.bind("<Left>", self.on_left)
         self.root.bind("<space>", self.on_space)
+        self.root.bind("<t>", self.on_topic)
         self.root.bind("<Escape>", self.on_escape_global)
 
     def unbind_naming_keys(self):
-        for sequence in ("<Right>", "<Down>", "<Up>", "<Left>", "<space>", "<Escape>"):
+        for sequence in ("<Right>", "<Down>", "<Up>", "<Left>", "<space>", "<t>", "<Escape>"):
             self.root.unbind(sequence)
 
     def previous_id(self) -> Optional[str]:
@@ -1072,7 +1073,7 @@ class ScanApp:
             return
         item = self.items[self.current_index]
         old_path = item.current_path(self.folder)
-        new_name = pp.topic_display(folgezetzel_id, topic) if topic else folgezetzel_id
+        new_name = pp.topic_display(folgezettel_id, topic) if topic else folgezettel_id
         new_path = self.folder / (new_name + old_path.suffix.lower())
         if new_path.exists() and new_path.resolve() != old_path.resolve():
             self.status_var.set(f"ファイル「{new_path.name}」はすでに存在します")
