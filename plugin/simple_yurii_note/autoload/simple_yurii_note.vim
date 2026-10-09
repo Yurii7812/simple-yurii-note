@@ -942,7 +942,8 @@ function! s:guide_template() abort
         \ '## ゴミ箱',
         \ '',
         \ '- `\tD` … 今のノートをゴミ箱（`.trash/`）へ移す（ソフト削除。`:SimpleTrash` も同じ）',
-        \ '- `\tr` … ゴミ箱を fzf で覗く（プレビュー付き）→ `⏎` で vault 直下へ復元して開く（`:SimpleTrashList`）',
+        \ '- `\tr` … ゴミ箱を fzf で覗く（プレビュー付き）。`⏎`=開くだけ / `^r`=vault 直下へ復元して開く / `^e`=ゴミ箱を空にする（`:SimpleTrashList`）',
+        \ '- `\tE` … ゴミ箱を全部空にする（完全削除・確認あり。`:SimpleTrashEmpty` も同じ）',
         \ '- `.trash/` はドット始まりなので検索・一覧・同期・リンクには出ない',
         \ '',
         \ '## よみ順ソート（Index）',
@@ -4531,8 +4532,9 @@ endfunction
 "   削除は <root>/.trash/ へ「移動」するソフト削除。.trash はドット始まりなので
 "   検索（note_search.py）も同期（note_format_v2.py）も一覧に出さない。
 "   ファイル名はアプリと同じ <日時>_<名前>（衝突時は <日時>_<n>_<名前>）。
-"   \tr / :SimpleTrashList … ゴミ箱を fzf で覗く（プレビュー付き）→ ⏎ で復元して開く
+"   \tr / :SimpleTrashList … ゴミ箱を fzf で覗く（プレビュー付き）→ ⏎=開く / ^r=復元 / ^e=空
 "   \tD / :SimpleTrash      … 今のノートをゴミ箱へ
+"   \tE / :SimpleTrashEmpty … ゴミ箱を全部空にする（完全削除・確認あり）
 " ---------------------------------------------------------------------------
 function! s:trash_dir() abort
   let l:root = s:get_pkm_root()
@@ -4608,18 +4610,35 @@ function! s:trash_restore(path) abort
   return l:dest
 endfunction
 
-function! s:trash_sink(line) abort
-  let l:parts = split(a:line, "\t", 1)
+" ゴミ箱の fzf 確定処理。先頭は押したキー（--expect）、次が選択行（パス）。
+"   ⏎（キー空）… 選択したゴミ箱ノートを開くだけ（復元しない）
+"   ^r         … 選択したノートを vault 直下へ復元して開く
+"   ^e         … ゴミ箱を全部空にする（確認あり）
+function! s:trash_sink(lines) abort
+  if len(a:lines) < 2 | return | endif
+  let l:key = a:lines[0]
+  let l:parts = split(a:lines[1], "\t", 1)
   let l:path = get(l:parts, 0, '')
   if empty(l:path) || !filereadable(l:path) | return | endif
-  let l:restored = s:trash_restore(l:path)
-  if empty(l:restored) | return | endif
+  if l:key ==# 'ctrl-e'
+    call simple_yurii_note#trash_empty()
+    return
+  endif
+  if l:key ==# 'ctrl-r'
+    let l:restored = s:trash_restore(l:path)
+    if empty(l:restored) | return | endif
+    call simple_yurii_note#push_history()
+    silent! execute 'edit ' . fnameescape(l:restored)
+    echo '復元しました: ' . fnamemodify(l:restored, ':t')
+    return
+  endif
+  " ⏎（または他のキー）… 中身を開くだけ。復元は ^r。
   call simple_yurii_note#push_history()
-  silent! execute 'edit ' . fnameescape(l:restored)
-  echo '復元しました: ' . fnamemodify(l:restored, ':t')
+  silent! execute 'edit ' . fnameescape(l:path)
 endfunction
 
-" \tr … ゴミ箱の中身を fzf で覗く（⏎ で復元）。fzf が無ければ quickfix。
+" \tr … ゴミ箱の中身を fzf で覗く（⏎=開く / ^r=復元 / ^e=空にする）。
+" fzf が無ければ quickfix。
 function! simple_yurii_note#trash_list() abort
   let l:entries = s:trash_entries()
   if empty(l:entries)
@@ -4635,12 +4654,39 @@ function! simple_yurii_note#trash_list() abort
   let l:source = map(copy(l:entries), {_, p -> p . "\t" . fnamemodify(p, ':t')})
   call fzf#run(fzf#wrap({
         \ 'source': l:source,
-        \ 'sink': function('s:trash_sink'),
+        \ 'sink*': function('s:trash_sink'),
         \ 'options': '--delimiter="\t" --with-nth=2 --accept-nth=1'
-        \   . ' --prompt=' . shellescape('ゴミ箱(⏎=復元)> ')
+        \   . ' --expect=ctrl-r,ctrl-e'
+        \   . ' --prompt=' . shellescape('ゴミ箱(⏎=開く ^r=復元 ^e=空)> ')
         \   . ' --preview "sed -n ''1,200p'' -- {1}"'
         \   . ' --preview-window=right:50%',
         \ }))
+endfunction
+
+" \tE / :SimpleTrashEmpty … ゴミ箱を全部空にする（完全削除・確認あり）。
+function! simple_yurii_note#trash_empty() abort
+  let l:dir = s:trash_dir()
+  if !isdirectory(l:dir)
+    echo 'simple_yurii_note: ゴミ箱は空です'
+    return
+  endif
+  let l:names = filter(readdir(l:dir), {_, n -> n !=# '.' && n !=# '..'})
+  if empty(l:names)
+    call delete(l:dir, 'd')
+    echo 'simple_yurii_note: ゴミ箱は空です'
+    return
+  endif
+  let l:n = len(l:names)
+  if confirm(printf('ゴミ箱の %d 件を完全に削除しますか？（元に戻せません）', l:n),
+        \ "&はい\n&いいえ", 2) != 1
+    echo 'キャンセルしました'
+    return
+  endif
+  for l:name in l:names
+    call delete(l:dir . s:sep() . l:name)
+  endfor
+  call delete(l:dir, 'd')
+  echo printf('ゴミ箱を空にしました（%d 件）', l:n)
 endfunction
 
 " :!rm % などの後始末。今のノートのファイルが消えていたらバッファを閉じて同期する

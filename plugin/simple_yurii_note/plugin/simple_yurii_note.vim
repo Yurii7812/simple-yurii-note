@@ -218,6 +218,7 @@ command!          SimpleWeb  call simple_yurii_note#open_web()
 " ゴミ箱（ソフト削除）
 command!          SimpleTrash      call simple_yurii_note#trash_current()
 command!          SimpleTrashList  call simple_yurii_note#trash_list()
+command!          SimpleTrashEmpty call simple_yurii_note#trash_empty()
 " vault の gocryptfs パスワード変更（マウント中は不可。閉じてから実行）
 command!          SimpleSetPassword call simple_yurii_note#set_password()
 command!          SimpleYuriinoteSetPassword call simple_yurii_note#set_password()
@@ -286,10 +287,11 @@ unlet s:h
 nnoremap <silent> \h       <Cmd>call simple_yurii_note#hub_open()<CR>
 nnoremap <silent> \H       <Cmd>call simple_yurii_note#hub_set()<CR>
 nnoremap <silent> \0       <Cmd>call simple_yurii_note#hub_list()<CR>
-" ゴミ箱（ソフト削除）: \tr=一覧を覗く（⏎ で復元） / \tD=今のノートをゴミ箱へ
+" ゴミ箱（ソフト削除）: \tr=一覧（⏎=開く / ^r=復元 / ^e=空） / \tD=今のノートをゴミ箱へ / \tE=空にする
 "   （\td は \tdr/\tdc（表の行・列削除）と待ちが被るので \tD にする）
 nnoremap <silent> \tr       <Cmd>call simple_yurii_note#trash_list()<CR>
 nnoremap <silent> \tD       <Cmd>call simple_yurii_note#trash_current()<CR>
+nnoremap <silent> \tE       <Cmd>call simple_yurii_note#trash_empty()<CR>
 " \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
 " \F … 紙PKM Index（タイムスタンプ名）を作成/オープン（Index_write・Folgezettel-Index も作る）
