@@ -209,6 +209,23 @@ def test_topic_index() -> None:
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
         check("[1-仏教]" not in folge_text, "Folgezettel-Index にトピック名は出ない")
 
+        # 階層トピック: 仏教/四念処 → 1-四念処（tm: 1-仏教）
+        src_n = root / "scan_1c.jpg"
+        src_n.write_bytes(b"x")
+        moved2, errors2 = pp.move_images(root, root, [(src_n, "1", "仏教/四念処")])
+        check(len(moved2) == 1 and not errors2, "階層トピックの作成")
+
+        topic_child = next(p for p in pp.iter_md(root)
+                           if "title: 1-四念処" in p.read_text(encoding="utf-8"))
+        pp.regen(root)
+        gid = pp.find_id_index(root, "1")
+        check(gid is not None, "階層後も 1_Index あり")
+        gid_text = gid.read_text(encoding="utf-8")
+        i_buk = gid_text.find("[1-仏教]")
+        i_sinen = gid_text.find("  [1-四念処]")
+        check(i_buk != -1 and i_sinen != -1 and gid_text.find("\n", i_buk) > i_sinen,
+              "四念処は仏教の下にインデント")
+
 
 
     print("move_images: ID 重複の検出")
