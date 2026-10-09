@@ -1405,11 +1405,9 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
     if name != "index.md":
-        # 本文の直後は空行を 1 つ開ける。末尾が散文のときだけ（末尾がリンク行の
-        # ときはリンク群と `### Parent` をそのままくっつけて差さない）。
-        # 既に空行があるなら足さない（余分な空行を増やさない）。
-        if lines and lines[-1].strip() != "" and not _SIMPLE_LINK_LINE_RE.match(lines[-1]):
-            lines.append("")
+        # 本文末尾の空行は落とす（本文と ### Parent の間に空行を入れない）
+        while lines and lines[-1].strip() == "":
+            lines.pop()
         # Parent の上に余分な空行を入れない（本文の余白はそのまま）
         lines.append(UP_MARK)
         lines += parent_lines
