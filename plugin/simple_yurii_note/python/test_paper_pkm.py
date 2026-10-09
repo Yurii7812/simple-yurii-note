@@ -234,8 +234,12 @@ def test_topic_index() -> None:
         pp.create_paper_index(root)
         moved, errors = pp.move_images(root, root, _add_images(root, ["1"]))
         check(len(moved) == 1 and not errors, "1枚目は成功")
+        old_note = moved[0][1]
         moved, errors = pp.move_images(root, root, _add_images(root, ["1"]))
-        check(not moved and len(errors) == 1, "同じ ID はエラー")
+        check(len(moved) == 1 and not errors, "同じ ID は上書き（エラーなし）")
+        check(old_note != moved[0][1], "旧ノートは置き換わる")
+        trashed = list((root / ".trash").glob("*"))
+        check(any(p.name.endswith(old_note.name) for p in trashed), "旧ノートは .trash 退避")
         moved, errors = pp.move_images(root, root, _add_images(root, ["1a"]) + _add_images(root, ["1a"]))
         check(len(moved) == 1 and len(errors) == 1, "同じバッチ内の重複もエラー")
 

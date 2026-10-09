@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -1064,20 +1065,28 @@ class ScanApp:
             return
         if topic:
             if any(item.processed and item.folgezettel_id == folgezettel_id
-                   and item.topic_title == topic for item in self.items):
-                self.status_var.set(f"「{pp.topic_display(folgezetzel_id, topic)}」はすでにあります")
+                   and (item.topic_title or "") == topic for item in self.items):
+                # 同バッチ内の重複は同名ファイルの競合になるので禁止
+                self.status_var.set(
+                    f"「{pp.topic_display(folgezettel_id, topic)}」はこのバッチ内にすでにあります")
                 return
         elif any(item.processed and item.folgezettel_id == folgezettel_id
                  and not item.topic_title for item in self.items):
-            self.status_var.set(f"ID「{folgezettel_id}」はすでに使用されています")
+            self.status_var.set(f"通常ID「{folgezettel_id}」はこのバッチ内にあります")
             return
         item = self.items[self.current_index]
         old_path = item.current_path(self.folder)
         new_name = pp.topic_display(folgezettel_id, topic) if topic else folgezettel_id
         new_path = self.folder / (new_name + old_path.suffix.lower())
         if new_path.exists() and new_path.resolve() != old_path.resolve():
-            self.status_var.set(f"ファイル「{new_path.name}」はすでに存在します")
+            # 上書き可（2026-10-09 指示）
+            pass
+        try:
+            os.replace(str(old_path), str(new_path))
+        except OSError as exc:
+            messagebox.showerror("名前を変更できません", f"{old_path.name}\n→ {new_path.name}\n\n{exc}")
             return
+        # vault 側に同名画像が既にあっても上書きされる（move_images 側で旧ノートは .trash 退避）
         old_state = {
             "current_name": item.current_name,
             "folgezettel_id": item.folgezettel_id,

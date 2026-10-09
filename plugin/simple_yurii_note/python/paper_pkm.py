@@ -709,6 +709,23 @@ def create_paper_index(root: Path) -> Path:
     return index_path
 
 
+def _trash_note(root: Path, note_path: Path) -> Optional[Path]:
+    """上書き前の旧ノートを `<vault>/.trash/<時刻>_<名前>` へ退避する。"""
+    trash = root / ".trash"
+    try:
+        trash.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        dest = trash / f"{stamp}_{note_path.name}"
+        i = 0
+        while dest.exists():
+            i += 1
+            dest = trash / f"{stamp}-{i}_{note_path.name}"
+        note_path.rename(dest)
+        return dest
+    except OSError:
+        return None
+
+
 def move_images(
     root: Path,
     dest: Path,
@@ -716,8 +733,10 @@ def move_images(
 ) -> tuple[list[tuple[str, Path]], list[tuple[Path, str, str]]]:
     """スキャン画像を ID 名（または `ID-トピック` 名）で dest へ移し、ノートを作る。
 
-    assignments: [(元画像パス, ID)] または [(元画像パス, ID, トピック名)]。
+    assignments: [(元画像パス, ID)] または [(元画像パス, ID, トピック名, [親トピック])].
     トピック名があるときはトピック別Indexノート（例: title: 1-仏教）を作る。
+    同じ表示名が vault に既にあってもエラーにしない: 旧ノートは .trash 退避、
+    同名画像は上書き（2026-10-09 指示）。
     戻り値は (moved, errors)。
     moved: [(ID, ノートパス)]（トピックは ID-トピック表示名）/ errors: [(元パス, ID, 理由)]。
     """
@@ -740,13 +759,11 @@ def move_images(
             errors.append((src, fid, "IDの形式が不正です"))
             continue
         display = topic_display(fid, topic) if topic else fid
-        if display in seen or display in existing or display in topics:
-            errors.append((src, display, "その名前のノートがすでにあります"))
+        if display in seen:
+            # 同じバッチ内の重複はフォルダ内で同名 rename になるためそのまま禁止
+            errors.append((src, display, "同じ表示名がこのバッチ内にあります"))
             continue
         target = dest / (display + src.suffix.lower())
-        if target.exists():
-            errors.append((src, display, f"{target.name} がすでに存在します"))
-            continue
         when = image_datetime(src) or datetime.now()
         try:
             shutil.move(str(src), str(target))
@@ -754,6 +771,10 @@ def move_images(
             errors.append((src, display, str(exc)))
             continue
         seen.add(display)
+        # 上書き: 旧ノートを .trash へ退避する（同名画像は上書き済み）
+        old = (existing.get(display) if not topic else None) or topics.get(display)
+        if old is not None:
+            _trash_note(root, old)
         if topic:
             note_path = create_topic_note(dest, fid, topic, target.name, when,
                                           parent_topic=parent_topic)
