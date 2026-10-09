@@ -1088,7 +1088,23 @@ function! s:refresh_guide(root) abort
   call s:syn_writefile(l:new, l:guide)
 endfunction
 
-" 公開: 既存の操作ガイドを最新にする（VimEnter 用。無ければ何もしない）。
+" 操作ガイドが開いていれば、ディスクの最新内容へ静かに読み直す。
+" 未保存の編集があるとき・特殊バッファのときは触らない。
+function! s:reload_guide_if_open(root) abort
+  let l:guide = fnamemodify(a:root, ':p') . s:sep() . s:guide_name
+  let l:buf = bufnr(l:guide)
+  if l:buf <= 0 || !bufloaded(l:buf)
+    return
+  endif
+  if getbufvar(l:buf, '&modified') || getbufvar(l:buf, '&buftype') !=# ''
+    return
+  endif
+  silent! execute 'checktime ' . l:buf
+endfunction
+
+" 公開: 操作ガイドを最新にする（VimEnter 用）。
+" 起動のたびに vault のガイドを最新テンプレートと比較し、変わっていれば書き換える
+" （プラグイン更新に自動追従）。Index がありガイドが無ければ作る。開いていれば読み直す。
 function! simple_yurii_note#refresh_guide() abort
   " ロック中の vault には書けない（mount後に自動で走らせる前提）
   if simple_yurii_note#vault_locked_flag() == 1
@@ -1098,10 +1114,13 @@ function! simple_yurii_note#refresh_guide() abort
   if empty(l:root) || !isdirectory(l:root)
     return
   endif
+  " ガイドが無く、Index も無いなら vault 未作成 → 何もしない
   if !filereadable(l:root . s:sep() . s:guide_name)
+        \ && !filereadable(s:index_path(l:root))
     return
   endif
   call s:refresh_guide(l:root)
+  call s:reload_guide_if_open(l:root)
 endfunction
 
 " 公開: 操作ガイドを作り直す（無ければ作る。:SimpleGuide 用）。
