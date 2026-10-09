@@ -712,6 +712,70 @@ _TITLE_STATE_FILE = ".pkm_title_state_v2.json"
 Rel = tuple[str, str, str]  # (src_id, type, tgt_id)  id = root からの相対 posix パス
 
 
+_ZK_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+_ZK_IMAGE_FM_KEYS = ("folgezettel", "paper_topic")
+
+
+def _trash_zk_note_images(root: Path, cache: dict, keys_now: set) -> int:
+    """Zettelkasten ノートの削除に合わせて画像も .trash へ退避する（2026-10-09）。
+
+    前回パースキャッシュにあって今回ディスクに無いノート（＝削除/ゴミ箱移動）
+    を xf: fm の `folgezettel:` / `paper_topic:` /（トピックは title 表示名）で
+    判定し、同じフォルダにある `<stem>(拡張子=画像)` を vault の `.trash` に
+    <時刻>_ 接頭付きで退避する。フォルゲゼッテル以外（正気の本文だけノート等）
+    は触らない。" zettelkasten の画像だけね"（ユーザー指示）。
+    戻り値は退避した画像数。
+    """
+    from datetime import datetime as _dt
+
+    now_s = _dt.now().strftime("%Y%m%d-%H%M%S")
+    trashed = 0
+    trash_dir = root / ".trash"
+    for key, ent in cache.items():
+        if key in keys_now or not isinstance(ent, list) or len(ent) < 3:
+            continue
+        fm = ent[1] if isinstance(ent[1], list) else None
+        if not fm:
+            continue
+        val = None
+        for ln in fm:
+            s = ln.strip()
+            if s.startswith("folgezettel:"):
+                val = s.split(":", 1)[1].strip()
+                break
+            if s.startswith("paper_topic:"):
+                title = s.split(":", 1)[1].strip() or None  # 後続
+            # トピック has は title 表示名で画像に対応する
+        if val is None:
+            for ln in fm:
+                if ln.strip().startswith("paper_topic:"):
+                    for ln2 in fm:
+                        if ln2.strip().startswith("title:"):
+                            val = ln2.split(":", 1)[1].strip()
+                            break
+                    break
+        if not val:
+            continue
+        note_path = root / key  # key は vault 相対パス（_nid 由来）
+        folder = note_path.parent
+        for ext in _ZK_IMAGE_EXTS:
+            img = folder / (val + ext)
+            if not img.is_file():
+                continue
+            try:
+                trash_dir.mkdir(parents=True, exist_ok=True)
+                dest = trash_dir / f"{now_s}_{img.name}"
+                i = 0
+                while dest.exists():
+                    i += 1
+                    dest = trash_dir / f"{now_s}-{i}_{img.name}"
+                img.rename(dest)
+                trashed += 1
+            except OSError:
+                pass
+    return trashed
+
+
 def _nid(path: Path, root: Path) -> str | None:
     # pathlib の relative_to は 1 万ノートで秒単位になり得るため、まず文字列
     # 演算（relpath）で済ませる。root 内で解決済みならこれで足りる。
@@ -1467,6 +1531,8 @@ def simple_sync(root) -> int:
             parsed_any = True
         if key is not None:
             keys[rp] = key
+    # 削除（ゴミ箱移動を含む）されたフォルゲゼッテル/トピックノートの画像も退避（2026-10-09）
+    _trash_zk_note_images(root, cache, set(keys.values()))
     titles = {p: n["title"] for p, n in notes.items()}
 
     # 前回 sync 時点のタイトル。本文リンクの表示名を「追従／手書きを残す」の
