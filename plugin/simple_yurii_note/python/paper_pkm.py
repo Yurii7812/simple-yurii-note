@@ -449,7 +449,9 @@ def regen(root: Path, do_sync: bool = True) -> bool:
     folge_index = root / FOLGE_INDEX
     inner = [
         markdown_link(fid, folge[fid], folge_index.parent)
-        for fid in sorted(folge, key=natural_key)
+        for fid in sorted(
+            (f for f in folge if parent_id(f) is None), key=natural_key
+        )
     ]
     if not folge_index.is_file():
         fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]
