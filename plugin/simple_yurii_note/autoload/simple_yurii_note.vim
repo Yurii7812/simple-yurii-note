@@ -4601,6 +4601,8 @@ function! simple_yurii_note#trash_current() abort
 endfunction
 
 " ゴミ箱のファイルを vault 直下へ戻す。戻した絶対パスを返す（失敗時は空）。
+" フォルゲゼッテル/トピックノート（fm folgezettel:/paper_topic: あり）を戻す
+" ときは同名のスキャン画像も一緒に戻す（2026-10-09。fm(topic_parent) なし）。
 function! s:trash_restore(path) abort
   let l:root = s:get_pkm_root()
   if empty(l:root) | return '' | endif
@@ -4613,9 +4615,38 @@ function! s:trash_restore(path) abort
     echohl WarningMsg | echo 'simple_yurii_note: 復元先が既に存在します: ' . l:orig | echohl NONE
     return ''
   endif
+  " 対応する画像がゴミ箱にあれば一緒に戻す
   call rename(a:path, l:dest)
+  call s:restore_trash_image(a:path, l:root, l:orig)
   if !empty(l:root) | call s:run_sync([g:simple_yurii_note_python, 'update', l:root]) | endif
   return l:dest
+endfunction
+
+" ゴミ箱内の、復元するノート（元名 a:orig）と同名 stem の画像パスを返す（無ければ ''）
+" ゴミ箱画像名は sync 側の退避名: `YYYYMMDD-HHMMSS(-n)_<元名>`
+function! s:find_trash_image(trash_dir, orig) abort
+  let l:stem = fnamemodify(a:orig, ':t:r')
+  for l:cand in split(glob(fnamemodify(a:trash_dir, ':p') . '*'), "\n")
+    let l:cname = fnamemodify(l:cand, ':t')
+    if l:cname =~# '\.\%(jpg\|jpeg\|png\|tif\|tiff\|bmp\|webp\|avif\|gif\)$'
+          \ && substitute(l:cname, '^\d\{8}-\d\{6}\%(-\d\+\)\?_', '', '') =~# '^' . l:stem . '\.'
+      return l:cand
+    endif
+  endfor
+  return ''
+endfunction
+
+" ゴミ箱にある画像を vault へ戻す（同名が既にあれば触らない）
+function! s:restore_trash_image(trash_path, root, orig) abort
+  let l:trash_dir = fnamemodify(a:trash_path, ':h')
+  let l:img = s:find_trash_image(l:trash_dir, a:orig)
+  if empty(l:img) | return | endif
+  let l:iname = fnamemodify(l:img, ':t')
+  let l:iorig = substitute(l:iname, '^\d\+_\(\d\+_\)\?', '', '')
+  let l:idel = fnamemodify(l:root, ':p') . l:iorig
+  if !empty(l:iorig) && !filereadable(l:idel)
+    call rename(l:img, l:idel)
+  endif
 endfunction
 
 " ゴミ箱の fzf 確定処理。先頭は押したキー（--expect）、次が選択行（パス）。
