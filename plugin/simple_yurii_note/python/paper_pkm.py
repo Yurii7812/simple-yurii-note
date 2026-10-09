@@ -357,7 +357,8 @@ def create_topic_note(
     path = unique_note_path(folder)
     display = topic_display(fid, topic)
     fm = [_time_line(when), f"title: {display}",
-          f"{FM_PAPER_TOPIC}: {fid}"]
+          f"{FM_PAPER_TOPIC}: {fid}",
+          f"{FM_TOPIC_PARENT}: {parent_topic or ''}"]
     if parent_topic:
         fm.append(f"{FM_TOPIC_PARENT}: {parent_topic}")
     body = [f"# {display}", "", f"![]({image_name})"]
@@ -587,9 +588,18 @@ def regen(root: Path, do_sync: bool = True) -> bool:
                 children.append(markdown_link(disp, tmap[disp][0], gid.parent))
         p_lines = _parent_link_lines(fid, gid.parent, exclude=gid)
         write_note(gid, fm_g, [f"# {fid}_Index"] + children + ["### Parent"] + p_lines)
-        # トピックノート自身の Parent（既存の `### Parent` 以降を置き換え）
+        # トピックノート自身の Parent（既存の `### Parent` 以降を置き換え）+
+        # fm `topic_parent:` は常に持たせる（無ければ追加・手書きで変更可）
         for disp, tpath, tp in tlist:
             fm_t, body_t = read_note(tpath)
+            if fm_value(fm_t, FM_TOPIC_PARENT) is None:
+                if tp is not None:
+                    fm_t.insert(1, f"{FM_TOPIC_PARENT}: {tp}")
+                else:
+                    key_idx = next((i for i, ln in enumerate(fm_t)
+                                    if ln.strip().startswith(f"{FM_PAPER_TOPIC}:")), None)
+                    if key_idx is not None:
+                        fm_t.insert(key_idx + 1, f"{FM_TOPIC_PARENT}: ")
             if "### Parent" in body_t:
                 i = body_t.index("### Parent")
                 body_t = body_t[:i]
