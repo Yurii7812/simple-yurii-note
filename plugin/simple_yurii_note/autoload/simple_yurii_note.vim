@@ -849,7 +849,7 @@ function! s:guide_template() abort
         \ '## リンク',
         \ '',
         \ '- `\l`（ノーマル）… カーソル下のファイル名を Markdown リンク化',
-        \ '- `\l`（ビジュアル）… 選択範囲を表示名にした新ノートへのリンクで選択を置換（新ノート title はタイムスタンプのまま。Parent=元ノート、確認なし）',
+        \ '- `\l`（ビジュアル）… 選択範囲を表示名にした新ノートへのリンクで選択を置換（新ノート title はタイムスタンプのまま。Parent は付けない＝元ノートは BackLink に出る。付けるなら `\P`）',
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
         \ '- `\p`（ビジュアル）… クリップボードのファイル名/URL を選択範囲のリンクに（無ければ何もしない）',
         \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `p`=Parent末尾 / `r`=Related）',
@@ -8158,10 +8158,8 @@ function! simple_yurii_note#linkify_selection_new_note() abort range
           \ s:v2_down_mark,
           \ ]
     call s:syn_writefile(l:new_content, l:new_file)
-    " 新ノートの親は元のノート（確認なしで入れる。あとから \P でも足せる）
-    if !empty(l:parent_link_lines)
-      call s:simple_add_parent(l:new_file, l:parent_file, l:parent_title)
-    endif
+    " Parent は付けない（2026-10-09〜）。元ノートは sync が新ノートの BackLink に
+    " 自動で載せる。後に Parent にしたいだけなら \P で足せる。
   endif
 
   let l:link = '[' . l:text . '](' . l:target . ')'
