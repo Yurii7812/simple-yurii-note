@@ -51,42 +51,35 @@ def _add_images(root: Path, ids: list[str]) -> list[tuple[Path, str]]:
 
 def test_parse_keyword_line() -> None:
     print("parse_keyword_line: キーワード行の解析")
-    e = pp.parse_keyword_line("バナナ(ばなな): 1,1a10b,3")
-    check(e == {"key": "バナナ", "paren": "ばなな", "display": "バナナ(ばなな)",
-                "ids": ["1", "1a10b", "3"]}, "よみ付き・カンマ区切り")
-    e = pp.parse_keyword_line("オザーク(ドラマ): 2")
-    check(e is not None and e["display"] == "オザーク(ドラマ)" and e["ids"] == ["2"],
-          "修飾語付き")
+    e = pp.parse_keyword_line("バナナ: 1,1a10b,3")
+    check(e == {"key": "バナナ", "display": "バナナ",
+                "ids": ["1", "1a10b", "3"]}, "カンマ区切り")
     e = pp.parse_keyword_line("キーワード: 1 2a")
-    check(e is not None and e["paren"] == "" and e["ids"] == ["1", "2a"],
-          "空白区切り・よみなし")
+    check(e is not None and e["ids"] == ["1", "2a"], "空白区切り")
+    check(pp.parse_keyword_line("オザーク(ドラマ): 2") is None,
+          "括弧付きの行は廃止（紛らわしいため扱わない）")
     check(pp.parse_keyword_line("キーワード: フォルゲゼッテル") is None,
           "ID でない値は行として扱わない")
     check(pp.parse_keyword_line("ただの文章") is None, "普通の文は None")
     check(pp.parse_keyword_line("time: 2026-01-01 00:00:00") is None,
           "front matter の time 行は None（誤マッチ回帰）")
-    check(pp.parse_keyword_line("title: Index_write") is None, "title 行は None")
+    check(pp.parse_keyword_line("title: Index-write") is None, "title 行は None")
     check(pp.parse_keyword_line("バナナ: 1A10B") is not None, "大文字は正規化して受ける")
 
 
 def test_keyword_reading() -> None:
-    print("keyword_reading: (…) がよみか修飾語かの判定")
-    check(pp.keyword_reading("バナナ(ばなな): 1,2") == "ばなな", "かなのよみを使う")
-    check(pp.keyword_reading("バナナ(バナナ): 1,2") == "ばなな", "カタカナよみもひらがな化")
-    check(pp.keyword_reading("オザーク(ドラマ): 2") == "おざーく",
-          "一致しない (…) は修飾語として本体のよみ")
-    check(pp.keyword_reading("知識管理(ちしきかんり): 3") == "ちしきかんり", "漢字のよみ")
-    check(pp.keyword_reading("知識管理(メモ): 3") == "ちしきかんり",
-          "漢字＋修飾語は本体のよみ")
+    print("keyword_reading: キーワード行のよみ")
+    check(pp.keyword_reading("バナナ: 1,2") == "ばなな", "カタカナはひらがな化")
+    check(pp.keyword_reading("知識管理: 3") == "ちしきかんり", "漢字のよみ")
     check(pp.keyword_reading("ただの文") is None, "キーワード行でなければ None")
 
 
 def test_keyword_sort() -> None:
     print("keyword_sort_key: キーワード行のよみ順")
     entries = [
-        pp.parse_keyword_line("バナナ(ばなな): 1,2"),
-        pp.parse_keyword_line("知識管理(ちしきかんり): 3"),
-        pp.parse_keyword_line("オザーク(ドラマ): 4"),
+        pp.parse_keyword_line("バナナ: 1,2"),
+        pp.parse_keyword_line("知識管理: 3"),
+        pp.parse_keyword_line("オザーク: 4"),
     ]
     order = [e["key"] for e in sorted(entries, key=pp.keyword_sort_key)]
     check(order == ["オザーク", "知識管理", "バナナ"], "おざーく < ちしき < ばなな")
@@ -108,8 +101,8 @@ def test_create_and_regen() -> None:
     with tempfile.TemporaryDirectory() as d:
         root = _make_vault(Path(d))
         index_path = pp.create_paper_index(root)
-        check(index_path.is_file(), "紙PKM Index ができる")
-        check((root / "Index_write.md").is_file(), "Index_write.md ができる")
+        check(index_path.is_file(), "Paper-Zettelkasten-Index ができる")
+        check((root / "Index-write.md").is_file(), "Index-write.md ができる")
         check((root / "Folgezettel-Index.md").is_file(), "Folgezettel-Index.md ができる")
         check(pp.find_paper_index(root) == index_path, "paper_index マーカーで見つかる")
         check(pp.create_paper_index(root) == index_path, "2回目は同じ Index を再利用")
@@ -121,22 +114,22 @@ def test_create_and_regen() -> None:
         notes = {fid: p for fid, p in moved}
         check(notes["1"].name != notes["1a"].name, "ノートはタイムスタンプ名")
 
-        (root / "Index_write.md").write_text(
-            "---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
-            "# Index_write\n\n"
-            "バナナ(ばなな): 1,1a,2\n"
-            "オザーク(ドラマ): 2\n",
+        (root / "Index-write.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index-write\n---\n\n"
+            "# Index-write\n\n"
+            "バナナ: 1,1a,2\n"
+            "オザーク: 2\n",
             encoding="utf-8",
         )
         pp.regen(root)
 
         index_text = index_path.read_text(encoding="utf-8")
-        check("[オザーク(ドラマ)]" in index_text and "[バナナ(ばなな)]" in index_text,
+        check("[オザーク]" in index_text and "[バナナ]" in index_text,
               "Index にキーワードリンクが並ぶ")
-        check(index_text.index("[オザーク(ドラマ)]") < index_text.index("[バナナ(ばなな)]"),
+        check(index_text.index("[オザーク]") < index_text.index("[バナナ]"),
               "Index もよみ順（オザーク < バナナ）")
 
-        group = pp.find_group(root, "バナナ(ばなな)")
+        group = pp.find_group(root, "バナナ")
         check(group is not None, "複数IDはグループノートができる")
         if group:
             group_text = group.read_text(encoding="utf-8")
@@ -145,26 +138,36 @@ def test_create_and_regen() -> None:
                   and f"[1a]({notes['1a'].name})" in group_text
                   and f"[2]({notes['2'].name})" in group_text,
                   "グループに各IDノートへのリンク")
-        check(pp.find_group(root, "オザーク(ドラマ)") is None,
+        check(pp.find_group(root, "オザーク") is None,
               "単一IDはグループを作らない")
-        check(f"[オザーク(ドラマ)]({notes['2'].name})" in index_text,
+        check(f"[オザーク]({notes['2'].name})" in index_text,
               "単一IDは Index から直接リンク")
 
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
         check(folge_text.index(f"[1]({notes['1'].name})")
               < folge_text.index(f"[1a]({notes['1a'].name})")
               < folge_text.index(f"[2]({notes['2'].name})"), "Folgezettel-Index は自然順")
+        check("### Parent" in folge_text and "[Paper-Zettelkasten-Index]" in folge_text,
+              "Folgezettel-Index の Parent は Paper-Zettelkasten-Index")
+        iw_text = (root / "Index-write.md").read_text(encoding="utf-8")
+        check("### Parent" in iw_text and "[Paper-Zettelkasten-Index]" in iw_text,
+              "Index-write の Parent は Paper-Zettelkasten-Index")
+        check("PAPER:START" not in index_text and "PAPER:END" not in folge_text,
+              "管理コメントは書かない")
+        parent_index = (root / "index.md").read_text(encoding="utf-8")
+        check("[Paper-Zettelkasten-Index]" in parent_index,
+              "vault の index.md にリンクが足される")
 
         note1 = notes["1"].read_text(encoding="utf-8")
         check(f"[1a]({notes['1a'].name})" in note1, "親ノートの本文に子リンク")
-        check("[紙のPKM Index]" in note1, "根のノートの Parent は紙PKM Index")
+        check("[Paper-Zettelkasten-Index]" in note1, "根のノートの Parent はPaper-Zettelkasten-Index")
         note1a = notes["1a"].read_text(encoding="utf-8")
         check(f"[1]({notes['1'].name})" in note1a, "子ノートの Parent は親ID")
 
         # キーワードから外した ID のグループ Parent 行は掃除される
-        (root / "Index_write.md").write_text(
-            "---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
-            "# Index_write\n\nバナナ(ばなな): 1,1a\nオザーク(ドラマ): 2\n",
+        (root / "Index-write.md").write_text(
+            "---\ntime: 2026-01-01 00:00:00\ntitle: Index-write\n---\n\n"
+            "# Index-write\n\nバナナ: 1,1a\nオザーク: 2\n",
             encoding="utf-8",
         )
         pp.regen(root)
@@ -186,7 +189,7 @@ def test_move_images_duplicate() -> None:
 
 
 def test_regen_without_index() -> None:
-    print("regen: 紙PKM Index が無ければ False")
+    print("regen: Paper-Zettelkasten-Index が無ければ False")
     with tempfile.TemporaryDirectory() as d:
         root = _make_vault(Path(d))
         check(pp.regen(root, do_sync=False) is False, "Index 無しで False")

@@ -77,7 +77,7 @@ COL_DONE = "#1f7a3d"
 COL_DANGER = "#b8503f"
 
 FONT_SIZES = {"title": 22, "section": 14, "body": 15, "small": 13,
-              "input": 20, "progress": 36}
+              "input": 20, "progress": 36, "prev_id": 40}
 
 
 @dataclass
@@ -259,6 +259,10 @@ class ScanApp:
                         font=(self.ui_font, FONT_SIZES["progress"], "bold"))
         style.configure("PrevId.TLabel", background=COL_CARD, foreground=COL_TEXT,
                         font=(self.mono_font, FONT_SIZES["input"]))
+        style.configure("PrevIdBadge.TLabel", background=COL_ACCENT, foreground=COL_ACCENT_TEXT,
+                        font=(self.mono_font, FONT_SIZES["prev_id"], "bold"))
+        style.configure("PrevIdBadgeMuted.TLabel", background=COL_CARD, foreground=COL_MUTED,
+                        font=(self.mono_font, FONT_SIZES["prev_id"]))
         # ボタンは大きくはっきり（らくらくスマホ風）
         style.configure("TButton", padding=(18, 10), font=(self.ui_font, body),
                         background=COL_CARD, foreground=COL_TEXT,
@@ -437,18 +441,23 @@ class ScanApp:
         header.pack(fill="x")
 
         progress_box = ttk.Frame(header, style="Card.TFrame")
-        progress_box.pack(side="left", fill="x", expand=True)
+        progress_box.pack(side="left", anchor="n")
         ttk.Label(progress_box, textvariable=self.progress_var, style="ProgressNum.TLabel").pack(anchor="w")
         self.naming_progress = ttk.Progressbar(progress_box, orient="horizontal", length=300, mode="determinate")
         self.naming_progress.pack(anchor="w", pady=(4, 0))
         ttk.Label(progress_box, textvariable=self.current_file_var, style="CardMuted.TLabel").pack(
             anchor="w", pady=(6, 0))
-        prev_row = ttk.Frame(progress_box, style="Card.TFrame")
-        prev_row.pack(anchor="w", pady=(4, 0))
-        ttk.Label(prev_row, text="直前のID:", style="CardMuted.TLabel").pack(side="left")
-        ttk.Label(prev_row, textvariable=self.previous_id_var, style="PrevId.TLabel").pack(side="left", padx=(10, 24))
-        ttk.Label(prev_row, text="移動先:", style="CardMuted.TLabel").pack(side="left")
-        ttk.Label(prev_row, textvariable=self.dest_var, style="MonoCard.TLabel").pack(side="left", padx=(10, 0))
+        dest_row = ttk.Frame(progress_box, style="Card.TFrame")
+        dest_row.pack(anchor="w", pady=(4, 0))
+        ttk.Label(dest_row, text="移動先:", style="CardMuted.TLabel").pack(side="left")
+        ttk.Label(dest_row, textvariable=self.dest_var, style="MonoCard.TLabel").pack(side="left", padx=(6, 0))
+
+        center_box = ttk.Frame(header, style="Card.TFrame")
+        center_box.pack(side="left", fill="both", expand=True)
+        ttk.Label(center_box, text="直前のID", style="CardMuted.TLabel").pack(anchor="center")
+        self.previous_id_label = ttk.Label(center_box, textvariable=self.previous_id_var,
+                                           style="PrevIdBadgeMuted.TLabel")
+        self.previous_id_label.pack(anchor="center")
 
         header_buttons = ttk.Frame(header, style="Card.TFrame")
         header_buttons.pack(side="right", anchor="n")
@@ -803,7 +812,10 @@ class ScanApp:
         self.progress_var.set(f"{self.current_index + 1} / {len(self.items)}")
         self.naming_progress.configure(maximum=max(len(self.items), 1), value=self.current_index)
         self.current_file_var.set(f"元: {item.original_name}　現在: {item.current_name}")
-        self.previous_id_var.set(self.previous_id() or "なし")
+        prev_id = self.previous_id()
+        self.previous_id_var.set(prev_id or "なし")
+        self.previous_id_label.configure(
+            style="PrevIdBadge.TLabel" if prev_id else "PrevIdBadgeMuted.TLabel")
         self.status_var.set("画像内のIDを確認してください")
         self.zoom = 1.0
         try:

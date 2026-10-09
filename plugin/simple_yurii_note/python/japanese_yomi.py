@@ -376,7 +376,7 @@ def sort_lines(lines: list[str], base_dir, extra_key_fn=None) -> list[str]:
     切る（グループの Parent や BackLink のリンクは動かさない。ソート後に
     本文と入れ替わってしまうのを防ぐ）。文章に埋もれたリンクも動かさない。
     extra_key_fn は行 → ソートキー tuple（対象外は None）。紙PKM の
-    Index_write のキーワード行（`バナナ(ばなな): 1,2`）を並べるのに使う。
+    Index-write のキーワード行（`バナナ(ばなな): 1,2`）を並べるのに使う。
     """
     slots: list[int] = []
     for i, ln in enumerate(lines):

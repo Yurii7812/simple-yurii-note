@@ -5,7 +5,7 @@
 
     sort_yomi.py sort --base DIR        # stdin の行をソートして stdout へ
     sort_yomi.py sort --base DIR --keyword-lines
-                                        # 紙PKM の Index_write のキーワード行も並べる
+                                        # 紙PKM の Index-write のキーワード行も並べる
     sort_yomi.py guess NAME             # NAME のよみを表示
     sort_yomi.py get  --note PATH --name NAME
     sort_yomi.py list --note PATH       # yomi の表示名を登録順に一覧
@@ -46,7 +46,7 @@ def main(argv: list[str]) -> int:
     p_sort.add_argument(
         "--keyword-lines",
         action="store_true",
-        help="紙PKM の Index_write のキーワード行（バナナ(ばなな): 1,2）も並べる",
+        help="紙PKM の Index-write のキーワード行（バナナ(ばなな): 1,2）も並べる",
     )
     p_sort.add_argument(
         "--report-file", default=None, help="yomi: に追加した件数を書き出すファイル"

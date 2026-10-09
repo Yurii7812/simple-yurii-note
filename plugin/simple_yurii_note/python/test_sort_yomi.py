@@ -261,17 +261,17 @@ def test_sort_keyword_lines() -> None:
         "",
         "# Index_write",
         "",
-        "バナナ(ばなな): 1,2",
-        "オザーク(ドラマ): 3",
-        "知識管理(ちしきかんり): 4",
+        "バナナ: 1,2",
+        "オザーク: 3",
+        "知識管理: 4",
         "ただの文",
     ]
     with tempfile.TemporaryDirectory() as d:
         out = jy.sort_lines(lines, d, extra_key_fn=_keyword_key)
     check(out[0:7] == lines[0:7], "front matter・見出し・空行は動かない")
-    check(out[7:10] == ["オザーク(ドラマ): 3", "知識管理(ちしきかんり): 4",
-                        "バナナ(ばなな): 1,2"],
-          "おざーく < ちしき < ばなな（修飾語は本体のよみ）")
+    check(out[7:10] == ["オザーク: 3", "知識管理: 4",
+                        "バナナ: 1,2"],
+          "おざーく < ちしき < ばなな")
     check(out[10] == "ただの文", "キーワード行でない文は動かない")
     with tempfile.TemporaryDirectory() as d:
         out2 = jy.sort_lines(lines, d)
@@ -281,7 +281,7 @@ def test_sort_keyword_lines() -> None:
 def test_cli_keyword_lines() -> None:
     print("sort_yomi CLI: --keyword-lines")
     data = ("---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
-            "バナナ(ばなな): 1,2\nオザーク(ドラマ): 3\n")
+            "バナナ: 1,2\nオザーク: 3\n")
     buf = io.StringIO()
     old_stdin = sys.stdin
     sys.stdin = io.StringIO(data)
@@ -292,7 +292,7 @@ def test_cli_keyword_lines() -> None:
         sys.stdin = old_stdin
     check(rc == 0 and buf.getvalue() == (
         "---\ntime: 2026-01-01 00:00:00\ntitle: Index_write\n---\n\n"
-        "オザーク(ドラマ): 3\nバナナ(ばなな): 1,2\n"
+        "オザーク: 3\nバナナ: 1,2\n"
     ), "CLI がキーワード行だけをよみ順に（front matter は不変）")
 
 

@@ -964,10 +964,10 @@ function! s:guide_template() abort
         \ '',
         \ '## 紙のPKM（フォルゲゼッテル）',
         \ '',
-        \ '- `\F` … 紙PKM Index（タイムスタンプ名）を作成/オープン（`:SimplePaperIndex`）。Index_write と Folgezettel-Index も作られる',
+        \ '- `\F` … 紙PKM Index（タイムスタンプ名）を作成/オープン（`:SimplePaperIndex`）。Index-write と Folgezettel-Index も作られる',
         \ '- `\f` … スキャン画像に番号を付けて vault 直下へ移動（`:SimpleScan`。番号付け GUI が開く）',
-        \ '- `Index_write` … `キーワード(よみ): 1,1a10b,3` の形式で手書き。複数IDのキーワードはグループノート、単一IDは直接リンクとして紙PKM Index に並ぶ（保存で自動再生成）',
-        \ '- `\S` … Index_write ではキーワード行もよみ順に並べる（`(…)` が本体のよみと一致すればそれをよみに、修飾語なら本体のよみで並べる）',
+        \ '- `Index-write` … `キーワード(よみ): 1,1a10b,3` の形式で手書き。複数IDのキーワードはグループノート、単一IDは直接リンクとして紙PKM Index に並ぶ（保存で自動再生成）',
+        \ '- `\S` … Index-write ではキーワード行もよみ順に並べる（`(…)` が本体のよみと一致すればそれをよみに、修飾語なら本体のよみで並べる）',
         \ '- Folgezettel-Index は存在する全IDの一覧（自然順）。生成物なので `\S` しない',
         \ '',
         \ '## Ex コマンド一覧',
@@ -6339,9 +6339,9 @@ function! simple_yurii_note#autosync_on_save() abort
     return
   endif
 
-  " 紙PKM: Index_write を保存したら Index/グループ/Folgezettel-Index を再生成する。
+  " 紙PKM: Index-write を保存したら Index/グループ/Folgezettel-Index を再生成する。
   " paper_pkm.py regen は SYN 同期まで行うので、update_one の代わりに走らせる。
-  if fnamemodify(l:file, ':t') ==# 'Index_write.md'
+  if fnamemodify(l:file, ':t') ==# 'Index-write.md'
     let l:paper = s:paper_pkm_script()
     if filereadable(l:paper)
       let l:pcmd = s:python_cmd() . ' ' . shellescape(l:paper)
@@ -8445,7 +8445,7 @@ function! s:paper_scan_script() abort
   return fnamemodify(g:simple_yurii_note_python, ':h') . s:sep() . 'folgezettel_scan.py'
 endfunction
 
-" 紙PKM Index（Index・Index_write・Folgezettel-Index）を作成/再利用して開く。
+" 紙PKM Index（Index・Index-write・Folgezettel-Index）を作成/再利用して開く。
 function! simple_yurii_note#paper_index() abort
   let l:root = s:get_pkm_root()
   if empty(l:root)
@@ -8469,7 +8469,7 @@ function! simple_yurii_note#paper_index() abort
     return
   endif
   execute 'edit ' . fnameescape(l:path)
-  echo 'simple_yurii_note: 紙PKM Index を開きました（Index_write にキーワードを書く）'
+  echo 'simple_yurii_note: 紙PKM Index を開きました（Index-write にキーワードを書く）'
 endfunction
 
 " スキャン画像の番号付け GUI を起動する。移動先は今開いているノートのフォルダ。
@@ -8547,7 +8547,7 @@ function! s:sort_lines_by_yomi(first, last) abort
   endif
   let l:report = tempname()
   let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(expand('%:p:h'))
-        \ . (expand('%:t') ==# 'Index_write.md' ? ' --keyword-lines' : '')
+        \ . (expand('%:t') ==# 'Index-write.md' ? ' --keyword-lines' : '')
         \ . ' --report-file ' . shellescape(l:report)
   " 1 万行の Index では数秒かかる。無反応に見えないよう先に表示する。
   echo printf('simple_yurii_note: %d 行をよみ順に並べ替え中…', len(l:lines))

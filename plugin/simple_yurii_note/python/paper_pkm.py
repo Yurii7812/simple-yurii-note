@@ -6,18 +6,22 @@
 - スキャン画像にフォルゲゼッテルIDを付けて vault 直下へ移す（GUI: folgezettel_scan.py）
 - 各スキャンは**タイムスタンプ名ノート**（title=ID、front matter `folgezettel: ID`）。
   画像は `<ID>.<拡張子>` として同じフォルダに置き、ノートが埋め込む。
-- `Index_write.md`（手書き）::
+- `Index-write.md`（手書き）::
 
       キーワード: フォルゲゼッテル
       バナナ(ばなな): 1,1a10b,3
       オザーク(ドラマ): 2
 
-  の各行から、紙PKM Index（タイムスタンプ名・`paper_index: true`）の
+  の各行から、Paper-Zettelkasten-Index（タイムスタンプ名・`paper_index: true`）の
   キーワードリンクを生成する。**複数IDのキーワードはグループノート**
   （`attribute: group`、中に各IDノートへのリンク）、単一IDは直接リンク。
 - `Folgezettel-Index.md`: 存在する全IDを自然順で並べた一覧。
-- 生成物は `<!-- PAPER:START -->` / `<!-- PAPER:END -->` の管理ブロックだけを
-  書き換え、ブロック外の手書き内容（`### Parent` / `### BackLink` 等）は残す。
+- 生成物（Index・グループ・Folgezettel-Index・スキャンノート）の本文は regen が
+  毎回まるごと作り直す（管理コメントは書かない）。`Index-write.md` だけは
+  手書きの本文＝キーワード行をサイ博（並び順のみ整える）。
+- `Index-write.md` と `Folgezettel-Index.md` の `### Parent` は
+  Paper-Zettelkasten-Index へのリンク（regen が無ければ足す）。
+- `create` 時に vault 親Index（`index.md`）へ Paper-Zettelkasten-Index へのリンクを足す。
 - 実行後は `note_format_v2.simple_sync()` で SYN 同期まで行う。
 
 CLI::
@@ -45,19 +49,18 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import japanese_yomi as jy  # noqa: E402
 
-INDEX_WRITE = "Index_write.md"
+INDEX_WRITE = "Index-write.md"
+OLD_INDEX_WRITE = "Index_write.md"
 FOLGE_INDEX = "Folgezettel-Index.md"
-DEFAULT_INDEX_TITLE = "紙のPKM Index"
+DEFAULT_INDEX_TITLE = "Paper-Zettelkasten-Index"
 
 ID_PATTERN = re.compile(r"^\d+(?:[a-z]+\d+)*[a-z]*$")
 # キーと ID 部に `:` を許さない（`time: 2026-01-01 00:00:00` のような front matter を
 # 後方一致でキーワード行と誤認しないため。`[^:]+?` の後退を防ぐ）。
 KEYWORD_LINE_RE = re.compile(
-    r"^(?P<key>[^:]+?)(?:\((?P<paren>[^()]*)\))?\s*:\s*(?P<ids>[^:]+)$"
+    r"^(?P<key>[^:()]+?)\s*:\s*(?P<ids>[^:]+)$"
 )
 
-PAPER_START = "<!-- PAPER:START -->"
-PAPER_END = "<!-- PAPER:END -->"
 FM_FOLGEZETTEL = "folgezettel"
 FM_PAPER_KEYWORD = "paper_keyword"
 FM_PAPER_INDEX = "paper_index"
@@ -124,14 +127,8 @@ def child_id(fid: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def display_name(key: str, paren: str) -> str:
-    return key + (f"({paren})" if paren else "")
-
-
-def reading_for_display(key: str, paren: str) -> str:
-    """キーワード行のよみ。`(…)` が本体のよみと一致すればよみ、違えば修飾語。"""
-    if paren and jy.kata2hira(jy.reading_for(key)) == jy.kata2hira(paren):
-        return jy.kata2hira(paren)
+def reading_for_display(key: str) -> str:
+    """キーワード行のよみ（pykakasi 自動推定・ひらがな）。"""
     return jy.kata2hira(jy.reading_for(key))
 
 
@@ -141,7 +138,6 @@ def parse_keyword_line(line: str) -> Optional[dict]:
     if not m:
         return None
     key = m.group("key").strip()
-    paren = (m.group("paren") or "").strip()
     raw_ids = m.group("ids").strip()
     if not key:
         return None
@@ -150,8 +146,7 @@ def parse_keyword_line(line: str) -> Optional[dict]:
         return None
     return {
         "key": key,
-        "paren": paren,
-        "display": display_name(key, paren),
+        "display": key,
         "ids": ids,
     }
 
@@ -161,11 +156,11 @@ def keyword_reading(line: str) -> Optional[str]:
     entry = parse_keyword_line(line)
     if entry is None:
         return None
-    return reading_for_display(entry["key"], entry["paren"])
+    return reading_for_display(entry["key"])
 
 
 def keyword_sort_key(entry: dict):
-    return jy.reading_key(reading_for_display(entry["key"], entry["paren"]))
+    return jy.reading_key(reading_for_display(entry["key"]))
 
 
 # ---------------------------------------------------------------------------
@@ -214,24 +209,6 @@ def _rel(base_dir: Path, target: Path) -> str:
 
 def markdown_link(display: str, target: Path, base_dir: Path) -> str:
     return f"[{display}]({_rel(base_dir, target)})"
-
-
-def managed_block(inner: list[str]) -> str:
-    return "\n".join([PAPER_START] + inner + [PAPER_END])
-
-
-def set_managed(text: str, inner: list[str]) -> str:
-    """管理ブロック（PAPER:START/END）の中身を差し替える。無ければ末尾に足す。"""
-    block = managed_block(inner)
-    pattern = re.compile(
-        re.escape(PAPER_START) + r".*?" + re.escape(PAPER_END), re.DOTALL
-    )
-    if pattern.search(text):
-        return pattern.sub(lambda _m: block, text, count=1)
-    body = text.rstrip("\n")
-    if body:
-        body += "\n\n"
-    return body + block + "\n"
 
 
 def unique_note_path(root: Path, when: Optional[datetime] = None) -> Path:
@@ -348,10 +325,10 @@ def create_scan_note(
     image_name: str,
     when: Optional[datetime] = None,
 ) -> Path:
-    """スキャン1枚をタイムスタンプ名ノートにする（管理ブロックは regen が埋める）。"""
+    """スキャン1枚をタイムスタンプ名ノートにする（本文は regen が作り直す）。"""
     path = unique_note_path(folder)
     fm = [_time_line(when), f"title: {fid}", f"{FM_FOLGEZETTEL}: {fid}"]
-    body = [f"# {fid}", "", f"![]({image_name})", "", PAPER_START, PAPER_END]
+    body = [f"# {fid}", "", f"![]({image_name})"]
     write_note(path, fm, body)
     return path
 
@@ -366,14 +343,14 @@ def _new_group_note(root: Path, display: str, reading: str) -> Path:
     ]
     if reading and reading != display:
         fm = jy.set_yomi_map(fm, {display: reading})
-    body = [f"# {display}", "", managed_block([])]
+    body = [f"# {display}", ""]
     write_note(path, fm, body)
     return path
 
 
 def _entry_readings(entries: list[dict]) -> dict[str, str]:
     return {
-        e["display"]: reading_for_display(e["key"], e["paren"]) for e in entries
+        e["display"]: reading_for_display(e["key"]) for e in entries
     }
 
 
@@ -385,56 +362,39 @@ def _update_yomi(fm: list[str], mapping: dict[str, str]) -> list[str]:
     return jy.set_yomi_map(fm, merged)
 
 
-def _prune_stale_group_parents(
-    body: list[str],
-    note_path: Path,
-    fid: str,
-    group_ids: dict[Path, set[str]],
-) -> list[str]:
-    """今のグループに含まれない ID の「グループ由来 Parent 行」を外す。
-
-    sync はグループ（attribute: group）からのリンクを相手の `### Parent` に
-    自動追加するが、リンクが消えても行は残る。regen 側で古い行だけ掃除する。
-    """
-    out: list[str] = []
-    in_parent = False
-    for ln in body:
-        s = ln.strip()
-        if s == "### Parent":
-            in_parent = True
-        elif s in ("### Related", "### BackLink"):
-            in_parent = False
-        if in_parent:
-            m = re.search(r"\[[^\]]*\]\(([^)]+)\)", ln)
-            if m:
-                target = (note_path.parent / m.group(1).split("#", 1)[0]).resolve()
-                ids = group_ids.get(target)
-                if ids is not None and fid not in ids:
-                    continue
-        out.append(ln)
-    return out
-
-
 def regen(root: Path, do_sync: bool = True) -> bool:
-    """Index・グループ・Folgezettel-Index・スキャンノートの管理ブロックを再生成。"""
+    """Index・グループ・Folgezettel-Index・スキャンノートの本文を再生成する。"""
     root = Path(root).resolve()
     index_path = find_paper_index(root)
     if index_path is None:
         return False
+    index_display = index_title(index_path)
 
     entries: list[dict] = []
     index_write = root / INDEX_WRITE
+    keyword_line_order: list[tuple[int, dict]] = []
     if index_write.is_file():
-        _, body = read_note(index_write)
-        for line in body:
+        iw_fm, body = read_note(index_write)
+        for i, line in enumerate(body):
             entry = parse_keyword_line(line)
             if entry is not None:
+                keyword_line_order.append((i, entry))
                 entries.append(entry)
+        entries.sort(key=keyword_sort_key)
+        if keyword_line_order:
+            slots = [i for i, _ in keyword_line_order]
+            for slot, entry in zip(slots, entries, strict=False):
+                body[slot] = entry["key"] + ": " + ", ".join(entry["ids"])
+        if not any(ln.strip() == "### Parent" for ln in body):
+            body += ["", "### Parent",
+                     markdown_link(index_display, index_path, root)]
+            write_note(index_write, iw_fm, body)
+        elif keyword_line_order:
+            write_note(index_write, iw_fm, body)
     entries.sort(key=keyword_sort_key)
     readings = _entry_readings(entries)
 
     folge = scan_folgezettel_notes(root)
-    index_display = index_title(index_path)
 
     # --- グループ（複数IDのキーワード） -------------------------------------
     group_paths: dict[str, Path] = {}
@@ -457,15 +417,14 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         inner.append("### Parent")
         inner.append(markdown_link(index_display, index_path, group_path.parent))
 
-        fm, body = read_note(group_path)
+        fm, _ = read_note(group_path)
         fm = [ln for ln in fm if not re.match(r"^\s*(title|attribute)\s*:", ln)]
         fm.insert(1 if fm else 0, f"title: {display}")
         fm.append("attribute: group")
         fm = _update_yomi(fm, {display: readings[display]})
-        body_text = set_managed("\n".join(body), inner)
-        write_note(group_path, fm, body_text.split("\n"))
+        write_note(group_path, fm, inner)
 
-    # --- 紙PKM Index のキーワードリンク -------------------------------------
+    # --- Paper-Zettelkasten-Index のキーワードリンク ------------------------
     inner: list[str] = []
     for entry in entries:
         display = entry["display"]
@@ -477,57 +436,59 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             target = folge[entry["ids"][0]]
             inner.append(markdown_link(display, target, index_path.parent))
 
-    fm, body = read_note(index_path)
-    body_text = set_managed("\n".join(body), inner)
-    write_note(index_path, fm, body_text.split("\n"))
+    fm, _ = read_note(index_path)
+    body = [
+        f"# {index_display}",
+        "",
+        f"[{INDEX_WRITE[:-3]}]({INDEX_WRITE})",
+        f"[{FOLGE_INDEX[:-3]}]({FOLGE_INDEX})",
+        "",
+        *inner,
+    ]
+    write_note(index_path, fm, body)
 
     # --- Folgezettel-Index --------------------------------------------------
     folge_index = root / FOLGE_INDEX
-    if not folge_index.is_file():
-        fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]
-        write_note(folge_index, fm_fi, [f"# {FOLGE_INDEX[:-3]}", "", managed_block([])])
     inner = [
         markdown_link(fid, folge[fid], folge_index.parent)
         for fid in sorted(folge, key=natural_key)
     ]
-    fm, body = read_note(folge_index)
-    body_text = set_managed("\n".join(body), inner)
-    write_note(folge_index, fm, body_text.split("\n"))
+    if not folge_index.is_file():
+        fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]
+        write_note(folge_index, fm_fi, [])
+    fm, _ = read_note(folge_index)
+    write_note(folge_index, fm, [f"# {FOLGE_INDEX[:-3]}", "", *inner,
+                                 "", "### Parent",
+                                 markdown_link(index_display, index_path, folge_index.parent)])
 
     # --- スキャンノートの親子リンク -----------------------------------------
-    group_ids: dict[Path, set[str]] = {
-        group_paths[e["display"]].resolve(): set(e["ids"])
-        for e in entries
-        if len(e["ids"]) >= 2 and e["display"] in group_paths
-    }
     for fid, note_path in folge.items():
         children = sorted(
             (c for c in folge if parent_id(c) == fid), key=natural_key
         )
-        inner = [
+        fm, old_body = read_note(note_path)
+        images = [ln for ln in old_body if re.match(r"^!\[\]\(", ln.strip())]
+        intra = [
             markdown_link(c, folge[c], note_path.parent) for c in children
         ]
-        pid = parent_id(fid)
-        parent_link = None
-        if pid is not None and pid in folge:
-            parent_link = markdown_link(pid, folge[pid], note_path.parent)
-        elif pid is None:
-            parent_link = markdown_link(index_display, index_path, note_path.parent)
-        inner.append("")
-        inner.append("### Parent")
-        if parent_link:
-            inner.append(parent_link)
+        inner = [f"# {fid}", "", *images]
+        if images or intra:
+            inner.append("")
+        inner += intra + ["### Parent"]
 
-        fm, body = read_note(note_path)
-        body = _prune_stale_group_parents(body, note_path, fid, group_ids)
+        pid = parent_id(fid)
+        if pid is not None and pid in folge:
+            inner.append(markdown_link(pid, folge[pid], note_path.parent))
+        elif pid is None:
+            inner.append(markdown_link(index_display, index_path, note_path.parent))
+
         mapping = {
             e["display"]: readings[e["display"]]
             for e in entries
             if len(e["ids"]) == 1 and e["ids"][0] == fid
         }
         fm = _update_yomi(fm, mapping)
-        body_text = set_managed("\n".join(body), inner)
-        write_note(note_path, fm, body_text.split("\n"))
+        write_note(note_path, fm, inner)
 
     if do_sync:
         jy.clear_memos()
@@ -538,18 +499,29 @@ def regen(root: Path, do_sync: bool = True) -> bool:
 
 
 def create_paper_index(root: Path) -> Path:
-    """紙PKM Index一式（Index・Index_write・Folgezettel-Index）を作る。
+    """紙PKM Index一式（Index-write・Paper-Zettelkasten-Index・Folgezettel-Index）を作る。
 
     既に Index があればそれを再利用する。作成/更新後に regen（同期込み）を実行。
     """
     root = Path(root).resolve()
     index_write = root / INDEX_WRITE
+    old_index_write = root / OLD_INDEX_WRITE
+    if not index_write.is_file() and old_index_write.is_file():
+        old_index_write.rename(index_write)
     if not index_write.is_file():
         write_note(
             index_write,
             [_time_line(), f"title: {INDEX_WRITE[:-3]}"],
             [f"# {INDEX_WRITE[:-3]}", ""],
         )
+    else:
+        fm, body = read_note(index_write)
+        if f"title: {INDEX_WRITE[:-3]}" not in fm:
+            fm = [f"title: {INDEX_WRITE[:-3]}" if ln.startswith("title:") else ln
+                  for ln in fm]
+            body = [INDEX_WRITE[:-3] if ln.strip() == OLD_INDEX_WRITE[:-3] else ln
+                    for ln in body]
+            write_note(index_write, fm, body)
     index_path = find_paper_index(root)
     if index_path is None:
         index_path = unique_note_path(root)
@@ -563,11 +535,27 @@ def create_paper_index(root: Path) -> Path:
             "",
             f"[{INDEX_WRITE[:-3]}]({INDEX_WRITE})",
             f"[{FOLGE_INDEX[:-3]}]({FOLGE_INDEX})",
-            "",
-            PAPER_START,
-            PAPER_END,
         ]
         write_note(index_path, fm, body)
+    else:
+        fm, body = read_note(index_path)
+        old_title = fm_value(fm, "title")
+        if old_title != DEFAULT_INDEX_TITLE:
+            fm = [f"title: {DEFAULT_INDEX_TITLE}" if ln.startswith("title:") else ln
+                  for ln in fm]
+            body = [DEFAULT_INDEX_TITLE if ln.strip() == "#" + old_title else ln
+                    for ln in body]
+            write_note(index_path, fm, body)
+
+    # vault 親Index（index.md）に Paper-Zettelkasten-Index へのリンクを足す
+    parent_index = root / "index.md"
+    if parent_index.is_file():
+        fm, body = read_note(parent_index)
+        if all(index_path.name not in ln for ln in body):
+            body += ["",
+                     f"[{DEFAULT_INDEX_TITLE}]({_rel(parent_index.parent, index_path)})"]
+            write_note(parent_index, fm, body)
+
     regen(root)
     return index_path
 
