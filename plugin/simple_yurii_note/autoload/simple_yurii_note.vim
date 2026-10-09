@@ -849,7 +849,7 @@ function! s:guide_template() abort
         \ '## リンク',
         \ '',
         \ '- `\l`（ノーマル）… カーソル下のファイル名を Markdown リンク化',
-        \ '- `\l`（ビジュアル）… 選択範囲をタイトルにした新ノートを作成し、選択をそのリンクに置換（Parent=元ノート、確認なし）',
+        \ '- `\l`（ビジュアル）… 選択範囲を表示名にした新ノートへのリンクで選択を置換（新ノート title はタイムスタンプのまま。Parent=元ノート、確認なし）',
         \ '- `\p`（ノーマル）… カーソル下 or クリップボードのリンクを 1 本追加（`h`/`Enter` で位置を選ぶ）',
         \ '- `\p`（ビジュアル）… クリップボードのファイル名/URL を選択範囲のリンクに（無ければ何もしない）',
         \ '- `za` … リンク 1 本を今のノートに追加（`h`=カーソル直下 / `Enter`=本文の最後 / `p`=Parent末尾 / `r`=Related）',
@@ -8142,13 +8142,16 @@ function! simple_yurii_note#linkify_selection_new_note() abort range
   let l:parent_link_lines = s:parent_link_lines(l:parent_file, l:parent_title, expand('%:p:h'))
 
   if !filereadable(l:new_file)
+    " title はタイムスタンプのまま。選択範囲はリンクの表示名だけに使う
+    "（タイトルを変えても文中の表示名は変わらない）
+    let l:title = fnamemodify(l:target, ':t:r')
     let l:new_content = [
           \ '---',
           \ 'time: ' . simple_yurii_note#timestamp_yaml(),
-          \ 'title: ' . l:text,
+          \ 'title: ' . l:title,
           \ '---',
           \ '',
-          \ '# ' . l:text,
+          \ '# ' . l:title,
           \ '',
           \ '',
           \ s:v2_up_mark,
