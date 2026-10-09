@@ -436,13 +436,15 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             inner.append(markdown_link(display, target, index_path.parent))
 
     fm, _ = read_note(index_path)
-    body = [
-        f"# {index_display}",
-        "",
-        f"[{INDEX_WRITE[:-3]}]({INDEX_WRITE})",
-        f"[{FOLGE_INDEX[:-3]}]({FOLGE_INDEX})",
-        *inner,
-    ]
+    body = [f"# {index_display}"]
+    if inner:
+        # キーワードができたら Folgezettel-Index リンク + 空行 + キーワード
+        body += [
+            "",
+            f"[{FOLGE_INDEX[:-3]}]({FOLGE_INDEX})",
+            "",
+            *inner,
+        ]
     write_note(index_path, fm, body)
 
     # --- Folgezettel-Index --------------------------------------------------
