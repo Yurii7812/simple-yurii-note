@@ -144,10 +144,9 @@ def test_create_and_regen() -> None:
               "単一IDは Index から直接リンク")
 
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
-        check(folge_text.index("[1](folgezettel-Index-1.md#1)")
-              < folge_text.index("[2](folgezettel-Index-2.md#2)"), "Folgezettel-Index は自然順")
-        check(f"[1a]({notes['1a'].name})" not in folge_text,
-              "Folgezettel-Index は先頭IDのみ（1a 等）")
+        check(folge_text.index(f"[1]({notes['1'].name})")
+              < folge_text.index(f"[2]({notes['2'].name})"), "Folgezettel-Index は自然順")
+        check("  [1a]" in folge_text, "Folgezettel-Index は子をインデントで階層表示")
         check("### Parent" in folge_text and "[Paper-Zettelkasten-Index]" in folge_text,
               "Folgezettel-Index の Parent は Paper-Zettelkasten-Index")
         dedicated = pp.folge_index_path(root, "1")
