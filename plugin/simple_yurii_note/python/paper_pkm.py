@@ -577,11 +577,11 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         body += ["", *inner]
     write_note(index_path, fm, body)
 
-    # --- Folgezettel-Index（全ノートのリンクを folge 順で並列に） ---
+    # --- Folgezettel-Index（最上位IDだけ。各リンクは専用ノート folgezettel-Index-N#N） ---
     folge_index = root / FOLGE_INDEX
     inner = [
-        markdown_link(fid, folge[fid], folge_index.parent)
-        for fid in sorted(folge, key=natural_key)
+        markdown_link(fid, folge_index_path(root, fid), folge_index.parent, frag=fid)
+        for fid in top_level_ids(folge)
     ]
     if not folge_index.is_file():
         fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]

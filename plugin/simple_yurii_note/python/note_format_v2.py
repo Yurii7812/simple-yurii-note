@@ -1465,6 +1465,10 @@ def _prune_one_sided_related(lines: list[str], path: Path, resolver,
     return out
 
 
+# BackLink 見出しを出さない生成ノート（紙PKM の Folgezettel-Index など）
+_NO_BACKLINK_NAMES = ("Folgezettel-Index.md",)
+
+
 def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back: list[Path], titles: dict) -> str:
     lines = list(n["fm"]) if n["fm"] else ["---", "title: " + n["title"], "---"]
     lines += list(n["body"])
@@ -1492,9 +1496,10 @@ def _simple_render(name: str, n: dict, path: Path, parent_lines: list[str], back
         if any(ln.strip() for ln in related):
             lines.append(RELATED_MARK)
             lines += related
-        lines.append(DOWN_MARK)
-        for t in back:
-            lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
+        if name not in _NO_BACKLINK_NAMES:
+            lines.append(DOWN_MARK)
+            for t in back:
+                lines.append(f"[{titles[t]}]({_rel(path.parent, t)})")
     while lines and lines[-1].strip() == "":
         lines.pop()
     return "\n".join(lines) + "\n"
