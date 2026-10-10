@@ -1094,11 +1094,6 @@ class ScanApp:
             "topic_title": item.topic_title,
             "topic_parent": item.topic_parent,
         }
-        try:
-            old_path.rename(new_path)
-        except OSError as exc:
-            messagebox.showerror("名前を変更できません", f"{old_path.name}\n→ {new_path.name}\n\n{exc}")
-            return
         item.current_name = new_path.name
         item.folgezettel_id = folgezettel_id
         item.topic_title = topic
