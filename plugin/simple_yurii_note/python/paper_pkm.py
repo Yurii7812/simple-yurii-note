@@ -466,6 +466,8 @@ def write_folge_index_notes(root: Path, folge: dict[str, Path],
         members = sorted((f for f in folge if _root_id(f) == fid), key=natural_key)
         for member in members:
             inner.append(f"## {member}")
+            inner.append("")
+            inner.append(markdown_link(member, folge[member], path.parent))
             _fm_n, body_n = read_note(folge[member])
             base_dir = folge[member].parent
             for ln in body_n:
@@ -575,12 +577,12 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         body += ["", *inner]
     write_note(index_path, fm, body)
 
-    # --- Folgezettel-Index（最上位IDは専用ノート folgezettel-Index-N へ） ---
+    # --- Folgezettel-Index（全ノートのリンクを folge 順・階層インデントで） ---
     folge_index = root / FOLGE_INDEX
-    inner = [
-        markdown_link(fid, folge_index_path(root, fid), folge_index.parent, frag=fid)
-        for fid in top_level_ids(folge)
-    ]
+    inner = []
+    for fid in sorted(folge, key=natural_key):
+        indent = "  " * (len(split_id_tokens(fid)) - 1)
+        inner.append(indent + markdown_link(fid, folge[fid], folge_index.parent))
     if not folge_index.is_file():
         fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]
         write_note(folge_index, fm_fi, [])
