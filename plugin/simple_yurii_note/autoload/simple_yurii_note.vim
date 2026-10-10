@@ -184,7 +184,8 @@ endfunction
 " ---------------------------------------------------------------------------
 
 function! s:gh_slug(text) abort
-  let l:s = tolower(trim(a:text))
+  " 見出し内のリンクは表示テキストだけでスラッグ化する（GitHub と同じ。URL は含めない）
+  let l:s = tolower(trim(substitute(a:text, '\[\([^\]]*\)\]([^)]*)', '\1', 'g')))
   " ASCII の句読点・記号（英数と `-` `_` は残す）
   let l:s = substitute(l:s, '[!-,.\/:-@\[-\^`{-~]', '', 'g')
   " 日本語の約物（読点・句点・括弧・中黒など）
