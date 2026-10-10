@@ -924,7 +924,7 @@ function! s:guide_template() abort
         \ '- `:SimpleSetPassword` … 未暗号化なら暗号化 init、暗号化済みならパスワード変更（`:SimpleYuriinoteSetPassword` も同じ）',
         \ '- `:SimpleRemovePassword` … 暗号化を解除して平文に戻す（`A/note` + `A/.crypt` → ノートを `A` 直下へ。`:SimpleYuriinoteRemovePassword` も同じ）',
         \ '- `:SimpleExitCleanup` … 終了時の後始末（viminfo 書き出し等）',
-        \ '- `:SimpleChooseIndex` / `:SimpleChooseIndexDir` / `:YuriiChooseIndex` / `:YuriiChooseIndexDir` … vault を選び直す（`A/note` があれば必ずそれを root に）',
+        \ '- `:SimpleChooseIndex` / `:SimpleChooseIndexDir` / `:YuriiChooseIndex` / `:YuriiChooseIndexDir` … vault を選び直す（`A/note` があれば必ずそれを root に。切替時に前の vault のバッファを閉じる）',
         \ '- 注意: gocryptfs は**空でないマウントポイントを拒否**する。ロック中は vault 内に `.state` 等を作らない。中身とファイル名は暗号化されるが、時刻・サイズ・構造は漏れる',
         \ '',
         \ '## ラベル記法（関係の接尾辞）',
@@ -1460,6 +1460,34 @@ function! simple_yurii_note#ensure_root_and_index() abort
   return s:setup_root_and_index(0)
 endfunction
 
+" root 切替時に前 vault のバッファを閉じる（暗号 vault の平文をバッファに残さない）。
+" 未保存は lock_vault と同じ流儀でフラッシュしてから bdelete!（保存に失敗したら破棄）。
+" カレントは対象外（切替後は新 Index のはず）。
+function! s:close_vault_buffers(root) abort
+  let l:rootp = fnamemodify(a:root, ':p')
+  let l:cur = bufnr('%')
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b) || l:b == l:cur
+      continue
+    endif
+    if stridx(fnamemodify(bufname(l:b), ':p'), l:rootp) == 0 && getbufvar(l:b, '&modified')
+      execute 'silent! buffer ' . l:b
+      silent! update
+    endif
+  endfor
+  if bufnr('%') != l:cur
+    execute 'silent! buffer ' . l:cur
+  endif
+  for l:b in range(1, bufnr('$'))
+    if !buflisted(l:b) || l:b == l:cur
+      continue
+    endif
+    if stridx(fnamemodify(bufname(l:b), ':p'), l:rootp) == 0
+      execute 'silent! bdelete! ' . l:b
+    endif
+  endfor
+endfunction
+
 function! simple_yurii_note#choose_index_root() abort
   let l:current_root = s:get_pkm_root()
   let l:new_root = s:setup_root_and_index(1)
@@ -1467,6 +1495,14 @@ function! simple_yurii_note#choose_index_root() abort
     return ''
   endif
   if !empty(l:current_root) && fnamemodify(l:current_root, ':p') !=# fnamemodify(l:new_root, ':p')
+    call s:close_vault_buffers(l:current_root)
+    " 前 vault が暗号化・マウント中ならロックする（VimLeave と同じ流儀）。
+    " lock_vault は現在 root を見るので一時的に戻して呼ぶ。
+    let g:simple_yurii_note_root = l:current_root
+    if simple_yurii_note#vault_mounted() == 1
+      call simple_yurii_note#lock_vault()
+    endif
+    let g:simple_yurii_note_root = l:new_root
     echom 'Switched PKM root to: ' . l:new_root
   else
     echom 'PKM root set to: ' . l:new_root
