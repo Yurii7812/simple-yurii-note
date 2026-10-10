@@ -928,6 +928,13 @@ augroup simple_yurii_note_guide_refresh
   autocmd VimEnter * ++once call simple_yurii_note#refresh_guide()
 augroup END
 
+" 起動直後の VimEnter 処理（Index を開く・ロック掃除など）の後に、画面を一度描き直す。
+" 描き直さないと、Index の下側が空白のまま残る（\r で直る症状）。
+augroup simple_yurii_note_startup_redraw
+  autocmd!
+  autocmd VimEnter * ++once call timer_start(300, {-> execute('redraw!')})
+augroup END
+
 augroup simple_yurii_note_startup_prefix_check
   autocmd!
 augroup END
