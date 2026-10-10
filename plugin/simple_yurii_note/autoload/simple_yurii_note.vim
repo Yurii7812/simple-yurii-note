@@ -966,7 +966,8 @@ function! s:guide_template() abort
         \ '## 紙のPKM（フォルゲゼッテル）',
         \ '',
         \ '- `\F` … 紙PKM Index（タイムスタンプ名）を作成/オープン（`:SimplePaperIndex`）。Index-write と Folgezettel-Index も作られる',
-        \ '- `\f` … スキャン画像に番号を付けて vault 直下へ移動（`:SimpleScan`。番号付け GUI が開く）',
+        \ '- `\F` … スキャン画像に番号を付けて vault 直下へ移動（`:SimpleScan`。番号付け GUI が開く）',
+        \ '- `\f` … 紙PKM Index を開く（`:SimplePaperIndex`。無ければ作成。更新は `\ua`）',
         \ '- `Index-write` … `キーワード(よみ): 1,1a10b,3` の形式で手書き。複数IDのキーワードはグループノート、単一IDは直接リンクとして紙PKM Index に並ぶ（保存で自動再生成）',
         \ '- `\S` … Index-write ではキーワード行もよみ順に並べる（`(…)` が本体のよみと一致すればそれをよみに、修飾語なら本体のよみで並べる）',
         \ '- Folgezettel-Index は存在する全IDの一覧（自然順）。生成物なので `\S` しない',
@@ -6346,6 +6347,13 @@ endfunction
 
 function! simple_yurii_note#update_all(arg) abort
   call simple_yurii_note#update_md(a:arg)
+  " 紙PKM（Index・グループ・Folgezettel-Index・専用ノート）も再生成する
+  let l:root = s:get_pkm_root()
+  let l:paper = s:paper_pkm_script()
+  if !empty(l:root) && !empty(s:paper_index_path(l:root)) && filereadable(l:paper)
+    call system(s:python_cmd() . ' ' . shellescape(l:paper) . ' regen ' . shellescape(l:root))
+    checktime
+  endif
 endfunction
 
 " 現在バッファをディスクから再読み込み（未変更の場合のみ、カーソル位置保持）
@@ -8514,10 +8522,28 @@ function! s:paper_scan_script() abort
 endfunction
 
 " 紙PKM Index（Index・Index-write・Folgezettel-Index）を作成/再利用して開く。
+" 紙PKM索引（paper_index: true のノート）のパス。無ければ ''。名前の新しい方（paper_pkm.py と同じ）。
+function! s:paper_index_path(root) abort
+  let l:found = []
+  for l:f in glob(a:root . s:sep() . '*.md', 0, 1)
+    if index(readfile(l:f, '', 8), 'paper_index: true') >= 0
+      call add(l:found, l:f)
+    endif
+  endfor
+  return empty(l:found) ? '' : sort(l:found)[-1]
+endfunction
+
 function! simple_yurii_note#paper_index() abort
   let l:root = s:get_pkm_root()
   if empty(l:root)
     echohl WarningMsg | echo 'simple_yurii_note: PKM root が未設定です' | echohl NONE
+    return
+  endif
+  " 既にある索引は開くだけ（再生成は重いので \ua で行う）
+  let l:existing = s:paper_index_path(l:root)
+  if !empty(l:existing)
+    execute 'edit ' . fnameescape(l:existing)
+    echo 'simple_yurii_note: 紙PKM Index を開きました（更新は \ua）'
     return
   endif
   let l:script = s:paper_pkm_script()

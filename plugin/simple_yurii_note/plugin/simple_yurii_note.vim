@@ -297,10 +297,10 @@ nnoremap <silent> \tD       <Cmd>call simple_yurii_note#trash_current()<CR>
 nnoremap <silent> \tE       <Cmd>call simple_yurii_note#trash_empty()<CR>
 " \i … index.md を開く（2打）。\s は \se（展開）の前置きと被って待たされるので使わない。
 nnoremap <silent> \i       <Cmd>call simple_yurii_note#open_index()<CR>
-" \F … 紙PKM Index（タイムスタンプ名）を作成/オープン（Index_write・Folgezettel-Index も作る）
-" \f … スキャン画像にフォルゲゼッテルIDを付けて vault 直下へ移動（番号付け GUI）
-nnoremap <silent> \F       <Cmd>call simple_yurii_note#paper_index()<CR>
-nnoremap <silent> \f       <Cmd>call simple_yurii_note#paper_scan()<CR>
+" \f … 紙PKM Index を開く（無ければ作成。更新は \ua）
+" \F … スキャン画像にフォルゲゼッテルIDを付けて vault 直下へ移動（番号付け GUI）
+nnoremap <silent> \f       <Cmd>call simple_yurii_note#paper_index()<CR>
+nnoremap <silent> \F       <Cmd>call simple_yurii_note#paper_scan()<CR>
 " \S … リンク行を表示名のよみ順（五十音 → ローマ字は末尾）に安定ソート。
 "   ビジュアル=選択範囲 / ノーマル=バッファ全体（主に index.md）。
 "   よみはリンク先ノートの front matter `yomi:`（\zy で登録）、無ければ pykakasi。
