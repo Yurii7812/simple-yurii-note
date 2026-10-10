@@ -1031,6 +1031,7 @@ function! s:guide_template() abort
         \ '- `:SetImageSize` 画像サイズ ・ `:Gallery` / `:SimpleGallery` ・ `:GalleryFolder` / `:SimpleGalleryFolder` 画像ギャラリー',
         \ '',
         \ '### SimpleYurii* 統一名（引数なし。既存の名前と同じ動作）',
+        \ '- `:SimpleYurii` … 入口（何もしない。`:SimpleYurii` のあとに Tab で下の候補を出す）',
         \ '- 同期・ノート: `:SimpleYuriiUpdateMD` `:SimpleYuriiUpdateAll` `:SimpleYuriiCheckPrefix` `:SimpleYuriiRP` `:SimpleYuriiSortYomi` `:SimpleYuriiSortTime` `:SimpleYuriiToggleCheckbox` `:SimpleYuriiOutlineEdit`',
         \ '- 作成: `:SimpleYuriiNF` `:SimpleYuriiNA` `:SimpleYuriiNP` `:SimpleYuriiNC` `:SimpleYuriiNH` `:SimpleYuriiV2Migrate` `:SimpleYuriiNT` `:SimpleYuriiRenameLinkText` `:SimpleYuriiLT`',
         \ '- リンク・クリップボード: `:SimpleYuriiCA` `:SimpleYuriiCU` `:SimpleYuriiTT` `:SimpleYuriiBC` `:SimpleYuriiAT` `:SimpleYuriiYN` `:SimpleYuriiLinkify` `:SimpleYuriiLinkifySelection` `:SimpleYuriiPasteLink` `:SimpleYuriiRenameChildLinkTitles` `:SimpleYuriiRenameDownLinkTitles`',

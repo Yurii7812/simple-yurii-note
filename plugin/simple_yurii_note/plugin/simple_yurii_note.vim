@@ -250,6 +250,8 @@ command!          TAC        call simple_yurii_note#table_add_col()
 command! -nargs=* SimpleTable call simple_yurii_note#table_new(<q-args>)
 
 " ---- SimpleYurii* の統一別名（既存の名前と同じ動作。既存は残す） ----
+" 入口だけのコマンド（:PlugInstall 等の prefix と同じ役割）。Tab で SimpleYurii* の候補を出す用。
+command! -nargs=0 SimpleYurii echo 'SimpleYurii* のコマンドは :SimpleYurii<Tab> で候補を表示'
 command! -nargs=? SimpleYuriiUpdateMD call simple_yurii_note#update_md(<q-args>)
 command! -nargs=? SimpleYuriiUpdateAll call simple_yurii_note#update_all(<q-args>)
 command!          SimpleYuriiCheckPrefix call simple_yurii_note#check_missing_prefix_in_current_dir()
