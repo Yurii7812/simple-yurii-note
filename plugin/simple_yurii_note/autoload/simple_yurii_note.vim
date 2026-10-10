@@ -10650,6 +10650,14 @@ function! simple_yurii_note#vault_locked_flag() abort
   return s:vault_status().locked
 endfunction
 
+" パスワードを含む一時ファイルを消す（shred があれば上書きしてから削除）
+function! s:secure_delete(path) abort
+  if executable('shred')
+    call system('shred -u -n 1 ' . shellescape(a:path) . ' 2>/dev/null')
+  endif
+  call delete(a:path)
+endfunction
+
 " 一時パスワードファイル（0600, すぐ消す）
 function! s:temp_passfile(pw) abort
   let l:pf = tempname()
@@ -10675,7 +10683,7 @@ function! s:mount_by_password(cipher, root) abort
     let l:pf = s:temp_passfile(l:pw)
     call system('gocryptfs -passfile=' . shellescape(l:pf) . ' '
           \ . shellescape(a:cipher) . ' ' . shellescape(a:root) . ' 2>&1 | tail -1')
-    call delete(l:pf)
+    call s:secure_delete(l:pf)
     call s:mount_cache_reset()
     if simple_yurii_note#vault_mounted(escape(a:root, '\\'), 1) == 1
       redraw
@@ -10798,9 +10806,11 @@ function! simple_yurii_note#lock_vault() abort
   endfor
   call s:release_vault_runtime()
   call s:cd_out_of_vault(l:root)
-  call system('fusermount3 -u -z ' . shellescape(l:root))
+  " 通常アンマウント（-z は使わない）。busy なら失敗させて「ロック失敗」を正しく出す。
+  " lazy unmount だと見かけ上ロックされたまま平文が残るため。
+  call system('fusermount3 -u ' . shellescape(l:root))
   call s:mount_cache_reset()
-  if v:shell_error != 0
+  if v:shell_error != 0 || simple_yurii_note#vault_mounted(escape(l:root, '\\'), 1) == 1
     echohl WarningMsg
     echom 'simple_yurii_note: 他アプリが開いていてロック失敗。閉じてから再度 :SimpleLock'
     echohl NONE
@@ -10861,7 +10871,7 @@ function! simple_yurii_note#set_password() abort
   let l:pold = s:temp_passfile(l:old)
   let l:out = system('gocryptfs -passwd -passfile=' . shellescape(l:pold) . ' '
         \ . shellescape(l:cipher) . ' 2>&1', l:new . "\n" . l:new . "\n")
-  call delete(l:pold)
+  call s:secure_delete(l:pold)
   if v:shell_error == 0
     redraw
     echom 'simple_yurii_note: パスワードを変更しました（次回のマウントから有効）'
@@ -10986,10 +10996,10 @@ function! s:init_encrypted_impl() abort
     echohl ErrorMsg
     echom 'simple_yurii_note: 暗号化失敗(' . l:before_err . ')。元の状態に戻しました'
     echohl NONE
-    call delete(l:pf)
+    call s:secure_delete(l:pf)
     return
   endtry
-  call delete(l:pf)
+  call s:secure_delete(l:pf)
   call s:mount_cache_reset()
   if l:converted
     " root を A/note に更新してバッファも張り替える（旧 A/index.md → A/note/index.md）
