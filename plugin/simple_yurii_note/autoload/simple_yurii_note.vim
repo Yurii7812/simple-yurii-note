@@ -10689,11 +10689,13 @@ function! simple_yurii_note#vault_mounted(...) abort
     let s:mounted_cache = {'time': 0, 'val': -1}
   endif
   let l:now = reltimefloat(reltime())
-  if !get(a:000, 1, 0) && s:mounted_cache.val >= 0 && l:now - s:mounted_cache.time < 2
+  " キャッシュは vault ごとに持つ（別 vault の値を返すと、切替時にロックが抜ける）
+  if !get(a:000, 1, 0) && get(s:mounted_cache, 'root', '') ==# l:root
+        \ && s:mounted_cache.val >= 0 && l:now - s:mounted_cache.time < 2
     return s:mounted_cache.val
   endif
   call system('mountpoint -q ' . shellescape(l:root))
-  let s:mounted_cache = {'time': l:now, 'val': v:shell_error == 0 ? 1 : 0}
+  let s:mounted_cache = {'root': l:root, 'time': l:now, 'val': v:shell_error == 0 ? 1 : 0}
   return s:mounted_cache.val
 endfunction
 
