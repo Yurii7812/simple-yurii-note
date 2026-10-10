@@ -321,6 +321,15 @@ command!          SimpleYuriiTableDelCol call simple_yurii_note#table_del_col()
 command!          SimpleYuriiTableAddRow call simple_yurii_note#table_add_row()
 command!          SimpleYuriiTableAddCol call simple_yurii_note#table_add_col()
 
+" 別ファイル（plugin/*.vim）で定義された既存コマンドへの別名
+command!          SimpleYuriiRename Rename
+command! -range   SimpleYuriiSetImageSize <line1>,<line2>SetImageSize
+command!          SimpleYuriiAutocwindow Autocwindow
+command!          SimpleYuriiFSearch FSearch
+command!          SimpleYuriiLinkPick LinkPick
+command! -nargs=+ SimpleYuriiFileContentSearch FileContentSearch <args>
+command!          SimpleYuriiCopyStack CopyStack
+
 nnoremap <silent> \tn  :NewTable<CR>
 nnoremap <silent> \ta  :TA<CR>
 nnoremap <silent> \te  :TRE<CR>

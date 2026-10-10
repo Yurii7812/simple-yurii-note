@@ -1038,6 +1038,7 @@ function! s:guide_template() abort
         \ '- 移動・展開: `:SimpleYuriiJumpParent` `:SimpleYuriiJumpUp` `:SimpleYuriiJumpChildTop` `:SimpleYuriiJumpChildBottom` `:SimpleYuriiJumpDownTop` `:SimpleYuriiJumpDownBottom` `:SimpleYuriiJumpLastLinkBeforeParent` `:SimpleYuriiJumpLastLinkBeforeUp` `:SimpleYuriiExpandLinks` `:SimpleYuriiExpandToT` `:SimpleYuriiSE`',
         \ '- Index・ガイド・紙PKM: `:SimpleYuriiIndex` `:SimpleYuriiChooseIndex` `:SimpleYuriiChooseIndexDir` `:SimpleYuriiGuide` `:SimpleYuriiPaperIndex` `:SimpleYuriiScan` `:SimpleYuriiWeb`',
         \ '- 画像・暗号・ゴミ箱: `:SimpleYuriiGallery` `:SimpleYuriiGalleryFolder` `:SimpleYuriiSetPassword` `:SimpleYuriiRemovePassword` `:SimpleYuriiMount` `:SimpleYuriiLock` `:SimpleYuriiExitCleanup` `:SimpleYuriiTrash` `:SimpleYuriiTrashList` `:SimpleYuriiTrashEmpty`',
+        \ '- 検索・その他: `:SimpleYuriiFSearch` `:SimpleYuriiLinkPick` `:SimpleYuriiFileContentSearch` `:SimpleYuriiRename` `:SimpleYuriiSetImageSize` `:SimpleYuriiAutocwindow` `:SimpleYuriiCopyStack`',
         \ '- 表: `:SimpleYuriiTableNew` `:SimpleYuriiTableAlign` `:SimpleYuriiTableRowEdit` `:SimpleYuriiTableCsvEdit` `:SimpleYuriiTableCsvApplySaved` `:SimpleYuriiTableToCsv` `:SimpleYuriiCsvToTable` `:SimpleYuriiTableCsvNew` `:SimpleYuriiTableAddRow` `:SimpleYuriiTableAddCol` `:SimpleYuriiTableDelRow` `:SimpleYuriiTableDelCol`',
         \ '',
         \ '### 表',
