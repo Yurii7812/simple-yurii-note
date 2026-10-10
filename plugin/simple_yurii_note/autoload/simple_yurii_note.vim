@@ -8542,8 +8542,8 @@ function! simple_yurii_note#paper_index() abort
   " 既にある索引は開くだけ（再生成は重いので \ua で行う）
   let l:existing = s:paper_index_path(l:root)
   if !empty(l:existing)
-    execute 'edit ' . fnameescape(l:existing)
-    echo 'simple_yurii_note: 紙PKM Index を開きました（更新は \ua）'
+    silent execute 'edit ' . fnameescape(l:existing)
+    redraw | echo 'simple_yurii_note: 紙PKM Index を開きました（更新は \ua）'
     return
   endif
   let l:script = s:paper_pkm_script()
@@ -8562,8 +8562,8 @@ function! simple_yurii_note#paper_index() abort
     echohl ErrorMsg | echo 'simple_yurii_note: 紙PKM Index を作成できませんでした' | echohl NONE
     return
   endif
-  execute 'edit ' . fnameescape(l:path)
-  echo 'simple_yurii_note: 紙PKM Index を開きました（Index-write にキーワードを書く）'
+  silent execute 'edit ' . fnameescape(l:path)
+  redraw | echo 'simple_yurii_note: 紙PKM Index を開きました（Index-write にキーワードを書く）'
 endfunction
 
 " スキャン画像の番号付け GUI を起動する。移動先は今開いているノートのフォルダ。
