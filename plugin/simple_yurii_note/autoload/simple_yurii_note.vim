@@ -2120,7 +2120,8 @@ function! s:realtime_sync_apply() abort
   endif
   let l:file = expand('%:p')
   let l:root = s:get_pkm_root()
-  if empty(l:root) || empty(l:file) || l:file !~# '^' . escape(l:root, '/\')
+  " 正規表現ではなく前方一致で判定（root の . や [ などをメタ文字扱いしない）
+  if empty(l:root) || empty(l:file) || stridx(l:file, l:root) != 0
     return
   endif
 
@@ -2165,7 +2166,11 @@ function! s:realtime_sync_apply() abort
   endif
 endfunction
 
-function! s:realtime_sync_timer(timer) abort
+" 発火時に別バッファへ移っていたら何もしない（別ノートのリンクを書き込まないため）
+function! s:realtime_sync_timer(bnr, timer) abort
+  if bufnr('%') != a:bnr
+    return
+  endif
   call s:realtime_sync_apply()
 endfunction
 
@@ -2177,7 +2182,7 @@ function! simple_yurii_note#realtime_sync_on_text_changed() abort
     call timer_stop(b:simple_yurii_note_realtime_timer)
   endif
   if has('timers')
-    let b:simple_yurii_note_realtime_timer = timer_start(get(g:, 'simple_yurii_note_realtime_link_sync_delay', 800), function('s:realtime_sync_timer'))
+    let b:simple_yurii_note_realtime_timer = timer_start(get(g:, 'simple_yurii_note_realtime_link_sync_delay', 800), function('s:realtime_sync_timer', [bufnr('%')]))
   else
     call s:realtime_sync_apply()
   endif
@@ -4186,7 +4191,13 @@ endfunction
 " クリップボードに載るため、そのままだとリンク先として解決できない。
 " file:// 以外（http 等）やホスト付き URI はそのまま返す。
 function! s:percent_decode(text) abort
-  return substitute(a:text, '%\(\x\x\)', '\=nr2char(str2nr(submatch(1), 16))', 'g')
+  " 連続する %XX 列をバイト列として一括で解釈する（UTF-8 のマルチバイトを文字化けさせない）
+  return substitute(a:text, '\%(%\x\x\)\+', '\=s:decode_pct_run(submatch(0))', 'g')
+endfunction
+
+function! s:decode_pct_run(run) abort
+  let l:esc = substitute(substitute(a:run, '%', '', 'g'), '\x\x', '\\x&', 'g')
+  return eval('"' . l:esc . '"')
 endfunction
 
 function! s:file_uri_to_path(target) abort
@@ -4685,7 +4696,7 @@ function! s:find_trash_image(trash_dir, orig) abort
   for l:cand in split(glob(fnamemodify(a:trash_dir, ':p') . '*'), "\n")
     let l:cname = fnamemodify(l:cand, ':t')
     if l:cname =~# '\.\%(jpg\|jpeg\|png\|tif\|tiff\|bmp\|webp\|avif\|gif\)$'
-          \ && substitute(l:cname, '^\d\{8}-\d\{6}\%(-\d\+\)\?_', '', '') =~# '^' . l:stem . '\.'
+          \ && substitute(l:cname, '^\d\{8}-\d\{6}\%(-\d\+\)\?_', '', '') =~# '^' . escape(l:stem, '\\.*$^~[]') . '\.'
       return l:cand
     endif
   endfor
@@ -4698,7 +4709,7 @@ function! s:restore_trash_image(trash_path, root, orig) abort
   let l:img = s:find_trash_image(l:trash_dir, a:orig)
   if empty(l:img) | return | endif
   let l:iname = fnamemodify(l:img, ':t')
-  let l:iorig = substitute(l:iname, '^\d\+_\(\d\+_\)\?', '', '')
+  let l:iorig = substitute(l:iname, '^\d\{8}-\d\{6}\%(-\d\+\)\?_', '', '')
   let l:idel = fnamemodify(l:root, ':p') . l:iorig
   if !empty(l:iorig) && !filereadable(l:idel)
     call rename(l:img, l:idel)
@@ -5767,7 +5778,7 @@ function! simple_yurii_note#v2_new_here() abort
   let l:dir = expand('%:p:h')
   let l:ts  = simple_yurii_note#timestamp_filename()
   let l:file = s:join_path(l:dir, l:ts . '.md')
-  call s:syn_writefile(simple_yurii_note#note_template(l:ts, 0), l:file)
+  call s:write_new_note(simple_yurii_note#note_template(l:ts, 0), l:file)
   let l:save_ai = &autoindent | let l:save_si = &smartindent
   setlocal noautoindent nosmartindent
   call append(line('.'), '[' . l:ts . '](' . l:ts . '.md)')
@@ -5855,7 +5866,7 @@ function! simple_yurii_note#v2_new_group_visual() abort range
         \ s:make_link_from_dir(l:cur, l:cur_title, l:dir),
         \ s:v2_down_mark,
         \ ]
-  call s:syn_writefile(l:content, l:file)
+  call s:write_new_note(l:content, l:file)
 
   " 元の選択をグループへのリンクで置き換える
   let l:link = '[' . l:ts . '](' . l:ts . '.md)'
@@ -6140,7 +6151,7 @@ function! s:v2_new_interactive(attr) abort
   endif
 
   " 新ノートを先に作る（sync がリンク先を解決できるように）
-  call s:syn_writefile(simple_yurii_note#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
+  call s:write_new_note(simple_yurii_note#note_template(l:ts, !empty(a:attr) ? 1 : 0), l:file)
 
   let l:link = '[' . l:ts . '](' . l:ts . '.md)'
   let l:added = 0
@@ -7113,7 +7124,7 @@ function! s:new_note_no_title(prefix) abort
     let l:cursor_line = 8
   endif
 
-  call s:syn_writefile(l:content, l:file)
+  call s:write_new_note(l:content, l:file)
 
   " 通常モード: 新ノート作成前はリンク先が未存在のため、作成後に親の本文リンクを同期する
   " mm/nf/nk の体感速度を優先し、重い update_one は非同期で走らせる。
@@ -7238,7 +7249,7 @@ function! s:visual_new_note(prefix, mode, ...) abort
     endif
   endif
 
-  call s:syn_writefile(l:content, l:file)
+  call s:write_new_note(l:content, l:file)
 
   " ---- 元ファイルの選択範囲を置き換える ----
   " スクロール位置・カーソルを保存
@@ -7509,7 +7520,7 @@ function! simple_yurii_note#new_quick(args) abort
     let l:cursor_line = 8
   endif
 
-  call s:syn_writefile(l:content, l:file)
+  call s:write_new_note(l:content, l:file)
 
   " 通常モード: 新ノート作成前はリンク先が未存在のため、作成後に親の本文リンクを同期する
   " mm/nf/nk の体感速度を優先し、重い update_one は非同期で走らせる。
@@ -9638,6 +9649,8 @@ function! simple_yurii_note#table_row_edit() abort
   let b:yurii_table_src_bufnr = bufnr('#') > 0 ? bufnr('#') : bufnr(winbufnr(l:origin_win))
   let b:yurii_table_src_bufnr = winbufnr(l:origin_win)
   let b:yurii_table_src_lnum = l:cur_lnum
+  " 開いた時点の元行を覚え、保存時に一致するか確認する（途中で行がずれていたら別行を壊さない）
+  let b:yurii_table_orig_line = get(getbufline(b:yurii_table_src_bufnr, l:cur_lnum), 0, '')
   let b:yurii_table_src_start = l:start
   let b:yurii_table_src_end = l:end
   let b:yurii_table_cols = l:cols
@@ -9706,6 +9719,10 @@ function! simple_yurii_note#table_row_editor_apply() abort
     return
   endif
 
+  if l:block_lines[l:row_idx] !=# get(b:, 'yurii_table_orig_line', '')
+    echoerr 'TableRowEdit: 元の行が変わったため保存しません（エディタを開き直してください）'
+    return
+  endif
   let l:src_parsed = s:parse_table_line(l:block_lines[l:row_idx])
   let l:block_lines[l:row_idx] = l:src_parsed.indent . '| ' . join(l:new_cells, ' | ') . ' |'
 
@@ -10931,7 +10948,8 @@ function! s:init_encrypted_impl() abort
   call s:cd_out_of_vault(l:cur)
   let l:plaindir = fnamemodify(l:cur, ':h') . s:sep() . fnamemodify(l:cur, ':t') . '-plain-' . strftime('%Y%m%d%H%M%S')
   let l:n = trim(system('find ' . shellescape(l:cur) . ' -mindepth 1 2>/dev/null | wc -l'))
-  if str2nr(l:n) > 0
+  " 数えられない（空・失敗）時も確認を飛ばさない
+  if l:n !~# '^\d\+$' || str2nr(l:n) > 0
     let l:size = trim(system('du -sh ' . shellescape(l:cur) . ' 2>/dev/null | cut -f1'))
     let l:msg = l:converted
           \ ? printf('%s を暗号化して %s + %s にします：%s 個のファイル(%s)。よければ y: ',
@@ -11215,6 +11233,13 @@ function! s:init_rollback(oldroot, root, plaindir, cipher, stage, converted) abo
     " plaindir がある＝退避（mv）が成功しているときだけ掃除して戻す。
     " mv 自体が失敗しているなら A は無傷なので何もしない。
     if isdirectory(a:plaindir)
+      " まだマウントが残っているなら親を消さない（中の暗号箱・マウント先を巻き込むため）
+      if simple_yurii_note#vault_mounted(escape(l:root, '\\'), 1) == 1
+        echohl WarningMsg
+        echom 'simple_yurii_note: 巻き戻し中断（マウントが残っています）。平文は ' . a:plaindir . ' にあります'
+        echohl NONE
+        return
+      endif
       call system('rm -rf ' . shellescape(fnamemodify(l:root, ':h')))
       call system('mv ' . shellescape(a:plaindir) . ' ' . shellescape(a:oldroot))
     endif
@@ -11330,6 +11355,15 @@ function! simple_yurii_note#vault_locked_buffer_hint() abort
 endfunction
 
 " writefile を全部ここに統一（ロック中 vault へ作成する経路も止めるため）
+" 新規ノート作成用: 既存ファイルを上書きしない（同秒タイムスタンプ衝突や同名タイトルで
+" 既存本文を無言で消すのを防ぐ）
+function! s:write_new_note(lines, path) abort
+  if filereadable(a:path) || isdirectory(a:path)
+    throw 'simple_yurii_note: 既存のファイルを上書きしません: ' . a:path
+  endif
+  return s:syn_writefile(a:lines, a:path)
+endfunction
+
 function! s:syn_writefile(lines, path, ...) abort
   call simple_yurii_note#guard_vault_write(a:path)
   if a:0 == 0
