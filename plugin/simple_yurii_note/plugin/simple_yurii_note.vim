@@ -248,6 +248,7 @@ command! -nargs=* SimpleTable call simple_yurii_note#table_new(<q-args>)
 " ---- SN* の統一別名（既存の名前と同じ動作。既存は残す） ----
 " 入口だけのコマンド（:PlugInstall 等の prefix と同じ役割）。Tab で SN* の候補を出す用。
 command! -nargs=0 SN echo 'SN* のコマンドは :SN<Tab> で候補を表示'
+command! -nargs=0 Yurii echo 'Yurii* のコマンドは :Yurii<Tab> で候補を表示'
 command! -nargs=? SNUpdateMD call simple_yurii_note#update_md(<q-args>)
 command! -nargs=? SNUpdateAll call simple_yurii_note#update_all(<q-args>)
 command!          SNCheckPrefix call simple_yurii_note#check_missing_prefix_in_current_dir()

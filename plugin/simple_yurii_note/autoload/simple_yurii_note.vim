@@ -1032,6 +1032,7 @@ function! s:guide_template() abort
         \ '',
         \ '### SN* 統一名（引数なし。既存の名前と同じ動作）',
         \ '- `:SN` … 入口（何もしない。`:SN` のあとに Tab で下の候補を出す）',
+        \ '- `:Yurii` … 入口（`:Yurii` のあとに Tab で候補を出す）',
         \ '- 同期・ノート: `:SNUpdateMD` `:SNUpdateAll` `:SNCheckPrefix` `:SNRP` `:SNSortYomi` `:SNSortTime` `:SNToggleCheckbox` `:SNOutlineEdit`',
         \ '- 作成: `:SNNF` `:SNNA` `:SNNP` `:SNNC` `:SNNH` `:SNV2Migrate` `:SNNT` `:SNRenameLinkText` `:SNLT`',
         \ '- リンク・クリップボード: `:SNCA` `:SNCU` `:SNTT` `:SNBC` `:SNAT` `:SNYN` `:SNLinkify` `:SNLinkifySelection` `:SNPasteLink` `:SNRenameChildLinkTitles` `:SNRenameDownLinkTitles`',
