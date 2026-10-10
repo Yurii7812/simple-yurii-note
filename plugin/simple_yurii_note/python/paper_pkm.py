@@ -465,9 +465,8 @@ def write_folge_index_notes(root: Path, folge: dict[str, Path],
         inner = [f"# {display}", ""]
         members = sorted((f for f in folge if _root_id(f) == fid), key=natural_key)
         for member in members:
-            inner.append(f"## {member}")
+            inner.append("## " + markdown_link(member, folge[member], path.parent))
             inner.append("")
-            inner.append(markdown_link(member, folge[member], path.parent))
             _fm_n, body_n = read_note(folge[member])
             base_dir = folge[member].parent
             for ln in body_n:

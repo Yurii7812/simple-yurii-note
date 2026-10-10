@@ -153,9 +153,9 @@ def test_create_and_regen() -> None:
         check(dedicated.is_file(), "専用ノート folgezettel-Index-1 ができる")
         if dedicated.is_file():
             d_text = dedicated.read_text(encoding="utf-8")
-            check("## 1" in d_text and f"## 1a" in d_text, "専用ノートに ID 見出し")
+            check("## [1](" in d_text and "## [1a](" in d_text, "専用ノートに ID 見出し（リンク）")
             check("folgezettel_index: 1" in d_text, "専用ノートの fm マーカー")
-            check(d_text.index("## 1") < d_text.index("## 1a"), "専用ノートは folge 順")
+            check(d_text.index("## [1](") < d_text.index("## [1a]("), "専用ノートは folge 順")
             check("![](" in d_text, "専用ノートに画像")
             check("[Paper-Zettelkasten-Index]" in d_text
                   or "[Folgezettel-Index]" in d_text, "専用ノートの Parent")
