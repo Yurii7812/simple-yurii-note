@@ -25,6 +25,12 @@ function! s:sep() abort
   return has('win32') ? '\' : '/'
 endfunction
 
+" 保存済みのパス文字列を展開する。expand() と違い glob のワイルドカード
+" （[ ] { * ?）を解釈しないよう、先頭の ~ だけを $HOME に置き換える。
+function! s:expand_path(p) abort
+  return substitute(a:p, '^\~\ze\%(/\|$\)', escape($HOME, '\&'), '')
+endfunction
+
 function! s:python_cmd() abort
   if has('win32')
     return 'python'
@@ -143,7 +149,7 @@ function! simple_yurii_note#current_title() abort
       return substitute(l:t, '^[\"'']\|[\"'']$', '', 'g')
     endif
     if !l:in_yaml && l:line =~# '^#\+\s\+'
-      return trim(substitute(l:line, '^#\s\+', '', ''))
+      return trim(substitute(l:line, '^#\+\s\+', '', ''))
     endif
   endfor
   return expand('%:t:r')
@@ -153,9 +159,12 @@ function! s:outline_collect() abort
   let l:items = []
   let l:max_lnum = line('$')
   let lnum = 1
+  let l:in_fence = 0
   while lnum <= l:max_lnum
     let l:line = getline(lnum)
-    if l:line =~# '^\s*#\+\s\+'
+    if l:line =~# '^\s*```'
+      let l:in_fence = !l:in_fence
+    elseif !l:in_fence && l:line =~# '^\s*#\+\s\+'
       let l:indent = matchstr(l:line, '^\s*')
       let l:head = matchstr(l:line, '#\+')
       let l:title = substitute(l:line, '^\s*#\+\s\+', '', '')
@@ -164,6 +173,7 @@ function! s:outline_collect() abort
 
       call add(l:items, {
             \ 'src_lnum': lnum,
+            \ 'orig': l:line,
             \ 'indent': l:indent,
             \ 'level': strlen(l:head),
             \ 'title': l:title,
@@ -327,7 +337,7 @@ function! s:outline_shift_range(first, last, delta) abort
       continue
     endif
     let l:level = strlen(matchstr(l:line, '#\+')) + a:delta
-    let l:level = max([1, l:level])
+    let l:level = min([6, max([1, l:level])])
     let l:title = trim(substitute(l:line, '^\s*#\+\s\+', '', ''))
     call setline(lnum, repeat('#', l:level) . ' ' . l:title)
   endfor
@@ -353,18 +363,29 @@ function! simple_yurii_note#outline_editor_apply() abort
     return
   endif
 
+  " 元ノートが開いてから変わっていないか確認（行番号ずれで別行を壊さない）
+  for l:src in l:items
+    if get(getbufline(l:src_buf, l:src.src_lnum), 0, '') !=# l:src.orig
+      echoerr 'OutlineEdit: 元ノートが変わったため反映を中止しました（もう一度 :OutlineEdit してください）'
+      return
+    endif
+  endfor
+
+  let l:new_lines = []
   for l:i in range(0, len(l:items) - 1)
     let l:src = l:items[l:i]
     let l:line = trim(getline(l:base + l:i))
     if l:line =~# '^#\+\s\+'
-      let l:new_level = strlen(matchstr(l:line, '^#\+'))
+      let l:new_level = min([6, strlen(matchstr(l:line, '^#\+'))])
       let l:new_title = trim(substitute(l:line, '^#\+\s\+', '', ''))
     else
       let l:new_level = max([1, get(l:src, 'level', 1)])
       let l:new_title = empty(l:line) ? get(l:src, 'title', '') : l:line
     endif
-    let l:new_line = get(l:src, 'indent', '') . repeat('#', l:new_level) . ' ' . l:new_title
-    call setbufline(l:src_buf, l:src.src_lnum, l:new_line)
+    call add(l:new_lines, [l:src.src_lnum, get(l:src, 'indent', '') . repeat('#', l:new_level) . ' ' . l:new_title])
+  endfor
+  for [l:lnum, l:text] in l:new_lines
+    call setbufline(l:src_buf, l:lnum, l:text)
   endfor
 
   setlocal nomodified
@@ -446,7 +467,7 @@ function! s:state_dir() abort
       endif
     endif
     if !empty(l:root)
-      let l:root = fnamemodify(expand(l:root), ':p')
+      let l:root = fnamemodify(s:expand_path(l:root), ':p')
       let l:dir = l:root . s:sep() . '.state'
       " ロック中の vault（gocryptfs マウント前）に .state を作らない。
       " gocryptfs は空でないマウントポイントを拒否するため、作成すると
@@ -500,6 +521,8 @@ function! simple_yurii_note#migrate_state_into_vault() abort
   if filereadable(l:stamp)
     return
   endif
+  " 1つでも移動に失敗したら stamp を書かない（次回起動で再試行する）
+  let l:failed = 0
   for l:name in ['hubs', 'hubs.json', 'recent.json', 'locks']
     let l:src = l:legacy . s:sep() . l:name
     if !isdirectory(l:src) && !filereadable(l:src)
@@ -513,11 +536,15 @@ function! simple_yurii_note#migrate_state_into_vault() abort
       for l:entry in split(glob(l:src . '/*', 1), "\n")
         let l:base = fnamemodify(l:entry, ':t')
         if !filereadable(l:dst . s:sep() . l:base)
-          call rename(l:entry, l:dst . s:sep() . l:base)
+          if rename(l:entry, l:dst . s:sep() . l:base) != 0
+            let l:failed = 1
+          endif
         endif
       endfor
     elseif !filereadable(l:dst)
-      call rename(l:src, l:dst)
+      if rename(l:src, l:dst) != 0
+        let l:failed = 1
+      endif
     endif
   endfor
   " 全移動後に空になった legacy のディレクトリを掃除（root.txt は無視）
@@ -533,6 +560,9 @@ function! simple_yurii_note#migrate_state_into_vault() abort
       endtry
     endif
   endfor
+  if l:failed
+    return
+  endif
   try
     call s:syn_writefile([l:legacy], l:stamp)
   catch
@@ -558,7 +588,7 @@ function! s:load_persisted_root() abort
   if empty(l:root)
     return ''
   endif
-  return fnamemodify(expand(l:root), ':p')
+  return fnamemodify(s:expand_path(l:root), ':p')
 endfunction
 
 function! s:save_persisted_root(root) abort
@@ -586,7 +616,7 @@ function! s:resolve_note_root(dir) abort
   if empty(a:dir)
     return a:dir
   endif
-  let l:d = substitute(fnamemodify(expand(a:dir), ':p'), s:sep() . '\+$', '', '')
+  let l:d = substitute(fnamemodify(s:expand_path(a:dir), ':p'), s:sep() . '\+$', '', '')
   " 二重解決を避ける（すでに note 自体なら何もしない）
   if fnamemodify(l:d, ':t') ==# 'note'
     return a:dir
@@ -611,7 +641,7 @@ function! s:get_pkm_root() abort
   if empty(l:root)
     return ''
   endif
-  let l:root = fnamemodify(expand(l:root), ':p')
+  let l:root = fnamemodify(s:expand_path(l:root), ':p')
   " A を覚えていても A/note があれば note 側へ寄せる（毎回のIndex作成確認を防ぐ）
   let l:resolved = s:resolve_note_root(l:root)
   if l:resolved !=# l:root
@@ -619,8 +649,10 @@ function! s:get_pkm_root() abort
     let g:simple_yurii_note_root = l:root
   endif
   " rm ゴミ箱ガード（bash）に vault を知らせる
-  if !has('win32')
+  " getter から頻繁に呼ばれるので、値が変わったときだけ環境変数を更新する
+  if !has('win32') && get(s:, 'vault_env', '') !=# l:root
     let $YURII_NOTE_VAULT = l:root
+    let s:vault_env = l:root
   endif
   return l:root
 endfunction
@@ -1087,7 +1119,7 @@ function! s:refresh_guide(root) abort
   let l:new = s:guide_template()
   if filereadable(l:guide)
     let l:old = readfile(l:guide)
-    let l:old_time = matchstr(join(l:old, "\n"), '^time:.*$')
+    let l:old_time = get(filter(copy(l:old), 'v:val =~# "^time:"'), 0, '')
     if !empty(l:old_time)
       call map(l:new, 'v:val =~# "^time:" ? l:old_time : v:val')
     endif
@@ -1350,7 +1382,7 @@ function! s:setup_root_and_index(open_index) abort
     echo 'Cancelled'
     return ''
   endif
-  let l:root = fnamemodify(expand(l:root), ':p')
+  let l:root = fnamemodify(s:expand_path(l:root), ':p')
 
   " ユーザーがプロジェクト A を指定したら A/note を vault 本体にする
   " （A/note があれば必ず。Index の有無は見ない）
@@ -1416,7 +1448,7 @@ function! s:prompt_index_root() abort
     return ''
   endif
   " A を選んだら A/note を root にする
-  return fnamemodify(s:resolve_note_root(fnamemodify(expand(l:dir), ':p')), ':p')
+  return fnamemodify(s:resolve_note_root(fnamemodify(s:expand_path(l:dir), ':p')), ':p')
 endfunction
 
 function! simple_yurii_note#ensure_root_and_index() abort
@@ -3860,7 +3892,7 @@ endfunction
 function! s:expand_user_path(path) abort
   let l:path = trim(a:path)
   if l:path =~# '^\~[\\/]'
-    return fnamemodify(expand(l:path), ':p')
+    return fnamemodify(s:expand_path(l:path), ':p')
   endif
   return l:path
 endfunction
@@ -6348,7 +6380,7 @@ endfunction
 " ---------------------------------------------------------------------------
 
 function! simple_yurii_note#update_md(arg) abort
-  let l:root = empty(a:arg) ? simple_yurii_note#ensure_root_and_index() : fnamemodify(expand(a:arg), ':p')
+  let l:root = empty(a:arg) ? simple_yurii_note#ensure_root_and_index() : fnamemodify(s:expand_path(a:arg), ':p')
   if empty(l:root)
     return
   endif
