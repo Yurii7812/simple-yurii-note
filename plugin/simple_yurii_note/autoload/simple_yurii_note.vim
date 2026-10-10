@@ -970,7 +970,7 @@ function! s:guide_template() abort
         \ '',
         \ '## 同期',
         \ '',
-        \ '- 保存時に自動同期（`:UpdateMD` / `:UpdateAll` / `\ua` で全体を整合）',
+        \ '- 保存時に自動同期（`:UpdateMD` / `:UpdateAll` / `\ua` で全体を整合。`:UpdateAll` / `\ua` は index.md もよみ順に並べ替える）',
         \ '- 相手側のラベルは自動でミラー。括弧を外して手書きしたら sticky',
         \ '- 消えたファイルへのリンクは自動で掃除（行ごと。文章中のリンクは文字だけ残す）',
         \ '',
@@ -6426,6 +6426,46 @@ function! simple_yurii_note#update_all(arg) abort
     call system(s:python_cmd() . ' ' . shellescape(l:paper) . ' regen ' . shellescape(l:root))
     checktime
   endif
+  if !empty(l:root)
+    call s:sort_index_file(l:root)
+  endif
+endfunction
+
+" index.md をよみ順に並べ替える（\S と同じ規則）。ディスク上のファイルを直接書く。
+" 開いていて未保存の変更があるときは上書きしない（中止して知らせる）。
+function! s:sort_index_file(root) abort
+  let l:index = s:index_path(a:root)
+  let l:script = s:sort_yomi_script()
+  if !filereadable(l:index) || !filereadable(l:script)
+    return
+  endif
+  let l:nr = bufnr(l:index)
+  if l:nr > 0 && bufloaded(l:nr) && getbufvar(l:nr, '&modified')
+    echohl WarningMsg | echo 'simple_yurii_note: index.md に未保存の変更があるため並べ替えを省略しました' | echohl NONE
+    return
+  endif
+  let l:lines = readfile(l:index)
+  if empty(l:lines)
+    return
+  endif
+  let l:report = tempname()
+  let l:cmd = s:python_cmd() . ' ' . shellescape(l:script) . ' sort --base ' . shellescape(fnamemodify(a:root, ':p'))
+        \ . ' --report-file ' . shellescape(l:report)
+  let l:out = system(l:cmd, join(l:lines, "\n") . "\n")
+  call delete(l:report)
+  if v:shell_error != 0
+    echohl WarningMsg | echo 'simple_yurii_note: index.md のよみソートに失敗しました（pykakasi 未導入?）' | echohl NONE
+    return
+  endif
+  let l:new = split(l:out, "\n", 1)
+  if !empty(l:new) && l:new[-1] ==# ''
+    call remove(l:new, -1)
+  endif
+  if len(l:new) != len(l:lines) || l:new ==# l:lines
+    return
+  endif
+  call writefile(l:new, l:index)
+  silent! checktime
 endfunction
 
 " 現在バッファをディスクから再読み込み（未変更の場合のみ、カーソル位置保持）
