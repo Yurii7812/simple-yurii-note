@@ -1293,7 +1293,9 @@ def _simple_parse(path: Path) -> dict:
 
 
 def _simple_parse_text(path: Path, text: str) -> dict:
-    fm, rest = _split_front_matter(text.split("\n"))
+    # 末尾の改行で生じる空要素は本文に入れない（残すと `### Parent` の上に空行が増える）。
+    # `### Parent` より前の空行（本文の途中の余白）は残る。
+    fm, rest = _split_front_matter(text.rstrip("\n").split("\n"))
     title = _fm_title(fm) or path.stem
     body: list[str] = []
     parent: list[str] = []
