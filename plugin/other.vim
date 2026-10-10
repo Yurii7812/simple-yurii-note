@@ -258,6 +258,8 @@ nnoremap <silent> gm :<C-u>call <SID>open_current_note()<CR>
 nnoremap \w :wa<CR>
 " UpdateAllのショート
 nnoremap \ua :UpdateAll<CR>
+" 画面の残像（前の画面の文字の重なり）を消す
+nnoremap <silent> \r :redraw!<CR>
 
 " 未保存の変更がある状態で別ファイルへ移動するときは、自動保存してから続行する
 set autowriteall
