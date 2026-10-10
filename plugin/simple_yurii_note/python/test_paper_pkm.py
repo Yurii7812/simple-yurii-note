@@ -146,7 +146,7 @@ def test_create_and_regen() -> None:
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
         check(folge_text.index(f"[1]({notes['1'].name})")
               < folge_text.index(f"[2]({notes['2'].name})"), "Folgezettel-Index は自然順")
-        check("  [1a]" in folge_text, "Folgezettel-Index は子をインデントで階層表示")
+        check("\n[1a](" in folge_text, "Folgezettel-Index は全ノートを並列に表示")
         check("### Parent" in folge_text and "[Paper-Zettelkasten-Index]" in folge_text,
               "Folgezettel-Index の Parent は Paper-Zettelkasten-Index")
         dedicated = pp.folge_index_path(root, "1")
