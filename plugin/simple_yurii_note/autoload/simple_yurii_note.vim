@@ -1285,7 +1285,7 @@ function! s:startup_recover_missing_root() abort
       call s:open_index_with_delay(l:index)
     else
       call simple_yurii_note#push_history()
-      execute 'edit ' . fnameescape(l:index)
+      silent execute 'edit ' . fnameescape(l:index)
     endif
   endif
   return l:new_root
@@ -1388,7 +1388,7 @@ function! s:setup_root_and_index(open_index) abort
       call s:open_index_with_delay(l:index)
     else
       call simple_yurii_note#push_history()
-      execute 'edit ' . fnameescape(l:index)
+      silent execute 'edit ' . fnameescape(l:index)
     endif
   endif
 
@@ -1503,8 +1503,10 @@ function! simple_yurii_note#choose_index_root() abort
     let g:simple_yurii_note_root = l:current_root
     if simple_yurii_note#vault_mounted() == 1
       call simple_yurii_note#lock_vault()
+      redraw
     endif
     let g:simple_yurii_note_root = l:new_root
+    redraw
     echom 'Switched PKM root to: ' . l:new_root
   else
     echom 'PKM root set to: ' . l:new_root
