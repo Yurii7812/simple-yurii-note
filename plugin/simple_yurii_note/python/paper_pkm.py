@@ -462,7 +462,7 @@ def write_folge_index_notes(root: Path, folge: dict[str, Path],
         fm_fi, _b = read_note(path)
         if fm_value(fm_fi, FM_PAPER_FOLGE_INDEX) is None:
             fm_fi.append(f"{FM_PAPER_FOLGE_INDEX}: {fid}")
-        inner = [f"# {display}"]
+        inner = [f"# {display}", ""]
         members = sorted((f for f in folge if _root_id(f) == fid), key=natural_key)
         for member in members:
             inner.append(f"## {member}")
