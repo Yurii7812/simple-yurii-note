@@ -700,13 +700,16 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             inner.append("")
         inner += intra + ["### Parent"]
 
+        # 専用ノート folgezettel-Index-N の自ID節（#ID）を Parent に入れる。
+        # 最上位IDはこれだけ、子は親ID の下に並べる（BackLink に出さない）。
+        root_fid = _root_id(fid)
+        dedicated = markdown_link(folge_index_display(root_fid),
+                                  folge_index_path(root, root_fid),
+                                  note_path.parent, frag=fid)
         if parent_id(fid) is None:
-            # 最上位IDの Parent は専用ノート folgezettel-Index-N の自ID節
-            p_lines = [markdown_link(folge_index_display(fid),
-                                     folge_index_path(root, fid),
-                                     note_path.parent, frag=fid)]
+            p_lines = [dedicated]
         else:
-            p_lines = _parent_link_lines(fid, note_path.parent)
+            p_lines = _parent_link_lines(fid, note_path.parent) + [dedicated]
         inner += p_lines
 
         mapping = {
