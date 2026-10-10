@@ -1335,7 +1335,8 @@ endfunction
 " 戻り値: 設定したrootのパス、キャンセル時は ''
 function! s:setup_root_and_index(open_index) abort
   " Step1: ディレクトリ選択
-  let l:default = s:get_pkm_root()
+  let l:prev_root = s:get_pkm_root()
+  let l:default = l:prev_root
   if empty(l:default)
     let l:default = getcwd()
   endif
@@ -1357,6 +1358,10 @@ function! s:setup_root_and_index(open_index) abort
 
   if !isdirectory(l:root)
     call mkdir(l:root, 'p')
+  endif
+  " 旧 root のバッファは新 Index を開く前に閉じる（全経路共通）
+  if !empty(l:prev_root) && fnamemodify(l:prev_root, ':p') !=# fnamemodify(l:root, ':p')
+    call s:close_vault_buffers(l:prev_root)
   endif
   let g:simple_yurii_note_root = l:root
   call s:save_persisted_root(l:root)
@@ -1480,14 +1485,25 @@ function! s:close_vault_buffers(root) abort
   if bufnr('%') != l:cur
     execute 'silent! buffer ' . l:cur
   endif
+  let l:kept = 0
   for l:b in range(1, bufnr('$'))
     if !buflisted(l:b) || l:b == l:cur
       continue
     endif
     if stridx(fnamemodify(bufname(l:b), ':p'), l:rootp) == 0
-      execute 'silent! bdelete! ' . l:b
+      " 保存できなかった変更は捨てない（閉じずに残して警告）
+      if getbufvar(l:b, '&modified')
+        let l:kept += 1
+        continue
+      endif
+      execute 'silent! bdelete ' . l:b
     endif
   endfor
+  if l:kept > 0
+    echohl WarningMsg
+    echom 'simple_yurii_note: 未保存のバッファが ' . l:kept . ' 件残っています（保存してから切替えてください）'
+    echohl NONE
+  endif
 endfunction
 
 function! simple_yurii_note#choose_index_root() abort
@@ -1497,8 +1513,8 @@ function! simple_yurii_note#choose_index_root() abort
     return ''
   endif
   if !empty(l:current_root) && fnamemodify(l:current_root, ':p') !=# fnamemodify(l:new_root, ':p')
-    call s:close_vault_buffers(l:current_root)
     " 前 vault が暗号化・マウント中ならロックする（VimLeave と同じ流儀）。
+    " バッファは setup_root_and_index 内で閉じ済み。
     " lock_vault は現在 root を見るので一時的に戻して呼ぶ。
     let g:simple_yurii_note_root = l:current_root
     if simple_yurii_note#vault_mounted() == 1
@@ -10637,8 +10653,9 @@ endfunction
 " 一時パスワードファイル（0600, すぐ消す）
 function! s:temp_passfile(pw) abort
   let l:pf = tempname()
+  " 先に 0600 で作ってから書く（writefile の後で chmod すると一瞬だけ他人に読める）
+  call system('install -m 600 /dev/null ' . shellescape(l:pf))
   call s:syn_writefile([a:pw], l:pf)
-  call system('chmod 600 ' . shellescape(l:pf))
   return l:pf
 endfunction
 
@@ -10949,10 +10966,11 @@ function! s:init_encrypted_impl() abort
       throw 'copy 失敗'
     endif
     let l:stage = 'verify'
+    " パイプ（| head）を挟むと終了コードが head のものになり不一致を見逃すので使わない
     let l:out = system('diff -rq --no-dereference ' . shellescape(l:plaindir)
-          \ . ' ' . shellescape(l:root) . ' 2>&1 | head -20')
+          \ . ' ' . shellescape(l:root) . ' 2>&1')
     if v:shell_error != 0
-      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))[0:300]
     endif
     let l:stage = 'done'
     " verify 済みだが FUSE 越しで silent corruption の可能性はゼロではない。
@@ -11077,10 +11095,11 @@ function! s:remove_encryption_impl() abort
     endif
     " FUSE 内の .crypt symlink（../.crypt）は暗号箱を消すと無効になるので持ち込まない
     call system('find ' . shellescape(l:temp) . ' -maxdepth 1 -name .crypt -type l -delete 2>/dev/null')
+    " パイプ（| head）は終了コードを隠すので使わない（不一致を見逃して暗号箱を消す事故になる）
     let l:out = system('diff -rq --no-dereference --exclude=.crypt '
-          \ . shellescape(l:mount) . ' ' . shellescape(l:temp) . ' 2>&1 | head -20')
+          \ . shellescape(l:mount) . ' ' . shellescape(l:temp) . ' 2>&1')
     if v:shell_error != 0
-      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))
+      throw 'verify 不一致: ' . trim(substitute(l:out, "\n", ' ', 'g'))[0:300]
     endif
     " アンマウント（cwd がマウント内だと busy になるので vault の外へ出る）
     let l:stage = 'unmount'
@@ -11176,7 +11195,9 @@ function! s:init_rollback(oldroot, root, plaindir, cipher, stage, converted) abo
     " mount したまま失敗したときは外して root を掃除
     call s:cd_out_of_vault(l:root)
     call system('fusermount3 -u ' . shellescape(l:root) . ' 2>/dev/null')
-    if isdirectory(l:root)
+    call s:mount_cache_reset()
+    " マウントが外れていないのに rm -rf すると暗号箱の中身を消すので、外れた時だけ掃除する
+    if isdirectory(l:root) && simple_yurii_note#vault_mounted(escape(l:root, '\\'), 1) != 1
       call system('rm -rf ' . shellescape(l:root))
     endif
   endif
