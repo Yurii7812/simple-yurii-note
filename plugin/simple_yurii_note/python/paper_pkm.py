@@ -66,6 +66,7 @@ FM_PAPER_KEYWORD = "paper_keyword"
 FM_PAPER_INDEX = "paper_index"
 FM_PAPER_TOPIC = "paper_topic"          # トピック別Indexノートのfm（値=起点ID）
 FM_PAPER_TOPIC_INDEX = "paper_topic_index"  # 番号別Index（グループ）のfm（値=起点ID）
+FM_PAPER_FOLGE_INDEX = "folgezettel_index"  # 番号専用ノート folgezettel-Index-N のfm（値=起点ID）
 FM_TOPIC_PARENT = "topic_parent"        # 上位トピック（親トピックノートの title）。手書き管理
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
@@ -210,8 +211,25 @@ def _rel(base_dir: Path, target: Path) -> str:
         return target.as_posix()
 
 
-def markdown_link(display: str, target: Path, base_dir: Path) -> str:
-    return f"[{display}]({_rel(base_dir, target)})"
+def markdown_link(display: str, target: Path, base_dir: Path,
+                  frag: Optional[str] = None) -> str:
+    link = f"[{display}]({_rel(base_dir, target)})"
+    if frag:
+        link = link[:-1] + f"#{frag})"
+    return link
+
+
+def folge_index_display(fid: str) -> str:
+    """番号専用ノート folgezettel-Index-N の表示名。"""
+    return f"folgezettel-Index-{fid}"
+
+
+def folge_index_path(root: Path, fid: str) -> Path:
+    return Path(root) / f"folgezettel-Index-{fid}.md"
+
+
+def top_level_ids(folge: dict[str, Path]) -> list[str]:
+    return sorted((f for f in folge if parent_id(f) is None), key=natural_key)
 
 
 def unique_note_path(root: Path, when: Optional[datetime] = None) -> Path:
@@ -428,6 +446,50 @@ def _update_yomi(fm: list[str], mapping: dict[str, str]) -> list[str]:
     return jy.set_yomi_map(fm, merged)
 
 
+def write_folge_index_notes(root: Path, folge: dict[str, Path],
+                            id_index_paths: dict[str, Path]) -> None:
+    """各最上位IDの専用ノート folgezettel-Index-N を作る/作り直す。
+
+    中身: 配下IDの `## <ID>` 見出し + 画像をフォルゲゼッテル自然順で並べ、
+    トピックIndex（1-Index）があればそのリンクも入れる。Parent は Folgezettel-Index。
+    """
+    for fid in top_level_ids(folge):
+        path = folge_index_path(root, fid)
+        display = folge_index_display(fid)
+        if not path.is_file():
+            write_note(path, [_time_line(), f"title: {display}",
+                              f"{FM_PAPER_FOLGE_INDEX}: {fid}"], [])
+        fm_fi, _b = read_note(path)
+        if fm_value(fm_fi, FM_PAPER_FOLGE_INDEX) is None:
+            fm_fi.append(f"{FM_PAPER_FOLGE_INDEX}: {fid}")
+        inner = [f"# {display}"]
+        members = sorted((f for f in folge if _root_id(f) == fid), key=natural_key)
+        for member in members:
+            inner.append(f"## {member}")
+            _fm_n, body_n = read_note(folge[member])
+            base_dir = folge[member].parent
+            for ln in body_n:
+                m = re.match(r"^!\[\]\((.+)\)$", ln.strip())
+                if m:
+                    img = (base_dir / m.group(1)).resolve()
+                    inner.append(f"![]({_rel(path.parent, img)})")
+            inner.append("")
+        id_index = id_index_paths.get(fid) or find_id_index(root, fid)
+        if id_index is not None:
+            fm_g, _bg = read_note(id_index)
+            gd = fm_value(fm_g, "title") or id_index.stem
+            inner.append(markdown_link(gd, id_index, path.parent))
+        inner += ["### Parent",
+                  markdown_link(FOLGE_INDEX[:-3], root / FOLGE_INDEX, path.parent)]
+        write_note(path, fm_fi, inner)
+
+
+def _root_id(fid: str) -> str:
+    while parent_id(fid) is not None:
+        fid = parent_id(fid)
+    return fid
+
+
 def regen(root: Path, do_sync: bool = True) -> bool:
     """Index・グループ・Folgezettel-Index・スキャンノートの本文を再生成する。"""
     root = Path(root).resolve()
@@ -513,13 +575,11 @@ def regen(root: Path, do_sync: bool = True) -> bool:
         body += ["", *inner]
     write_note(index_path, fm, body)
 
-    # --- Folgezettel-Index --------------------------------------------------
+    # --- Folgezettel-Index（最上位IDは専用ノート folgezettel-Index-N へ） ---
     folge_index = root / FOLGE_INDEX
     inner = [
-        markdown_link(fid, folge[fid], folge_index.parent)
-        for fid in sorted(
-            (f for f in folge if parent_id(f) is None), key=natural_key
-        )
+        markdown_link(fid, folge_index_path(root, fid), folge_index.parent, frag=fid)
+        for fid in top_level_ids(folge)
     ]
     if not folge_index.is_file():
         fm_fi = [_time_line(), f"title: {FOLGE_INDEX[:-3]}"]
@@ -529,7 +589,7 @@ def regen(root: Path, do_sync: bool = True) -> bool:
                                  "### Parent",
                                  markdown_link(index_display, index_path, folge_index.parent)])
 
-    # --- トピック別Index（B案: `1_Index` グループにノートと `1-仏教` を入れる） ---
+    # --- トピック別Index（B案: `1-Index` グループにノートと `1-仏教` を入れる） ---
     topics = scan_topic_notes(root)
     id_index_paths: dict[str, Path] = {}
 
@@ -554,13 +614,16 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             gid = unique_note_path(root)
             fm_g = [
                 _time_line(),
-                f"title: {fid}_Index",
+                f"title: {fid}-Index",
                 f"{FM_PAPER_TOPIC_INDEX}: {fid}",
                 "attribute: group",
             ]
             write_note(gid, fm_g, [])
         else:
             fm_g, _b = read_note(gid)
+            # 旧表記 `1_Index` を `1-Index` に改名（手書きの別名は残す）
+            fm_g = [f"title: {fid}-Index" if ln.strip() == f"title: {fid}_Index" else ln
+                    for ln in fm_g]
         id_index_paths[fid] = gid
         # 子トピック順: fm topic_parent（無い/親が見つからないものは最上位）を
         # 辿って、子は親の直下に 2スペースずつインデントして並べる。
@@ -587,7 +650,7 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             if disp not in used_t:
                 children.append(markdown_link(disp, tmap[disp][0], gid.parent))
         p_lines = _parent_link_lines(fid, gid.parent, exclude=gid)
-        write_note(gid, fm_g, [f"# {fid}_Index"] + children + ["### Parent"] + p_lines)
+        write_note(gid, fm_g, [f"# {fid}-Index"] + children + ["### Parent"] + p_lines)
         # トピックノート自身の Parent（既存の `### Parent` 以降を置き換え）+
         # fm `topic_parent:` は常に持たせる（無ければ追加・手書きで変更可）
         for disp, tpath, tp in tlist:
@@ -605,13 +668,21 @@ def regen(root: Path, do_sync: bool = True) -> bool:
                 body_t = body_t[:i]
             while body_t and body_t[-1].strip() == "":
                 body_t.pop()
+            # Parent は folgezettel-Index-N ＋（親トピックがあればそのリンク、
+            # 無ければトピックIndex 1-Index）を表示する
+            folge_link = markdown_link(folge_index_display(fid),
+                                       folge_index_path(root, fid), tpath.parent)
             parent_disp = tp if tp in tmap else None
             if parent_disp is not None:
-                p_lines = [markdown_link(parent_disp, tmap[parent_disp][0], gid.parent)]
+                p_lines = [markdown_link(parent_disp, tmap[parent_disp][0],
+                                         tpath.parent), folge_link]
             else:
-                p_lines = _parent_link_lines(fid, tpath.parent)
+                p_lines = [folge_link] + _parent_link_lines(fid, tpath.parent)
             body_t += ["### Parent"] + p_lines
             write_note(tpath, fm_t, body_t)
+
+    # --- 番号専用ノート folgezettel-Index-N ----------------------------------
+    write_folge_index_notes(root, folge, id_index_paths)
 
     # --- スキャンノートの親子リンク -----------------------------------------
     for fid, note_path in folge.items():
@@ -628,7 +699,13 @@ def regen(root: Path, do_sync: bool = True) -> bool:
             inner.append("")
         inner += intra + ["### Parent"]
 
-        p_lines = _parent_link_lines(fid, note_path.parent)
+        if parent_id(fid) is None:
+            # 最上位IDの Parent は専用ノート folgezettel-Index-N の自ID節
+            p_lines = [markdown_link(folge_index_display(fid),
+                                     folge_index_path(root, fid),
+                                     note_path.parent, frag=fid)]
+        else:
+            p_lines = _parent_link_lines(fid, note_path.parent)
         inner += p_lines
 
         mapping = {

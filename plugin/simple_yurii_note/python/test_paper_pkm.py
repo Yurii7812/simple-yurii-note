@@ -144,12 +144,22 @@ def test_create_and_regen() -> None:
               "単一IDは Index から直接リンク")
 
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
-        check(folge_text.index(f"[1]({notes['1'].name})")
-              < folge_text.index(f"[2]({notes['2'].name})"), "Folgezettel-Index は自然順")
+        check(folge_text.index("[1](folgezettel-Index-1.md#1)")
+              < folge_text.index("[2](folgezettel-Index-2.md#2)"), "Folgezettel-Index は自然順")
         check(f"[1a]({notes['1a'].name})" not in folge_text,
               "Folgezettel-Index は先頭IDのみ（1a 等）")
         check("### Parent" in folge_text and "[Paper-Zettelkasten-Index]" in folge_text,
               "Folgezettel-Index の Parent は Paper-Zettelkasten-Index")
+        dedicated = pp.folge_index_path(root, "1")
+        check(dedicated.is_file(), "専用ノート folgezettel-Index-1 ができる")
+        if dedicated.is_file():
+            d_text = dedicated.read_text(encoding="utf-8")
+            check("## 1" in d_text and f"## 1a" in d_text, "専用ノートに ID 見出し")
+            check("folgezettel_index: 1" in d_text, "専用ノートの fm マーカー")
+            check(d_text.index("## 1") < d_text.index("## 1a"), "専用ノートは folge 順")
+            check("![](" in d_text, "専用ノートに画像")
+            check("[Paper-Zettelkasten-Index]" in d_text
+                  or "[Folgezettel-Index]" in d_text, "専用ノートの Parent")
         iw_text = (root / "Index-write.md").read_text(encoding="utf-8")
         check("### Parent" in iw_text and "[Paper-Zettelkasten-Index]" in iw_text,
               "Index-write の Parent は Paper-Zettelkasten-Index")
@@ -161,7 +171,8 @@ def test_create_and_regen() -> None:
 
         note1 = notes["1"].read_text(encoding="utf-8")
         check(f"[1a]({notes['1a'].name})" in note1, "親ノートの本文に子リンク")
-        check("[Paper-Zettelkasten-Index]" in note1, "根のノートの Parent はPaper-Zettelkasten-Index")
+        check("[folgezettel-Index-1](folgezettel-Index-1.md#1)" in note1,
+              "根のノートの Parent は folgezettel-Index-1#1")
         note1a = notes["1a"].read_text(encoding="utf-8")
         check(f"[1]({notes['1'].name})" in note1a, "子ノートの Parent は親ID")
 
@@ -177,7 +188,7 @@ def test_create_and_regen() -> None:
 
 
 def test_topic_index() -> None:
-    print("トピック別Index: 1-仏教 + 1_Index グループ")
+    print("トピック別Index: 1-仏教 + 1-Index グループ")
     with tempfile.TemporaryDirectory() as d:
         root = _make_vault(Path(d))
         index_path = pp.create_paper_index(root)
@@ -195,17 +206,24 @@ def test_topic_index() -> None:
               "トピックノートの fm")
         pp.regen(root)
         gid = pp.find_id_index(root, "1")
-        check(gid is not None, "1_Index グループができる")
+        check(gid is not None, "1-Index グループができる")
         if gid:
             gid_text = gid.read_text(encoding="utf-8")
+            check("title: 1-Index" in gid_text, "トピックIndex は 1-Index に改名")
             check(f"[1]({notes['1'].name})" in gid_text and "[1-仏教]" in gid_text,
                   "グループに ID ノートと トピック のリンク")
             check("attribute: group" in gid_text, "グループ属性")
             check("[Paper-Zettelkasten-Index]" in gid_text, "グループの Parent は Paper index")
         n1 = notes["1"].read_text(encoding="utf-8")
-        check("[1_Index]" in n1, "ID ノートの Parent は 1_Index")
-        check(gid and "[1_Index]" not in notes["1-仏教"].read_text(encoding="utf-8")
-              or True, "フォルゲゼッテル一覧にトピックは出ない")
+        check("[folgezettel-Index-1](folgezettel-Index-1.md#1)" in n1,
+              "ID ノートの Parent は folgezettel-Index-1#1")
+        d_text = pp.folge_index_path(root, "1").read_text(encoding="utf-8")
+        check("[1-Index]" in d_text, "専用ノートにトピックIndexへのリンク")
+        topic_text = notes["1-仏教"].read_text(encoding="utf-8")
+        i_folge = topic_text.find("[folgezettel-Index-1]")
+        i_gindex = topic_text.find("[1-Index]")
+        check(i_folge != -1 and i_gindex != -1 and i_folge < i_gindex,
+              "トピックノートの Parent は folgezettel-Index-1 + 1-Index")
         folge_text = (root / "Folgezettel-Index.md").read_text(encoding="utf-8")
         check("[1-仏教]" not in folge_text, "Folgezettel-Index にトピック名は出ない")
 
@@ -219,7 +237,7 @@ def test_topic_index() -> None:
                            if "title: 1-四念処" in p.read_text(encoding="utf-8"))
         pp.regen(root)
         gid = pp.find_id_index(root, "1")
-        check(gid is not None, "階層後も 1_Index あり")
+        check(gid is not None, "階層後も 1-Index あり")
         gid_text = gid.read_text(encoding="utf-8")
         i_buk = gid_text.find("[1-仏教]")
         i_sinen = gid_text.find("  [1-四念処]")
